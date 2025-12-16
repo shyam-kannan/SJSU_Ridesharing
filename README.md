@@ -309,35 +309,12 @@ See [References](docs/references.md) for full academic citations.
 
 ---
 
-## 📄 License
-
-Copyright © 2026 Spencer Davis, Shyam Kannan, Sri Ram Mannam, Johnny To
-
-**All Rights Reserved**
-
-This project is developed as part of the CMPE 295 Master's Project at San Jose State University.
-
----
-
 ## 🙏 Acknowledgments
 
 Special thanks to **Professor Younghee Park** for invaluable guidance and support throughout this project.
 
 ---
 
-## 📞 Contact
-
-For questions or collaboration inquiries:
-- 📧 Project Email: lessgo-team@sjsu.edu
-- 🌐 Project Website: [Coming Soon]
-- 📱 Demo Request: [Schedule a Demo](mailto:shyam.kannan@sjsu.edu)
-
----
-
 <p align="center">
   <i>Building smarter, safer, and more sustainable campus transportation</i>
-</p>
-
-<p align="center">
-  Made with ❤️ at San Jose State University
 </p>
