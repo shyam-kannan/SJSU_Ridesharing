@@ -309,12 +309,6 @@ See [References](docs/references.md) for full academic citations.
 
 ---
 
-## 🙏 Acknowledgments
-
-Special thanks to **Professor Younghee Park** for invaluable guidance and support throughout this project.
-
----
-
 <p align="center">
   <i>Building smarter, safer, and more sustainable campus transportation</i>
 </p>
