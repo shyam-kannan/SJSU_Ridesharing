@@ -302,8 +302,6 @@ This project builds upon research in:
 - Privacy-preserving mobility services using homomorphic encryption
 - Reinforcement learning for sequential assignment decisions
 
-See [References](docs/references.md) for full academic citations.
-
 ---
 
 <p align="center">
