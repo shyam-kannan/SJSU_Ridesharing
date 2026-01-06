@@ -1,4 +1,4 @@
-# LessGo 🚗
+# LessGo 
 
 **Smart Carpooling Platform for University Students**
 
@@ -10,7 +10,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
@@ -23,7 +23,7 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
 LessGo tackles the growing transportation challenges at San Jose State University by providing a student-centered ridesharing platform. With increased enrollment leading to overcrowded parking and mounting frustration, LessGo offers an efficient, community-based solution that:
 
@@ -34,10 +34,10 @@ LessGo tackles the growing transportation challenges at San Jose State Universit
 
 ### The Problem
 
-- 🚗 **Overcrowded parking** during peak hours
-- 💰 **Expensive rideshare services** with surge pricing
-- 🚌 **Unreliable public transit** with limited routes
-- ⏰ **Scheduling conflicts** for commuter students
+-  **Overcrowded parking** during peak hours
+-  **Expensive rideshare services** with surge pricing
+-  **Unreliable public transit** with limited routes
+-  **Scheduling conflicts** for commuter students
 
 ### Our Solution
 
@@ -49,9 +49,9 @@ An intelligent carpooling platform that:
 
 ---
 
-## ✨ Features
+##  Features
 
-### 🎯 Core Features
+###  Core Features
 
 **For Riders:**
 - Smart ride matching based on class schedules
@@ -67,7 +67,7 @@ An intelligent carpooling platform that:
 - Real-time rider notifications
 - Trip history and earnings tracking
 
-### 🔒 Safety & Privacy
+###  Safety & Privacy
 
 - **Real-time Safety Monitoring** - Anomaly detection for route deviations
 - **Silent Safety Checks** - Discrete rider verification during trips
@@ -75,14 +75,14 @@ An intelligent carpooling platform that:
 - **Homomorphic Encryption** - Privacy-preserving route calculations
 - **University Verification** - SJSU authentication required
 
-### 🧠 ML-Enhanced Matching
+###  ML-Enhanced Matching
 
 - Machine learning models reduce candidate sets for faster matching
 - Representation learning embeds user preferences and constraints
 - Reinforcement learning optimizes system-level assignments
 - Schedule-aware grouping based on class timetables
 
-### 💰 Fair Cost Allocation
+###  Fair Cost Allocation
 
 - **Quote Never Increases** - Riders see maximum price upfront
 - **Detour-Aware Pricing** - Fair allocation based on actual route impact
@@ -91,7 +91,7 @@ An intelligent carpooling platform that:
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 LessGo uses a **microservice architecture** for scalability and independence across features.
 
@@ -119,7 +119,7 @@ LessGo uses a **microservice architecture** for scalability and independence acr
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 ### Mobile Applications
 
@@ -167,7 +167,7 @@ Monitoring: CloudWatch, Datadog
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -230,7 +230,7 @@ cd android && ./gradlew assembleDebug
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 SJSU_Ridesharing/
@@ -266,7 +266,7 @@ SJSU_Ridesharing/
 
 ---
 
-## 👥 Team
+##  Team
 
 **SJSU Master's in Software Engineering - CMPE 295**
 
@@ -281,14 +281,14 @@ SJSU_Ridesharing/
 
 ---
 
-## 📚 Documentation
+##  Documentation
 
-- [📖 Full Project Report](docs/Final_Report.pdf)
-- [📋 Project Workbook](docs/Project_Workbook.pdf)
-- [🏗️ Architecture Design](docs/architecture/)
-- [🔌 API Documentation](docs/api/)
-- [🧪 Testing Strategy](docs/testing/)
-- [🚀 Deployment Guide](docs/deployment/)
+- [ Full Project Report](docs/Final_Report.pdf)
+- [ Project Workbook](docs/Project_Workbook.pdf)
+- [ Architecture Design](docs/architecture/)
+- [ API Documentation](docs/api/)
+- [ Testing Strategy](docs/testing/)
+- [ Deployment Guide](docs/deployment/)
 
 ### Key Academic Contributions
 
