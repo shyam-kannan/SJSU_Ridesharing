@@ -2,9 +2,6 @@
 
 **Smart Carpooling Platform for University Students**
 
-[![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
-[![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-blue.svg)]()
 
 > A safe, intelligent, and cost-effective carpooling solution designed specifically for SJSU students, addressing parking congestion and transportation challenges through ML-enhanced matching and transparent pricing.
 
