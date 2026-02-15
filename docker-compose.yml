@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS extension for geospatial data
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: lessgo-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: lessgo_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lessgo-network
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: lessgo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lessgo-network
+
+  # Kafka for event streaming (optional)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: lessgo-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - lessgo-network
+    profiles:
+      - kafka
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: lessgo-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - lessgo-network
+    profiles:
+      - kafka
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  lessgo-network:
+    driver: bridge

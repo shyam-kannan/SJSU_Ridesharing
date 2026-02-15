@@ -1,0 +1,37 @@
+{
+  "name": "lessgo-backend",
+  "version": "1.0.0",
+  "description": "LessGo Smart Carpooling Platform Backend - Microservices Architecture",
+  "main": "index.js",
+  "scripts": {
+    "migrate:create": "node-pg-migrate create -m shared/database/migrations",
+    "migrate:up": "node-pg-migrate up -m shared/database/migrations --database-url-var DATABASE_URL",
+    "migrate:down": "node-pg-migrate down -m shared/database/migrations --database-url-var DATABASE_URL",
+    "migrate:status": "node-pg-migrate list -m shared/database/migrations --database-url-var DATABASE_URL",
+    "seed": "node shared/database/seeds/seed.js",
+    "dev:auth": "cd services/auth-service && npm run dev",
+    "dev:user": "cd services/user-service && npm run dev",
+    "dev:trip": "cd services/trip-service && npm run dev",
+    "dev:booking": "cd services/booking-service && npm run dev",
+    "dev:payment": "cd services/payment-service && npm run dev",
+    "dev:notification": "cd services/notification-service && npm run dev",
+    "dev:cost": "cd services/cost-calculation-service && npm run dev",
+    "dev:gateway": "cd services/api-gateway && npm run dev"
+  },
+  "keywords": [
+    "carpooling",
+    "ridesharing",
+    "microservices",
+    "postgresql",
+    "postgis"
+  ],
+  "author": "LessGo Team",
+  "license": "MIT",
+  "dependencies": {
+    "node-pg-migrate": "^6.2.2",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "@faker-js/faker": "^8.3.1"
+  },
+  "devDependencies": {}
+}
