@@ -1,9 +1,6 @@
 import { Response } from 'express';
 import * as userService from '../services/user.service';
-import { AuthRequest } from '../../../shared/middleware/auth';
-import { AppError } from '../../../shared/middleware/errorHandler';
-import { successResponse, errorResponse } from '../../../shared/utils/response';
-import { DriverSetupRequest } from '../../../shared/types';
+import { AuthRequest, AppError, successResponse, errorResponse, DriverSetupRequest } from '@lessgo/shared';
 
 /**
  * Get user profile by ID

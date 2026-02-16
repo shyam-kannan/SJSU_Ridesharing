@@ -1,13 +1,14 @@
 import { Pool } from 'pg';
 import Stripe from 'stripe';
 import { config } from '../config';
-import { Payment, PaymentStatus } from '../../../shared/types';
+import { Payment, PaymentStatus } from '@lessgo/shared';
 
 const pool = new Pool({ connectionString: config.databaseUrl });
-const stripe = new Stripe(config.stripeSecretKey!, { apiVersion: '2024-12-18.acacia' });
+const stripe = new Stripe(config.stripeSecretKey!);
 
 /**
  * Create Stripe Payment Intent
+ * Uses manual capture so the iOS app can confirm, then we capture server-side.
  */
 export const createPaymentIntent = async (
   bookingId: string,
@@ -23,7 +24,7 @@ export const createPaymentIntent = async (
   const paymentIntent = await stripe.paymentIntents.create({
     amount: Math.round(amount * 100), // Convert to cents
     currency: 'usd',
-    automatic_payment_methods: { enabled: true },
+    capture_method: 'manual',
     metadata: { booking_id: bookingId },
   });
 
@@ -45,6 +46,8 @@ export const createPaymentIntent = async (
 
 /**
  * Capture payment
+ * In production: the iOS app confirms the PaymentIntent first, then this captures it.
+ * In test mode: capture/refund require manual confirmation which isn't available server-side.
  */
 export const capturePayment = async (paymentId: string): Promise<Payment> => {
   const payment = await pool.query('SELECT * FROM payments WHERE payment_id = $1', [paymentId]);
@@ -56,8 +59,16 @@ export const capturePayment = async (paymentId: string): Promise<Payment> => {
     return paymentData;
   }
 
-  // Confirm payment intent with Stripe
-  await stripe.paymentIntents.confirm(paymentData.stripe_payment_intent_id);
+  const stripeIntentId = paymentData.stripe_payment_intent_id;
+  const paymentIntent = await stripe.paymentIntents.retrieve(stripeIntentId);
+
+  if (paymentIntent.status === 'requires_capture') {
+    await stripe.paymentIntents.capture(stripeIntentId);
+  } else if (paymentIntent.status === 'succeeded') {
+    // Already captured on Stripe side
+  } else {
+    throw new Error(`Cannot capture payment in state: ${paymentIntent.status}. Client must confirm the PaymentIntent first.`);
+  }
 
   // Update status
   const updateQuery = `
@@ -94,6 +105,31 @@ export const refundPayment = async (paymentId: string): Promise<Payment> => {
 };
 
 /**
+ * Cancel a pending payment (cancels the Stripe PaymentIntent)
+ */
+export const cancelPayment = async (paymentId: string): Promise<Payment> => {
+  const payment = await pool.query('SELECT * FROM payments WHERE payment_id = $1', [paymentId]);
+  if (payment.rows.length === 0) throw new Error('Payment not found');
+
+  const paymentData = payment.rows[0];
+
+  if (paymentData.status !== PaymentStatus.Pending) {
+    throw new Error('Can only cancel pending payments');
+  }
+
+  // Cancel PaymentIntent with Stripe
+  await stripe.paymentIntents.cancel(paymentData.stripe_payment_intent_id);
+
+  // Update status
+  const updateQuery = `
+    UPDATE payments SET status = $1, updated_at = current_timestamp
+    WHERE payment_id = $2 RETURNING *
+  `;
+  const result = await pool.query(updateQuery, [PaymentStatus.Failed, paymentId]);
+  return result.rows[0];
+};
+
+/**
  * Get payment by booking ID
  */
 export const getPaymentByBooking = async (bookingId: string): Promise<Payment | null> => {
@@ -101,4 +137,4 @@ export const getPaymentByBooking = async (bookingId: string): Promise<Payment | 
   return result.rows.length > 0 ? result.rows[0] : null;
 };
 
-export default { createPaymentIntent, capturePayment, refundPayment, getPaymentByBooking };
+export default { createPaymentIntent, capturePayment, refundPayment, cancelPayment, getPaymentByBooking };

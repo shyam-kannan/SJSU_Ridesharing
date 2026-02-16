@@ -1,9 +1,6 @@
 import { Response } from 'express';
 import * as bookingService from '../services/booking.service';
-import { AuthRequest } from '../../../shared/middleware/auth';
-import { AppError } from '../../../shared/middleware/errorHandler';
-import { successResponse, errorResponse } from '../../../shared/utils/response';
-import { CreateBookingRequest, CreateRatingRequest } from '../../../shared/types';
+import { AuthRequest, AppError, successResponse, errorResponse, CreateBookingRequest, CreateRatingRequest } from '@lessgo/shared';
 
 export const createBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

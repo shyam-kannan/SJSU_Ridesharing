@@ -9,7 +9,7 @@ import {
   Rating,
   CreateBookingRequest,
   CreateRatingRequest,
-} from '../../../shared/types';
+} from '@lessgo/shared';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -309,9 +309,15 @@ export const cancelBooking = async (
       throw new Error('Cannot cancel completed booking');
     }
 
-    // If confirmed, issue refund
+    // If confirmed with a payment, handle based on payment status
     if (bookingData.status === BookingStatus.Confirmed && bookingData.payment) {
-      await axios.post(`${config.paymentServiceUrl}/payments/${bookingData.payment.payment_id}/refund`);
+      if (bookingData.payment.status === 'captured') {
+        // Refund captured payments
+        await axios.post(`${config.paymentServiceUrl}/payments/${bookingData.payment.payment_id}/refund`);
+      } else if (bookingData.payment.status === 'pending') {
+        // Cancel pending payment intents
+        await axios.post(`${config.paymentServiceUrl}/payments/${bookingData.payment.payment_id}/cancel`);
+      }
     }
 
     // Update booking status

@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { config } from '../config';
-import { User, SafeUser, RegisterRequest, UserRole, SJSUIdStatus } from '../../../shared/types';
+import { User, SafeUser, RegisterRequest, UserRole, SJSUIdStatus } from '@lessgo/shared';
 import { hashPassword, comparePassword } from './bcrypt.service';
 
 // Create database connection pool

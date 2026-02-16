@@ -1,7 +1,6 @@
 import express from 'express';
 import * as tripController from '../controllers/trip.controller';
-import { authenticateToken, requireDriver, requireVerifiedStudent } from '../../../shared/middleware/auth';
-import { asyncHandler } from '../../../shared/middleware/errorHandler';
+import { authenticateToken, requireDriver, requireVerifiedStudent, asyncHandler } from '@lessgo/shared';
 import { body } from 'express-validator';
 
 const router = express.Router();

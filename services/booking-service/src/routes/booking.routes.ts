@@ -1,7 +1,6 @@
 import express from 'express';
 import * as bookingController from '../controllers/booking.controller';
-import { authenticateToken, requireVerifiedStudent } from '../../../shared/middleware/auth';
-import { asyncHandler } from '../../../shared/middleware/errorHandler';
+import { authenticateToken, requireVerifiedStudent, asyncHandler } from '@lessgo/shared';
 import { body } from 'express-validator';
 
 const router = express.Router();

@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
-import { UserRole } from '../../../shared/types';
-import { isValidEmail, validatePassword } from '../../../shared/utils/validation';
+import { UserRole, isValidEmail, validatePassword } from '@lessgo/shared';
 
 /**
  * Validation middleware to check for validation errors

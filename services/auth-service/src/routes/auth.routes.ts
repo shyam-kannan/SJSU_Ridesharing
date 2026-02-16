@@ -9,7 +9,7 @@ import {
   loginValidation,
   refreshTokenValidation,
 } from '../middleware/validate';
-import { asyncHandler } from '../../../shared/middleware/errorHandler';
+import { asyncHandler } from '@lessgo/shared';
 
 const router = express.Router();
 
@@ -96,5 +96,14 @@ router.post('/logout', asyncHandler(authController.logout));
  * @access  Public (requires token)
  */
 router.get('/me', asyncHandler(authController.getCurrentUser));
+
+/**
+ * @route   POST /auth/test/verify/:userId
+ * @desc    Test-only: verify a user's SJSU ID status
+ * @access  Development only
+ */
+if (config.env !== 'production') {
+  router.post('/test/verify/:userId', asyncHandler(authController.testVerifyUser));
+}
 
 export default router;

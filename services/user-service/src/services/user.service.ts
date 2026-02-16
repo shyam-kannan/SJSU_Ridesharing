@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { config } from '../config';
-import { SafeUser, Rating, RatingWithUsers, DriverSetupRequest, UserRole } from '../../../shared/types';
+import { SafeUser, Rating, RatingWithUsers, DriverSetupRequest, UserRole } from '@lessgo/shared';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,

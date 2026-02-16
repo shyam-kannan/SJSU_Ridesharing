@@ -1,8 +1,6 @@
 import express from 'express';
 import paymentRoutes from './routes/payment.routes';
-import { errorHandler, notFoundHandler } from '../../shared/middleware/errorHandler';
-import { requestLogger } from '../../shared/middleware/logger';
-import { devCorsMiddleware } from '../../shared/middleware/cors';
+import { errorHandler, notFoundHandler, requestLogger, devCorsMiddleware } from '@lessgo/shared';
 import { config } from './config';
 
 const app = express();

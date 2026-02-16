@@ -1,9 +1,6 @@
 import { Response } from 'express';
 import * as tripService from '../services/trip.service';
-import { AuthRequest } from '../../../shared/middleware/auth';
-import { AppError } from '../../../shared/middleware/errorHandler';
-import { successResponse, errorResponse } from '../../../shared/utils/response';
-import { CreateTripRequest, SearchTripsRequest, TripStatus } from '../../../shared/types';
+import { AuthRequest, AppError, successResponse, errorResponse, CreateTripRequest, SearchTripsRequest, TripStatus } from '@lessgo/shared';
 import { config } from '../config';
 
 /**

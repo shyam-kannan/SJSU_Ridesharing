@@ -2,7 +2,11 @@
   "name": "lessgo-backend",
   "version": "1.0.0",
   "description": "LessGo Smart Carpooling Platform Backend - Microservices Architecture",
-  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "services/*"
+  ],
   "scripts": {
     "migrate:create": "node-pg-migrate create -m shared/database/migrations",
     "migrate:up": "node-pg-migrate up -m shared/database/migrations --database-url-var DATABASE_URL",
@@ -28,10 +32,13 @@
   "author": "LessGo Team",
   "license": "MIT",
   "dependencies": {
-    "node-pg-migrate": "^6.2.2",
-    "pg": "^8.11.3",
+    "@faker-js/faker": "^8.3.1",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^16.3.1",
-    "@faker-js/faker": "^8.3.1"
+    "node-pg-migrate": "^6.2.2",
+    "pg": "^8.11.3"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "dotenv-cli": "^7.4.4"
+  }
 }

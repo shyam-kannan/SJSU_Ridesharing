@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { config } from '../config';
-import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '../../../shared/types';
+import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
 
 const pool = new Pool({

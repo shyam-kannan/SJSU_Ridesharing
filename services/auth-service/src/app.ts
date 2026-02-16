@@ -1,9 +1,7 @@
 import express, { Application } from 'express';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes';
-import { errorHandler, notFoundHandler } from '../../shared/middleware/errorHandler';
-import { requestLogger } from '../../shared/middleware/logger';
-import { corsMiddleware, devCorsMiddleware } from '../../shared/middleware/cors';
+import { errorHandler, notFoundHandler, requestLogger, corsMiddleware, devCorsMiddleware } from '@lessgo/shared';
 import { config } from './config';
 
 const app: Application = express();

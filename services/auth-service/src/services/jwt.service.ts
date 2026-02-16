@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { JWTPayload, UserRole, SJSUIdStatus } from '../../../shared/types';
+import { JWTPayload, UserRole, SJSUIdStatus } from '@lessgo/shared';
 
 /**
  * Generate access token (short-lived)
@@ -26,7 +26,7 @@ export const generateAccessToken = (
 
   const token = jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtAccessExpiry,
-  });
+  } as jwt.SignOptions);
 
   return token;
 };
@@ -44,7 +44,7 @@ export const generateRefreshToken = (userId: string): string => {
 
   const token = jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtRefreshExpiry,
-  });
+  } as jwt.SignOptions);
 
   return token;
 };

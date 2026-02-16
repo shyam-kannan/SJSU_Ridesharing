@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { config } from '../config';
-import { GeoPoint } from '../../../shared/types';
+import { GeoPoint } from '@lessgo/shared';
 
 /**
  * Geocode an address to lat/lng coordinates using Google Maps API

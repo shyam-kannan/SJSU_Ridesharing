@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
 import * as authService from '../services/auth.service';
 import * as jwtService from '../services/jwt.service';
-import { RegisterRequest, LoginRequest, AuthResponse } from '../../../shared/types';
-import { AppError } from '../../../shared/middleware/errorHandler';
-import { successResponse, errorResponse } from '../../../shared/utils/response';
+import { RegisterRequest, LoginRequest, AuthResponse, AppError, successResponse, errorResponse, SJSUIdStatus } from '@lessgo/shared';
 
 /**
  * Register a new user
@@ -232,4 +230,22 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
     }
     throw new AppError('Failed to get current user', 500);
   }
+};
+
+/**
+ * Test-only: Verify a user's SJSU ID status
+ * POST /auth/test/verify/:userId
+ * Only available in development mode
+ */
+export const testVerifyUser = async (req: Request, res: Response): Promise<void> => {
+  const { userId } = req.params;
+
+  const user = await authService.findUserById(userId);
+  if (!user) {
+    errorResponse(res, 'User not found', 404);
+    return;
+  }
+
+  const updatedUser = await authService.updateSJSUIdStatus(userId, SJSUIdStatus.Verified);
+  successResponse(res, updatedUser, 'User SJSU ID verified (test only)');
 };

@@ -1,7 +1,6 @@
 import express from 'express';
 import * as userController from '../controllers/user.controller';
-import { authenticateToken } from '../../../shared/middleware/auth';
-import { asyncHandler } from '../../../shared/middleware/errorHandler';
+import { authenticateToken, asyncHandler } from '@lessgo/shared';
 import { body } from 'express-validator';
 
 const router = express.Router();
