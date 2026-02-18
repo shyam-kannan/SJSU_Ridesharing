@@ -11,6 +11,8 @@ struct BookingConfirmationView: View {
 
     @State private var step: Step = .review
     @State private var showSuccess = false
+    @State private var showVerificationAlert = false
+    @State private var showIDVerificationSheet = false
 
     enum Step { case review, paying }
 
@@ -152,14 +154,35 @@ struct BookingConfirmationView: View {
             }
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.75), value: showSuccess)
+        .alert("Verification Required", isPresented: $showVerificationAlert) {
+            Button("Verify Now") { showIDVerificationSheet = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your SJSU ID must be verified before booking. Please complete verification first.")
+        }
+        .sheet(isPresented: $showIDVerificationSheet) {
+            IDVerificationView().environmentObject(authVM)
+                .onDisappear { Task { await authVM.refreshCurrentUser() } }
+        }
     }
 
     private func confirmBooking() {
+        // Client-side verification guard — catches unverified users before the network call
+        guard authVM.currentUser?.sjsuIdStatus == .verified else {
+            showVerificationAlert = true
+            return
+        }
+
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
             if success, let bookingId = bookingVM.currentBooking?.id {
                 let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: estimatedPrice)
                 if paid { withAnimation { showSuccess = true } }
+            } else if let errMsg = bookingVM.errorMessage,
+                      errMsg.lowercased().contains("verif") {
+                // Backend also rejects unverified bookings — surface the verification flow
+                bookingVM.errorMessage = nil
+                showVerificationAlert = true
             }
         }
     }

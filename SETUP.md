@@ -63,7 +63,28 @@ Check that `.env` exists in the project root:
 ls .env
 ```
 
-**No changes needed.** All API keys (Stripe, Google Maps, JWT secret, database credentials) are already configured with development/test values. These are shared test keys for the team.
+**No changes needed for basic setup.** All API keys (Stripe, Google Maps, JWT secret, database credentials) are already configured with development/test values. These are shared test keys for the team.
+
+### Email Notifications Setup (Optional)
+
+LessGo sends real emails for booking confirmations, payment receipts, and trip reminders. Without SMTP configured, the notification endpoints still succeed but log to console only.
+
+**Gmail App Password steps:**
+1. Use or create a Gmail account for sending (e.g. `lessgo.sjsu@gmail.com`)
+2. Enable 2-Factor Authentication on the account
+3. Go to **Google Account → Security → 2-Step Verification → App passwords**
+4. Select **Mail**, generate, and copy the 16-character password
+
+**Add to root `.env`:**
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your16charpassword
+FROM_EMAIL=LessGo <noreply@lessgo.app>
+```
+
+> **Note:** `SMTP_PASS` must be the 16-character app password with no spaces.
 
 ---
 
@@ -99,10 +120,12 @@ You should see output like:
 > ...
 ```
 
-Load test data (50 users, 100 trips, bookings, ratings):
+Load test data:
 ```
 npm run seed
 ```
+
+The seed creates **50 users** (25 drivers, 25 riders, all verified) and **108 trips** — 54 trips TO SJSU and 54 trips FROM SJSU, covering 10 Bay Area hubs from SF Caltrain (66 km) to Santa Clara (8 km).
 
 ---
 
@@ -155,6 +178,13 @@ The test runner will:
 7. Optionally run API Gateway E2E tests (full flow through port 3000)
 
 You should see mostly green checkmarks.
+
+**Test new iOS features (email, password change, notifications, support):**
+```bash
+./tests/test-ios-features.sh
+```
+
+This tests: change password, device token registration, notification preferences, all 5 email endpoints, and report-issue validation. Expected: **16/16 passed**.
 
 ---
 
@@ -255,7 +285,7 @@ lessgo-backend/
     trip-service/     Port 3003 - Trip CRUD, geocoding, PostGIS spatial search
     booking-service/  Port 3004 - Bookings, quotes (via Cost Service), payment (via Payment Service)
     payment-service/  Port 3005 - Stripe PaymentIntents, capture, refund
-    notification-service/  Port 3006 - Email/push notification stubs
+    notification-service/  Port 3006 - Real email (nodemailer/SMTP) + push notification endpoints
     cost-calculation-service/  Port 3009 - Trip cost calculation
   tests/              PowerShell test scripts for all services
   docs/               API documentation

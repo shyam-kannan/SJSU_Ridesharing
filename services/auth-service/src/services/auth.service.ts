@@ -174,6 +174,41 @@ export const updateSJSUIdStatus = async (
   return result.rows[0];
 };
 
+/**
+ * Change user's password
+ * @param userId User's UUID
+ * @param currentPassword Current plain-text password
+ * @param newPassword New plain-text password
+ */
+export const changePassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> => {
+  // Fetch user with password hash
+  const query = `SELECT * FROM users WHERE user_id = $1`;
+  const result = await pool.query(query, [userId]);
+
+  if (result.rows.length === 0) {
+    throw new Error('User not found');
+  }
+
+  const user: User = result.rows[0];
+
+  // Verify current password
+  const isValid = await comparePassword(currentPassword, user.password_hash);
+  if (!isValid) {
+    throw new Error('Current password is incorrect');
+  }
+
+  // Hash new password and update
+  const newHash = await hashPassword(newPassword);
+  await pool.query(
+    `UPDATE users SET password_hash = $1, updated_at = current_timestamp WHERE user_id = $2`,
+    [newHash, userId]
+  );
+};
+
 export default {
   createUser,
   findUserByEmail,
@@ -182,4 +217,5 @@ export default {
   toSafeUser,
   submitSJSUIdImage,
   updateSJSUIdStatus,
+  changePassword,
 };

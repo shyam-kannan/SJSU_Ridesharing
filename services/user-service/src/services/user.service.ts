@@ -256,6 +256,35 @@ export const getUserStats = async (
   return stats;
 };
 
+/**
+ * Save device push token for a user
+ * @param userId User's UUID
+ * @param deviceToken APNs/FCM device token
+ */
+export const saveDeviceToken = async (userId: string, deviceToken: string): Promise<void> => {
+  await pool.query(
+    `UPDATE users SET device_token = $1, updated_at = current_timestamp WHERE user_id = $2`,
+    [deviceToken, userId]
+  );
+};
+
+/**
+ * Update notification preferences for a user
+ * @param userId User's UUID
+ * @param emailNotifications Enable email notifications
+ * @param pushNotifications Enable push notifications
+ */
+export const updateNotificationPreferences = async (
+  userId: string,
+  emailNotifications: boolean,
+  pushNotifications: boolean
+): Promise<void> => {
+  await pool.query(
+    `UPDATE users SET email_notifications = $1, push_notifications = $2, updated_at = current_timestamp WHERE user_id = $3`,
+    [emailNotifications, pushNotifications, userId]
+  );
+};
+
 export default {
   getUserById,
   updateUserProfile,
@@ -263,4 +292,6 @@ export default {
   getUserRatings,
   updateUserAverageRating,
   getUserStats,
+  saveDeviceToken,
+  updateNotificationPreferences,
 };

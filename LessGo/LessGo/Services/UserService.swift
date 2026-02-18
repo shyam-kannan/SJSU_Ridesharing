@@ -61,6 +61,28 @@ class UserService {
         return user
     }
 
+    // MARK: - Device Token
+
+    func registerDeviceToken(userId: String, token: String) async throws {
+        struct TokenRequest: Encodable { let deviceToken: String }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/users/\(userId)/device-token",
+            method: .post,
+            body: TokenRequest(deviceToken: token)
+        )
+    }
+
+    // MARK: - Notification Preferences
+
+    func updateNotificationPreferences(userId: String, emailNotifications: Bool, pushNotifications: Bool) async throws {
+        struct PrefsRequest: Encodable { let emailNotifications: Bool; let pushNotifications: Bool }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/users/\(userId)/preferences",
+            method: .put,
+            body: PrefsRequest(emailNotifications: emailNotifications, pushNotifications: pushNotifications)
+        )
+    }
+
     // MARK: - Get User Ratings
 
     func getUserRatings(id: String) async throws -> UserRatingsResponse {

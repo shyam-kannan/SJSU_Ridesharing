@@ -272,6 +272,43 @@ export const submitSJSUId = async (req: Request, res: Response): Promise<void> =
 };
 
 /**
+ * Change user's password
+ * PUT /auth/change-password
+ */
+export const changePassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) { errorResponse(res, 'Token required', 401); return; }
+
+    const decoded = jwtService.verifyToken(token);
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      errorResponse(res, 'currentPassword and newPassword are required', 400);
+      return;
+    }
+    if (newPassword.length < 8) {
+      errorResponse(res, 'New password must be at least 8 characters', 400);
+      return;
+    }
+
+    await authService.changePassword(decoded.userId, currentPassword, newPassword);
+    successResponse(res, null, 'Password changed successfully');
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Current password is incorrect') {
+      errorResponse(res, 'Current password is incorrect', 400);
+      return;
+    }
+    if (error instanceof Error && error.name === 'TokenExpiredError') {
+      errorResponse(res, 'Token expired', 401);
+      return;
+    }
+    throw new AppError('Failed to change password', 500);
+  }
+};
+
+/**
  * Test-only: Verify a user's SJSU ID status
  * POST /auth/test/verify/:userId
  * Only available in development mode

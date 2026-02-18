@@ -150,6 +150,59 @@ export const getUserRatings = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
+ * Register device push token
+ * POST /users/:userId/device-token
+ */
+export const registerDeviceToken = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { deviceToken } = req.body;
+
+    if (!req.user || req.user.userId !== userId) {
+      errorResponse(res, 'Unauthorized', 403);
+      return;
+    }
+
+    if (!deviceToken) {
+      errorResponse(res, 'deviceToken is required', 400);
+      return;
+    }
+
+    await userService.saveDeviceToken(userId, deviceToken);
+    successResponse(res, null, 'Device token registered');
+  } catch (error) {
+    console.error('Register device token error:', error);
+    throw new AppError('Failed to register device token', 500);
+  }
+};
+
+/**
+ * Update notification preferences
+ * PUT /users/:userId/preferences
+ */
+export const updatePreferences = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { emailNotifications, pushNotifications } = req.body;
+
+    if (!req.user || req.user.userId !== userId) {
+      errorResponse(res, 'Unauthorized', 403);
+      return;
+    }
+
+    await userService.updateNotificationPreferences(
+      userId,
+      emailNotifications !== false,
+      pushNotifications !== false
+    );
+    successResponse(res, null, 'Preferences updated');
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    throw new AppError('Failed to update preferences', 500);
+  }
+};
+
+/**
  * Get user statistics
  * GET /users/:id/stats
  */

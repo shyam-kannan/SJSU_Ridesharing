@@ -24,6 +24,16 @@ class TripSearchViewModel: ObservableObject {
 
     enum ViewMode { case map, list }
 
+    enum SortOption: String, CaseIterable, Identifiable {
+        case all = "All"
+        case leavingSoon = "Leaving Soon"
+        case bestRated = "Best Rated"
+        case cheapest = "Cheapest"
+        var id: String { rawValue }
+    }
+
+    @Published var sortOption: SortOption = .all
+
     enum TravelDirection: Hashable {
         case toSJSU    // rider is picked up somewhere → dropped at SJSU
         case fromSJSU  // rider departs from SJSU → dropped somewhere
@@ -71,14 +81,12 @@ class TripSearchViewModel: ObservableObject {
 
     // MARK: - Search Near Location
 
-    // This app is exclusively for rides TO or FROM SJSU.
-    // Always search around SJSU coordinates so we surface all campus-connected trips.
+    // Every trip in LessGo is connected to SJSU, so loading all upcoming active
+    // trips is simpler and more reliable than a geospatial search with a fixed
+    // radius (which misses Bay Area hubs 30–70 km from campus).
+    // Client-side direction + text filtering in `filteredTrips` handles the rest.
     func searchNearby(radiusMeters: Int = AppConstants.defaultSearchRadiusMeters) async {
-        await search(
-            lat: AppConstants.sjsuCoordinate.latitude,
-            lng: AppConstants.sjsuCoordinate.longitude,
-            radius: radiusMeters
-        )
+        await loadAllUpcoming()
     }
 
     func search(lat: Double, lng: Double, radius: Int = AppConstants.defaultSearchRadiusMeters) async {
@@ -152,19 +160,38 @@ class TripSearchViewModel: ObservableObject {
             }
         }
 
-        // Then apply text search filter on the variable end
-        guard !searchText.isEmpty else { return directionFiltered }
-        return directionFiltered.filter { trip in
-            switch searchDirection {
-            case .toSJSU:
-                // Filter by pickup (origin) text
-                return trip.origin.localizedCaseInsensitiveContains(searchText) ||
-                       (trip.driver?.name.localizedCaseInsensitiveContains(searchText) ?? false)
-            case .fromSJSU:
-                // Filter by drop-off (destination) text
-                return trip.destination.localizedCaseInsensitiveContains(searchText) ||
-                       (trip.driver?.name.localizedCaseInsensitiveContains(searchText) ?? false)
+        // Apply text search filter on the variable end
+        let textFiltered: [Trip]
+        if searchText.isEmpty {
+            textFiltered = directionFiltered
+        } else {
+            textFiltered = directionFiltered.filter { trip in
+                switch searchDirection {
+                case .toSJSU:
+                    return trip.origin.localizedCaseInsensitiveContains(searchText) ||
+                           (trip.driver?.name.localizedCaseInsensitiveContains(searchText) ?? false)
+                case .fromSJSU:
+                    return trip.destination.localizedCaseInsensitiveContains(searchText) ||
+                           (trip.driver?.name.localizedCaseInsensitiveContains(searchText) ?? false)
+                }
             }
+        }
+
+        // Apply sort
+        return sortTrips(textFiltered, by: sortOption)
+    }
+
+    func sortTrips(_ list: [Trip], by option: SortOption) -> [Trip] {
+        switch option {
+        case .all:
+            return list
+        case .leavingSoon:
+            return list.sorted { $0.departureTime < $1.departureTime }
+        case .bestRated:
+            return list.sorted { ($0.driver?.rating ?? 0) > ($1.driver?.rating ?? 0) }
+        case .cheapest:
+            // Sort by most seats available (more seats = lower per-seat cost share)
+            return list.sorted { $0.seatsAvailable > $1.seatsAvailable }
         }
     }
 }

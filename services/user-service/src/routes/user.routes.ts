@@ -71,4 +71,18 @@ router.get('/:id/ratings', asyncHandler(userController.getUserRatings));
  */
 router.get('/:id/stats', asyncHandler(userController.getUserStatistics));
 
+/**
+ * @route   POST /users/:userId/device-token
+ * @desc    Register device push token
+ * @access  Private (own user only)
+ */
+router.post('/:userId/device-token', authenticateToken, asyncHandler(userController.registerDeviceToken));
+
+/**
+ * @route   PUT /users/:userId/preferences
+ * @desc    Update notification preferences
+ * @access  Private (own user only)
+ */
+router.put('/:userId/preferences', authenticateToken, asyncHandler(userController.updatePreferences));
+
 export default router;

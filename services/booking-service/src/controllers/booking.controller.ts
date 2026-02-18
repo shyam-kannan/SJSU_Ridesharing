@@ -1,6 +1,18 @@
 import { Response } from 'express';
+import axios from 'axios';
 import * as bookingService from '../services/booking.service';
 import { AuthRequest, AppError, successResponse, errorResponse, CreateBookingRequest, CreateRatingRequest } from '@lessgo/shared';
+import { config } from '../config';
+
+// Fire-and-forget email notification (never throws)
+async function fireEmail(path: string, body: object): Promise<void> {
+  try {
+    await axios.post(`${config.notificationServiceUrl}${path}`, body);
+  } catch {
+    // Non-critical — log and continue
+    console.log(`[EMAIL] Notification to ${path} failed (non-critical)`);
+  }
+}
 
 export const createBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -68,6 +80,24 @@ export const confirmBooking = async (req: AuthRequest, res: Response): Promise<v
     const booking = await bookingService.confirmBooking(id, req.user.userId);
 
     successResponse(res, booking, 'Booking confirmed successfully');
+
+    // Fire email notifications (non-blocking)
+    if (booking.rider && booking.trip) {
+      const depTime = new Date(booking.trip.departure_time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+      const amount = booking.quote?.max_price ?? 0;
+
+      // Email to rider
+      fireEmail('/notifications/send/booking-confirmation', {
+        email: booking.rider.email,
+        riderName: booking.rider.name,
+        origin: booking.trip.origin,
+        destination: booking.trip.destination,
+        departureTime: depTime,
+        seats: booking.seats_booked,
+        amount,
+        bookingId: booking.booking_id,
+      });
+    }
   } catch (error) {
     console.error('Confirm booking error:', error);
     if (error instanceof Error) {
@@ -89,6 +119,22 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
     const booking = await bookingService.cancelBooking(id, req.user.userId);
 
     successResponse(res, booking, 'Booking cancelled successfully');
+
+    // Fire cancellation email (non-blocking)
+    if (booking.rider && booking.trip) {
+      const depTime = new Date(booking.trip.departure_time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+      const refundAmount = booking.payment?.amount;
+
+      fireEmail('/notifications/send/cancellation', {
+        email: booking.rider.email,
+        name: booking.rider.name,
+        origin: booking.trip.origin,
+        destination: booking.trip.destination,
+        departureTime: depTime,
+        refundAmount,
+        bookingId: booking.booking_id,
+      });
+    }
   } catch (error) {
     console.error('Cancel booking error:', error);
     if (error instanceof Error) {

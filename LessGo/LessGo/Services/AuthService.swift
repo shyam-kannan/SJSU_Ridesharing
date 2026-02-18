@@ -129,6 +129,20 @@ class AuthService {
     }
     #endif
 
+    // MARK: - Change Password
+
+    func changePassword(currentPassword: String, newPassword: String) async throws {
+        struct ChangePasswordRequest: Encodable {
+            let currentPassword: String
+            let newPassword: String
+        }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/auth/change-password",
+            method: .put,
+            body: ChangePasswordRequest(currentPassword: currentPassword, newPassword: newPassword)
+        )
+    }
+
     // MARK: - Helpers
 
     var isLoggedIn: Bool {

@@ -109,6 +109,13 @@ router.post(
 );
 
 /**
+ * @route   PUT /auth/change-password
+ * @desc    Change authenticated user's password
+ * @access  Private (requires Bearer token)
+ */
+router.put('/change-password', asyncHandler(authController.changePassword));
+
+/**
  * @route   POST /auth/test/verify/:userId
  * @desc    Test-only: verify a user's SJSU ID status
  * @access  Development only

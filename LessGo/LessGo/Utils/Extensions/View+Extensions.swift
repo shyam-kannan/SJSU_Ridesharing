@@ -148,6 +148,23 @@ struct SkeletonRow: View {
     }
 }
 
+// MARK: - Rounded Corners (specific corners only)
+
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCornerShape(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCornerShape: Shape {
+    let radius: CGFloat
+    let corners: UIRectCorner
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
+    }
+}
+
 // MARK: - Star Rating View
 struct StarRatingView: View {
     let rating: Double

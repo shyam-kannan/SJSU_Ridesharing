@@ -11,9 +11,18 @@ class AuthViewModel: ObservableObject {
     @Published var showIDVerification = false
 
     private let authService = AuthService.shared
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         Task { await checkAuthentication() }
+        // Re-fetch the user whenever the app returns to foreground so
+        // verification status and profile data are always current.
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                guard let self, self.isAuthenticated else { return }
+                Task { await self.refreshCurrentUser() }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Auth State Check
@@ -39,6 +48,8 @@ class AuthViewModel: ObservableObject {
             let response = try await authService.login(email: email, password: password)
             currentUser = response.user
             isAuthenticated = true
+            // Always fetch latest record so sjsuIdStatus is current, not JWT-cached.
+            await refreshCurrentUser()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
             errorMessage = error.localizedDescription
@@ -82,11 +93,16 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Refresh current user
 
-    func refreshUser() async {
+    /// Refreshes `currentUser` from `/auth/me`. Call this after any action that
+    /// may change verification status, profile info, or role.
+    func refreshCurrentUser() async {
         do {
             currentUser = try await authService.getCurrentUser()
         } catch {}
     }
+
+    /// Alias kept for call-site compatibility.
+    func refreshUser() async { await refreshCurrentUser() }
 
     // MARK: - Debug: instant SJSU ID approval
 

@@ -48,6 +48,23 @@ struct Quote: Codable {
         case finalPrice = "final_price"
         case createdAt = "created_at"
     }
+
+    // Postgres DECIMAL columns arrive as strings from the pg library.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id        = try c.decode(String.self, forKey: .id)
+        bookingId = try c.decode(String.self, forKey: .bookingId)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+
+        maxPrice  = Self.decodeDouble(c, key: .maxPrice) ?? 0.0
+        finalPrice = Self.decodeDouble(c, key: .finalPrice)
+    }
+
+    private static func decodeDouble(_ c: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) -> Double? {
+        if let v = try? c.decode(Double.self, forKey: key) { return v }
+        if let s = try? c.decode(String.self, forKey: key) { return Double(s) }
+        return nil
+    }
 }
 
 // MARK: - Booking Request/Response Models

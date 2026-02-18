@@ -170,10 +170,18 @@ export const searchTripsNearby = async (
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE ST_DWithin(
-      t.origin_point::geography,
-      ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-      $3
+    WHERE (
+      ST_DWithin(
+        t.origin_point::geography,
+        ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+        $3
+      )
+      OR
+      ST_DWithin(
+        t.destination_point::geography,
+        ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+        $3
+      )
     )
   `;
 

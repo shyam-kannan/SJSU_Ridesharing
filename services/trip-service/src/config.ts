@@ -15,9 +15,9 @@ export const config = {
   // Google Maps API
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
 
-  // Geospatial defaults
-  defaultSearchRadius: 5000, // 5km in meters
-  maxSearchRadius: 50000, // 50km maximum
+  // Geospatial defaults (Bay Area spans ~100km from SJSU to SF)
+  defaultSearchRadius: 100000, // 100km — covers all Bay Area hubs
+  maxSearchRadius: 100000,     // 100km maximum
 };
 
 // Validate required config

@@ -4,6 +4,8 @@ struct DriverHomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var profileVM = ProfileViewModel()
     @State private var showCreateTrip = false
+    @State private var showVerificationAlert = false
+    @State private var showIDVerificationSheet = false
 
     var body: some View {
         NavigationView {
@@ -72,6 +74,16 @@ struct DriverHomeView: View {
                         }
                     }
             }
+            .alert("Verification Required", isPresented: $showVerificationAlert) {
+                Button("Verify Now") { showIDVerificationSheet = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Please verify your SJSU ID before creating trips.")
+            }
+            .sheet(isPresented: $showIDVerificationSheet) {
+                IDVerificationView().environmentObject(authVM)
+                    .onDisappear { Task { await authVM.refreshCurrentUser() } }
+            }
         }
     }
 
@@ -85,7 +97,13 @@ struct DriverHomeView: View {
 
     // MARK: - Create Trip Card
     private var createTripCard: some View {
-        Button(action: { showCreateTrip = true }) {
+        Button(action: {
+            if authVM.currentUser?.sjsuIdStatus == .verified {
+                showCreateTrip = true
+            } else {
+                showVerificationAlert = true
+            }
+        }) {
             HStack(spacing: 16) {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.2)).frame(width: 56, height: 56)

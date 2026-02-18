@@ -70,11 +70,22 @@ struct RiderHomeView: View {
 
     // MARK: - Map Background
 
+    // Pin coordinate: "To SJSU" → rider is picked up at origin (Bay Area hub).
+    //                 "From SJSU" → rider is dropped at destination (Bay Area hub).
+    private func pinCoordinate(for trip: Trip) -> CLLocationCoordinate2D {
+        switch viewModel.searchDirection {
+        case .toSJSU:
+            return trip.originPoint?.clLocationCoordinate2D ?? AppConstants.sjsuCoordinate
+        case .fromSJSU:
+            return trip.destinationPoint?.clLocationCoordinate2D ?? AppConstants.sjsuCoordinate
+        }
+    }
+
     private var mapBackground: some View {
         Map(coordinateRegion: $region,
             showsUserLocation: true,
-            annotationItems: viewModel.trips) { trip in
-            MapAnnotation(coordinate: trip.originPoint?.clLocationCoordinate2D ?? AppConstants.sjsuCoordinate) {
+            annotationItems: viewModel.filteredTrips) { trip in
+            MapAnnotation(coordinate: pinCoordinate(for: trip)) {
                 TripMapMarker(trip: trip, isSelected: selectedTrip?.id == trip.id) {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                         selectedTrip = (selectedTrip?.id == trip.id) ? nil : trip
@@ -417,9 +428,10 @@ struct TripMapMarker: View {
 struct TripPreviewCard: View {
     let trip: Trip
     let onDismiss: () -> Void
+    @EnvironmentObject var authVM: AuthViewModel
 
     var body: some View {
-        NavigationLink(destination: TripDetailsView(trip: trip)) {
+        NavigationLink(destination: TripDetailsView(trip: trip).environmentObject(authVM)) {
             VStack(spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {
@@ -476,24 +488,3 @@ struct TripPreviewCard: View {
     }
 }
 
-// MARK: - Corner Radius Extension
-
-extension View {
-    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
-        clipShape(RoundedCorner(radius: radius, corners: corners))
-    }
-}
-
-struct RoundedCorner: Shape {
-    var radius: CGFloat = 0
-    var corners: UIRectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(
-            roundedRect: rect,
-            byRoundingCorners: corners,
-            cornerRadii: CGSize(width: radius, height: radius)
-        )
-        return Path(path.cgPath)
-    }
-}

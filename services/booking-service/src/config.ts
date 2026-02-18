@@ -15,6 +15,7 @@ export const config = {
   // Service URLs
   paymentServiceUrl: process.env.PAYMENT_SERVICE_URL || 'http://localhost:3005',
   costServiceUrl: process.env.COST_SERVICE_URL || 'http://localhost:3009',
+  notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3006',
 };
 
 if (!config.databaseUrl) {
