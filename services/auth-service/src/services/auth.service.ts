@@ -123,6 +123,32 @@ export const toSafeUser = (user: User): SafeUser => {
 };
 
 /**
+ * Save SJSU ID image path and set status to pending
+ * @param userId User's UUID
+ * @param imagePath Path to the uploaded image
+ * @returns Updated user (safe)
+ */
+export const submitSJSUIdImage = async (
+  userId: string,
+  imagePath: string
+): Promise<SafeUser> => {
+  const query = `
+    UPDATE users
+    SET sjsu_id_image_path = $1, sjsu_id_status = $2, updated_at = current_timestamp
+    WHERE user_id = $3
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, created_at, updated_at
+  `;
+
+  const result = await pool.query(query, [imagePath, SJSUIdStatus.Pending, userId]);
+
+  if (result.rows.length === 0) {
+    throw new Error('User not found');
+  }
+
+  return result.rows[0];
+};
+
+/**
  * Update user's SJSU ID verification status (admin only)
  * @param userId User's UUID
  * @param status New SJSU ID status
@@ -154,5 +180,6 @@ export default {
   findUserById,
   validateCredentials,
   toSafeUser,
+  submitSJSUIdImage,
   updateSJSUIdStatus,
 };

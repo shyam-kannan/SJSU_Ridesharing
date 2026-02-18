@@ -233,6 +233,45 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
 };
 
 /**
+ * Submit SJSU ID image for verification
+ * POST /auth/verify-id
+ * Accepts multipart/form-data with field "sjsuId"
+ */
+export const submitSJSUId = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      errorResponse(res, 'Token required', 401);
+      return;
+    }
+
+    const decoded = jwtService.verifyToken(token);
+    const userId = decoded.userId;
+
+    if (!req.file) {
+      errorResponse(res, 'SJSU ID image is required', 400);
+      return;
+    }
+
+    const updatedUser = await authService.submitSJSUIdImage(userId, req.file.path);
+    successResponse(res, updatedUser, 'SJSU ID submitted for verification');
+  } catch (error) {
+    console.error('Verify ID error:', error);
+    if (error instanceof Error && error.name === 'TokenExpiredError') {
+      errorResponse(res, 'Token expired', 401);
+      return;
+    }
+    if (error instanceof Error && error.name === 'JsonWebTokenError') {
+      errorResponse(res, 'Invalid token', 403);
+      return;
+    }
+    throw new AppError('Failed to submit SJSU ID', 500);
+  }
+};
+
+/**
  * Test-only: Verify a user's SJSU ID status
  * POST /auth/test/verify/:userId
  * Only available in development mode

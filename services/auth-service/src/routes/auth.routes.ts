@@ -98,6 +98,17 @@ router.post('/logout', asyncHandler(authController.logout));
 router.get('/me', asyncHandler(authController.getCurrentUser));
 
 /**
+ * @route   POST /auth/verify-id
+ * @desc    Submit SJSU ID image for verification (multipart/form-data, field: "sjsuId")
+ * @access  Private (requires Bearer token)
+ */
+router.post(
+  '/verify-id',
+  upload.single('sjsuId'),
+  asyncHandler(authController.submitSJSUId)
+);
+
+/**
  * @route   POST /auth/test/verify/:userId
  * @desc    Test-only: verify a user's SJSU ID status
  * @access  Development only

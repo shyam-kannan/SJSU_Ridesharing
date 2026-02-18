@@ -17,19 +17,23 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID'],
 }));
 
-app.use(express.json());
+// NOTE: express.json() is intentionally NOT added here.
+// The gateway is a pure proxy — it must forward raw request bytes to each
+// microservice. Parsing the body here consumes the stream and causes
+// http-proxy-middleware to forward an empty body, resulting in ECONNRESET.
+// Each microservice parses its own request bodies.
 
-// Service URLs
+// Service URLs — use 127.0.0.1 to avoid IPv6 (::1) resolution issues on macOS
 const SERVICES = {
-  auth: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
-  user: process.env.USER_SERVICE_URL || 'http://localhost:3002',
-  trip: process.env.TRIP_SERVICE_URL || 'http://localhost:3003',
-  booking: process.env.BOOKING_SERVICE_URL || 'http://localhost:3004',
-  payment: process.env.PAYMENT_SERVICE_URL || 'http://localhost:3005',
-  notification: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3006',
-  grouping: process.env.GROUPING_SERVICE_URL || 'http://localhost:8001',
-  routing: process.env.ROUTING_SERVICE_URL || 'http://localhost:8002',
-  cost: process.env.COST_SERVICE_URL || 'http://localhost:3009',
+  auth: process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:3001',
+  user: process.env.USER_SERVICE_URL || 'http://127.0.0.1:3002',
+  trip: process.env.TRIP_SERVICE_URL || 'http://127.0.0.1:3003',
+  booking: process.env.BOOKING_SERVICE_URL || 'http://127.0.0.1:3004',
+  payment: process.env.PAYMENT_SERVICE_URL || 'http://127.0.0.1:3005',
+  notification: process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:3006',
+  grouping: process.env.GROUPING_SERVICE_URL || 'http://127.0.0.1:8001',
+  routing: process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8002',
+  cost: process.env.COST_SERVICE_URL || 'http://127.0.0.1:3009',
 };
 
 // Rate Limiting
@@ -55,16 +59,21 @@ app.use((req, res, next) => {
 
 // JWT Validation Middleware (for protected routes)
 const jwtMiddleware = (req: Request, res: Response, next: Function) => {
-  const publicPaths = ['/api/auth/register', '/api/auth/login', '/api/auth/refresh'];
+  // NOTE: mounted at app.use('/api', ...) so req.path is WITHOUT the /api prefix.
+  // A request to /api/auth/register arrives here as /auth/register.
+  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh'];
+
+  console.log(`[JWT] path="${req.path}" | isPublic=${publicPaths.some(p => req.path.startsWith(p))}`);
 
   if (publicPaths.some(path => req.path.startsWith(path))) {
+    console.log(`[JWT] Skipping auth for public path: ${req.path}`);
     return next();
   }
 
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token && req.path.startsWith('/api/trips') && req.method === 'GET') {
+  if (!token && req.path.startsWith('/trips') && req.method === 'GET') {
     // Allow public trip viewing
     return next();
   }
@@ -84,8 +93,8 @@ const jwtMiddleware = (req: Request, res: Response, next: Function) => {
 
 app.use('/api', jwtMiddleware);
 
-// Health Check
-app.get('/health', (req, res) => {
+// Health Check — uses express.json() locally for this one route only
+app.get('/health', express.json(), (req, res) => {
   res.json({
     status: 'success',
     message: 'API Gateway is running',
@@ -97,9 +106,11 @@ app.get('/health', (req, res) => {
 // Proxy Configuration
 const proxyOptions = {
   changeOrigin: true,
-  logLevel: 'silent' as const,
+  proxyTimeout: 15000,
+  timeout: 15000,
+  logLevel: 'warn' as const,
   onError: (err: Error, req: Request, res: Response) => {
-    console.error(`❌ Proxy error for ${req.path}:`, err.message);
+    console.error(`❌ Proxy error for ${req.path}: ${err.message}`);
     res.status(502).json({
       status: 'error',
       message: 'Service temporarily unavailable',
