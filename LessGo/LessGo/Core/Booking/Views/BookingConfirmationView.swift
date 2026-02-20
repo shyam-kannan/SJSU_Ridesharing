@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreLocation
 
 struct BookingConfirmationView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -13,6 +14,7 @@ struct BookingConfirmationView: View {
     @State private var showSuccess = false
     @State private var showVerificationAlert = false
     @State private var showIDVerificationSheet = false
+    @State private var isBookingComplete = false
 
     enum Step { case review, paying }
 
@@ -132,9 +134,10 @@ struct BookingConfirmationView: View {
                         VStack(spacing: 0) {
                             Divider()
                             PrimaryButton(
-                                title: "Confirm & Pay \(String(format: "$%.2f", estimatedPrice))",
-                                icon: "lock.fill",
-                                isLoading: bookingVM.isCreating || bookingVM.isLoading
+                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", estimatedPrice))",
+                                icon: isBookingComplete ? "checkmark" : "lock.fill",
+                                isLoading: bookingVM.isCreating || bookingVM.isLoading,
+                                isEnabled: !isBookingComplete
                             ) { confirmBooking() }
                             .padding(.horizontal, AppConstants.pagePadding)
                             .padding(.vertical, 16)
@@ -167,22 +170,38 @@ struct BookingConfirmationView: View {
     }
 
     private func confirmBooking() {
+        // Prevent duplicate bookings from multiple taps
+        guard !isBookingComplete, !bookingVM.isCreating else { return }
+
         // Client-side verification guard — catches unverified users before the network call
         guard authVM.currentUser?.sjsuIdStatus == .verified else {
             showVerificationAlert = true
             return
         }
 
+        // Set flag immediately to prevent race condition
+        isBookingComplete = true
+
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
             if success, let bookingId = bookingVM.currentBooking?.id {
                 let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: estimatedPrice)
-                if paid { withAnimation { showSuccess = true } }
-            } else if let errMsg = bookingVM.errorMessage,
-                      errMsg.lowercased().contains("verif") {
-                // Backend also rejects unverified bookings — surface the verification flow
-                bookingVM.errorMessage = nil
-                showVerificationAlert = true
+                if paid {
+                    withAnimation { showSuccess = true }
+                } else {
+                    // Payment failed - allow retry
+                    isBookingComplete = false
+                }
+            } else {
+                // Booking creation failed - allow retry
+                isBookingComplete = false
+
+                if let errMsg = bookingVM.errorMessage,
+                   errMsg.lowercased().contains("verif") {
+                    // Backend also rejects unverified bookings — surface the verification flow
+                    bookingVM.errorMessage = nil
+                    showVerificationAlert = true
+                }
             }
         }
     }
@@ -216,6 +235,17 @@ struct BookingSuccessView: View {
 
     @State private var scale: CGFloat = 0.5
     @State private var opacity: Double = 0
+    @State private var showLocationPrompt = false
+    @State private var showManualAddress = false
+    @State private var manualAddress = ""
+    @State private var isUpdatingLocation = false
+
+    @StateObject private var locationManager = LocationManager.shared
+
+    private var isToSJSU: Bool {
+        trip.destination.lowercased().contains("sjsu") ||
+        trip.destination.lowercased().contains("san jose state")
+    }
 
     var body: some View {
         VStack(spacing: 28) {
@@ -255,6 +285,93 @@ struct BookingSuccessView: View {
             .background(Color.brand.opacity(0.08))
             .cornerRadius(14)
 
+            // Location sharing prompt (only for To SJSU trips)
+            if isToSJSU && !showManualAddress {
+                VStack(spacing: 12) {
+                    Text("Share Pickup Location?")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    Text("Help your driver find you easily")
+                        .font(.system(size: 14))
+                        .foregroundColor(.textSecondary)
+
+                    HStack(spacing: 12) {
+                        Button(action: shareCurrentLocation) {
+                            HStack(spacing: 6) {
+                                if isUpdatingLocation {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "location.fill")
+                                }
+                                Text("Use Current Location")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DesignSystem.Colors.sjsuBlue)
+                            .cornerRadius(12)
+                        }
+                        .disabled(isUpdatingLocation)
+
+                        Button(action: { showManualAddress = true }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "text.cursor")
+                                Text("Enter Address")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundColor(DesignSystem.Colors.sjsuBlue)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DesignSystem.Colors.sjsuBlue.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .padding(16)
+                .background(Color.cardBackground)
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                .padding(.horizontal, 20)
+            }
+
+            // Manual address entry
+            if showManualAddress {
+                VStack(spacing: 12) {
+                    TextField("Enter pickup address", text: $manualAddress)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, 20)
+
+                    HStack(spacing: 12) {
+                        Button("Cancel") {
+                            showManualAddress = false
+                            manualAddress = ""
+                        }
+                        .foregroundColor(.textSecondary)
+
+                        Button(action: shareManualAddress) {
+                            if isUpdatingLocation {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Text("Share")
+                            }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(DesignSystem.Colors.sjsuBlue)
+                        .cornerRadius(12)
+                        .disabled(manualAddress.isEmpty || isUpdatingLocation)
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+
             Spacer()
 
             PrimaryButton(title: "Done", icon: "checkmark") { onDone() }
@@ -266,6 +383,62 @@ struct BookingSuccessView: View {
                 scale = 1; opacity = 1
             }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+            // Auto-navigate to My Trips after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                onDone()
+            }
+        }
+    }
+
+    private func shareCurrentLocation() {
+        isUpdatingLocation = true
+        locationManager.startUpdating()
+
+        // Wait a moment for location to be available
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if let location = locationManager.currentLocation {
+                Task {
+                    do {
+                        _ = try await BookingService.shared.updatePickupLocation(
+                            id: trip.id,
+                            lat: location.coordinate.latitude,
+                            lng: location.coordinate.longitude,
+                            address: nil
+                        )
+                        isUpdatingLocation = false
+                        showLocationPrompt = false
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    } catch {
+                        print("Failed to update pickup location: \(error)")
+                        isUpdatingLocation = false
+                    }
+                }
+            } else {
+                isUpdatingLocation = false
+            }
+        }
+    }
+
+    private func shareManualAddress() {
+        guard !manualAddress.isEmpty else { return }
+        isUpdatingLocation = true
+
+        Task {
+            do {
+                // Use default SJSU coordinates with manual address
+                _ = try await BookingService.shared.updatePickupLocation(
+                    id: trip.id,
+                    lat: AppConstants.sjsuCoordinate.latitude,
+                    lng: AppConstants.sjsuCoordinate.longitude,
+                    address: manualAddress
+                )
+                isUpdatingLocation = false
+                showManualAddress = false
+            } catch {
+                print("Failed to update pickup location: \(error)")
+                isUpdatingLocation = false
+            }
         }
     }
 }

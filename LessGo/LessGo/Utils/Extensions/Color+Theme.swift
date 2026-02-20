@@ -1,36 +1,44 @@
 import SwiftUI
 
 extension Color {
-    // MARK: - Brand Colors
-    static let brand     = Color(red: 0/255, green: 122/255, blue: 255/255)   // #007AFF
-    static let brandGreen = Color(red: 52/255, green: 199/255, blue: 89/255)  // #34C759
-    static let brandRed  = Color(red: 255/255, green: 59/255,  blue: 48/255)  // #FF3B30
-    static let brandOrange = Color(red: 255/255, green: 149/255, blue: 0/255) // #FF9500
+    // MARK: - SJSU Brand Colors
+    static let brand = DesignSystem.Colors.sjsuBlue        // SJSU Blue #0055A2
+    static let brandGold = DesignSystem.Colors.sjsuGold    // SJSU Gold #E5A823
+    static let brandTeal = DesignSystem.Colors.sjsuTeal    // SJSU Teal #008C95
+
+    // Backwards compatibility aliases
+    static let brandGreen = Color.green
+    static let brandRed = Color.red
+    static let brandOrange = Color.orange
 
     // MARK: - Background
-    static let appBackground   = Color(red: 0.95, green: 0.95, blue: 0.97)
-    static let cardBackground  = Color.white
-    static let sheetBackground = Color(red: 0.97, green: 0.97, blue: 0.99)
+    static let appBackground = DesignSystem.Colors.background
+    static let cardBackground = DesignSystem.Colors.cardBackground
+    static let sheetBackground = DesignSystem.Colors.surfaceBackground
 
     // MARK: - Text
-    static let textPrimary   = Color(red: 0.11, green: 0.11, blue: 0.12)
-    static let textSecondary = Color(red: 0.24, green: 0.24, blue: 0.26)
-    static let textTertiary  = Color(red: 0.56, green: 0.56, blue: 0.58)
+    static let textPrimary = DesignSystem.Colors.textPrimary
+    static let textSecondary = DesignSystem.Colors.textSecondary
+    static let textTertiary = DesignSystem.Colors.textTertiary
 
-    // MARK: - Gradients
+    // MARK: - SJSU Gradients
     static var brandGradient: LinearGradient {
         LinearGradient(
-            colors: [Color(red: 0/255, green: 122/255, blue: 255/255),
-                     Color(red: 0/255, green: 80/255, blue: 200/255)],
+            colors: [
+                DesignSystem.Colors.sjsuBlue,
+                DesignSystem.Colors.sjsuBlue.opacity(0.8)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 
-    static var greenGradient: LinearGradient {
+    static var goldGradient: LinearGradient {
         LinearGradient(
-            colors: [Color(red: 52/255, green: 199/255, blue: 89/255),
-                     Color(red: 40/255, green: 170/255, blue: 70/255)],
+            colors: [
+                DesignSystem.Colors.sjsuGold,
+                DesignSystem.Colors.sjsuGold.opacity(0.8)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -38,8 +46,38 @@ extension Color {
 
     static var heroGradient: LinearGradient {
         LinearGradient(
-            colors: [Color(red: 0/255, green: 122/255, blue: 255/255),
-                     Color(red: 88/255, green: 86/255, blue: 214/255)],
+            colors: [
+                DesignSystem.Colors.sjsuBlue,
+                DesignSystem.Colors.sjsuTeal
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var greenGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.green, Color.green.opacity(0.8)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    // MARK: - Status Gradients
+    static var successGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.green, Color.green.opacity(0.8)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var warningGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                DesignSystem.Colors.sjsuGold,
+                DesignSystem.Colors.sjsuGold.opacity(0.8)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )

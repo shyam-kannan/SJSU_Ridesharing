@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import axios from 'axios';
 import * as tripService from '../services/trip.service';
 import { AuthRequest, AppError, successResponse, errorResponse, CreateTripRequest, SearchTripsRequest, TripStatus } from '@lessgo/shared';
 import { config } from '../config';
@@ -226,5 +227,62 @@ export const cancelTrip = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
     throw new AppError('Failed to cancel trip', 500);
+  }
+};
+
+/**
+ * Get all bookings for a trip (passengers list)
+ * GET /trips/:id/bookings
+ */
+export const getTripBookings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    // Verify user owns this trip
+    const trip = await tripService.getTripById(id);
+
+    if (!trip) {
+      errorResponse(res, 'Trip not found', 404);
+      return;
+    }
+
+    if (trip.driver_id !== req.user.userId) {
+      errorResponse(res, 'Unauthorized: You must be the driver of this trip', 403);
+      return;
+    }
+
+    // Fetch bookings from booking-service
+    try {
+      const bookingsResponse = await axios.get(
+        `${config.bookingServiceUrl}/bookings/trip/${id}`,
+        {
+          headers: { Authorization: req.headers.authorization }
+        }
+      );
+
+      const bookings = bookingsResponse.data.data || [];
+
+      successResponse(res, { bookings, total: bookings.length }, 'Trip bookings retrieved successfully');
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('Error fetching bookings from booking-service:', error.message);
+        // Return empty list if booking service fails
+        successResponse(res, { bookings: [], total: 0 }, 'Trip bookings retrieved successfully');
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Get trip bookings error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to get trip bookings', 500);
   }
 };

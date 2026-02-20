@@ -12,14 +12,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const userData: RegisterRequest = req.body;
     const sjsuIdImage = req.file; // Multer file upload
 
-    // Check if user already exists
-    const existingUser = await authService.findUserByEmail(userData.email);
-    if (existingUser) {
-      errorResponse(res, 'User with this email already exists', 409);
-      return;
-    }
-
-    // Create user
+    // Create user (service layer checks for duplicates)
     const sjsuIdImagePath = sjsuIdImage ? sjsuIdImage.path : undefined;
     const user = await authService.createUser(userData, sjsuIdImagePath);
 
@@ -40,6 +33,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     successResponse(res, response, 'User registered successfully', 201);
   } catch (error) {
     console.error('Registration error:', error);
+
+    // Handle duplicate email error
+    if (error instanceof Error && error.message === 'An account with this email already exists') {
+      errorResponse(res, 'An account with this email already exists', 400);
+      return;
+    }
+
     if (error instanceof AppError) {
       throw error;
     }

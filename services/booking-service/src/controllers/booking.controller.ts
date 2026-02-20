@@ -97,6 +97,19 @@ export const confirmBooking = async (req: AuthRequest, res: Response): Promise<v
         amount,
         bookingId: booking.booking_id,
       });
+
+      // Email to driver
+      if (booking.trip.driver) {
+        fireEmail('/notifications/send/driver-new-booking', {
+          email: booking.trip.driver.email,
+          driverName: booking.trip.driver.name,
+          riderName: booking.rider.name,
+          origin: booking.trip.origin,
+          destination: booking.trip.destination,
+          departureTime: depTime,
+          seatsBooked: booking.seats_booked,
+        });
+      }
     }
   } catch (error) {
     console.error('Confirm booking error:', error);
@@ -165,5 +178,80 @@ export const createRating = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
     throw new AppError('Failed to create rating', 500);
+  }
+};
+
+export const updatePickupLocation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+    const { lat, lng, address } = req.body;
+
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      errorResponse(res, 'lat and lng are required and must be numbers', 400);
+      return;
+    }
+
+    const booking = await bookingService.updatePickupLocation(
+      id,
+      req.user.userId,
+      { lat, lng, address }
+    );
+
+    successResponse(res, booking, 'Pickup location updated successfully');
+  } catch (error) {
+    console.error('Update pickup location error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to update pickup location', 500);
+  }
+};
+
+export const getTripBookings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { tripId } = req.params;
+
+    // Verify user owns this trip by calling trip-service
+    try {
+      const tripResponse = await axios.get(`${config.tripServiceUrl}/trips/${tripId}`, {
+        headers: { Authorization: req.headers.authorization }
+      });
+
+      const trip = tripResponse.data.data;
+
+      if (trip.driver_id !== req.user.userId) {
+        errorResponse(res, 'Unauthorized: You must be the driver of this trip', 403);
+        return;
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        errorResponse(res, 'Trip not found', 404);
+        return;
+      }
+      throw error;
+    }
+
+    // Get all bookings for this trip
+    const bookings = await bookingService.getBookingsByTripId(tripId);
+
+    successResponse(res, bookings, 'Trip bookings retrieved successfully');
+  } catch (error) {
+    console.error('Get trip bookings error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to get trip bookings', 500);
   }
 };

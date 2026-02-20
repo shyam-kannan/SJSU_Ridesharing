@@ -6,6 +6,8 @@ struct DriverHomeView: View {
     @State private var showCreateTrip = false
     @State private var showVerificationAlert = false
     @State private var showIDVerificationSheet = false
+    @State private var recentBookings: [(booking: BookingWithRider, trip: Trip)] = []
+    @State private var showTripDetails: Trip?
 
     var body: some View {
         NavigationView {
@@ -21,6 +23,26 @@ struct DriverHomeView: View {
                     if let user = authVM.currentUser {
                         statsRow(user: user)
                             .padding(.horizontal, AppConstants.pagePadding)
+                    }
+
+                    // ── Recent Activity ──
+                    if !recentBookings.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Recent Activity")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.textPrimary)
+                                .padding(.horizontal, AppConstants.pagePadding)
+
+                            ForEach(recentBookings.prefix(5), id: \.booking.id) { item in
+                                Button(action: {
+                                    showTripDetails = item.trip
+                                }) {
+                                    RecentActivityCard(passenger: item.booking, trip: item.trip)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, AppConstants.pagePadding)
+                            }
+                        }
                     }
 
                     // ── Upcoming Trips ──
@@ -57,11 +79,13 @@ struct DriverHomeView: View {
             .refreshable {
                 if let id = authVM.currentUser?.id {
                     await profileVM.loadDriverTrips(driverId: id)
+                    await loadRecentBookings()
                 }
             }
             .task {
                 if let id = authVM.currentUser?.id {
                     await profileVM.loadDriverTrips(driverId: id)
+                    await loadRecentBookings()
                 }
             }
             .sheet(isPresented: $showCreateTrip) {
@@ -84,7 +108,33 @@ struct DriverHomeView: View {
                 IDVerificationView().environmentObject(authVM)
                     .onDisappear { Task { await authVM.refreshCurrentUser() } }
             }
+            .sheet(item: $showTripDetails) { trip in
+                DriverTripDetailsView(trip: trip)
+            }
         }
+    }
+
+    // MARK: - Load Recent Bookings
+    private func loadRecentBookings() async {
+        var allBookings: [(booking: BookingWithRider, trip: Trip)] = []
+
+        // Load bookings for each active trip
+        for trip in profileVM.driverTrips.prefix(10) {
+            do {
+                let bookings = try await TripService.shared.getTripPassengers(tripId: trip.id)
+                for booking in bookings {
+                    allBookings.append((booking: booking, trip: trip))
+                }
+            } catch {
+                print("Failed to load bookings for trip \(trip.id): \(error)")
+            }
+        }
+
+        // Sort by creation date (most recent first) and take top 5
+        recentBookings = allBookings
+            .sorted { $0.booking.createdAt > $1.booking.createdAt }
+            .prefix(5)
+            .map { $0 }
     }
 
     // MARK: - Nav Title

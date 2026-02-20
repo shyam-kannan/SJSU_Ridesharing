@@ -3,9 +3,16 @@ import UIKit
 import CoreLocation
 import Combine
 
+enum TripDirection: String, CaseIterable {
+    case toSJSU = "To SJSU"
+    case fromSJSU = "From SJSU"
+}
+
 @MainActor
 class CreateTripViewModel: ObservableObject {
     // MARK: - Form State
+    @Published var tripDirection: TripDirection = .toSJSU
+    @Published var userLocation = ""  // The one location user enters
     @Published var origin = ""
     @Published var destination = ""
     @Published var departureDate = Date().addingTimeInterval(3600)
@@ -15,7 +22,7 @@ class CreateTripViewModel: ObservableObject {
 
     // MARK: - Step
     @Published var currentStep = 0
-    let totalSteps = 3
+    let totalSteps = 4  // Direction, Location, Schedule, Details
 
     // MARK: - Loading/Error
     @Published var isLoading = false
@@ -31,16 +38,31 @@ class CreateTripViewModel: ObservableObject {
 
     // MARK: - Validation
 
-    var isStep0Valid: Bool { !origin.isEmpty && !destination.isEmpty && origin != destination }
-    var isStep1Valid: Bool { departureDate > Date() }
-    var isStep2Valid: Bool { seatsAvailable >= 1 }
+    var isStep0Valid: Bool { true }  // Direction is always valid
+    var isStep1Valid: Bool { !userLocation.isEmpty && userLocation.count >= 3 }
+    var isStep2Valid: Bool { departureDate > Date() }
+    var isStep3Valid: Bool { seatsAvailable >= 1 }
 
     var canProceed: Bool {
         switch currentStep {
         case 0: return isStep0Valid
         case 1: return isStep1Valid
         case 2: return isStep2Valid
+        case 3: return isStep3Valid
         default: return true
+        }
+    }
+
+    // MARK: - Sync Origin/Destination
+
+    func syncOriginDestination() {
+        switch tripDirection {
+        case .toSJSU:
+            origin = userLocation
+            destination = "San Jose State University"
+        case .fromSJSU:
+            origin = "San Jose State University"
+            destination = userLocation
         }
     }
 
@@ -79,6 +101,9 @@ class CreateTripViewModel: ObservableObject {
     // MARK: - Submit
 
     func createTrip() async {
+        // Sync origin/destination based on direction
+        syncOriginDestination()
+
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -104,6 +129,8 @@ class CreateTripViewModel: ObservableObject {
     // MARK: - Reset
 
     func reset() {
+        tripDirection = .toSJSU
+        userLocation = ""
         origin = ""
         destination = ""
         departureDate = Date().addingTimeInterval(3600)

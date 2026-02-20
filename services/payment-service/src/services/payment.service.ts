@@ -17,8 +17,12 @@ export const createPaymentIntent = async (
   // Check if payment already exists for booking
   const existing = await pool.query('SELECT * FROM payments WHERE booking_id = $1', [bookingId]);
   if (existing.rows.length > 0) {
+    const existingPayment = existing.rows[0];
+    console.error(`[PAYMENT] Payment already exists for booking ${bookingId}: payment_id=${existingPayment.payment_id}, status=${existingPayment.status}`);
     throw new Error('Payment already exists for this booking');
   }
+
+  console.log(`[PAYMENT] Creating Stripe PaymentIntent for booking ${bookingId}, amount: $${amount}`);
 
   // Create Stripe Payment Intent
   const paymentIntent = await stripe.paymentIntents.create({
@@ -27,6 +31,8 @@ export const createPaymentIntent = async (
     capture_method: 'manual',
     metadata: { booking_id: bookingId },
   });
+
+  console.log(`[PAYMENT] Stripe PaymentIntent created: ${paymentIntent.id}`);
 
   // Store payment record
   const query = `
@@ -40,6 +46,8 @@ export const createPaymentIntent = async (
     amount,
     PaymentStatus.Pending,
   ]);
+
+  console.log(`[PAYMENT] Payment record created: payment_id=${result.rows[0].payment_id}`);
 
   return result.rows[0];
 };

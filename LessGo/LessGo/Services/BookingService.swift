@@ -82,4 +82,24 @@ class BookingService {
 
         return rating
     }
+
+    // MARK: - Update Pickup Location
+
+    func updatePickupLocation(id: String, lat: Double, lng: Double, address: String?) async throws -> Booking {
+        struct PickupLocationRequest: Codable {
+            let lat: Double
+            let lng: Double
+            let address: String?
+        }
+
+        let request = PickupLocationRequest(lat: lat, lng: lng, address: address)
+
+        let booking: Booking = try await network.request(
+            endpoint: "/bookings/\(id)/pickup-location",
+            method: .put,
+            body: request
+        )
+
+        return booking
+    }
 }

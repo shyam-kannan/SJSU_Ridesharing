@@ -302,6 +302,7 @@ lessgo-backend/
 - Seeded users: `user1@sjsu.edu` through `user50@sjsu.edu`
 - Password for all: `Password123`
 - 25 drivers, 25 riders, all SJSU-verified
+- 108 trips covering 10 Bay Area hubs: SF (66 km), Oakland (58 km), Fremont (24 km), Palo Alto (28 km), and more
 
 ---
 
@@ -316,7 +317,9 @@ lessgo-backend/
 | Run migrations | `npm run migrate:up` |
 | Undo migrations | `npm run migrate:down` |
 | Seed database | `npm run seed` |
-| Run all tests | `.\tests\run-all-tests.ps1 -All` |
+| Run all tests (Windows) | `.\tests\run-all-tests.ps1 -All` |
+| Run all tests (Mac) | `./tests/run-all-tests.sh --all` |
+| Test iOS features | `./tests/test-ios-features.sh` |
 | Check service health | `curl http://localhost:3000/health` |
 
 ---
@@ -411,6 +414,13 @@ cd SJSU_Ridesharing
 
 All services should show ✅ passing tests.
 
+**Test new iOS features:**
+```bash
+./tests/test-ios-features.sh
+```
+
+Expected: **16/16 passed** (change password, device tokens, notification preferences, email endpoints, support).
+
 ---
 
 ### 5. iOS App Setup (Xcode)
@@ -429,19 +439,53 @@ All services should show ✅ passing tests.
 
 ---
 
+### 6. iOS App Testing
+
+**Basic flow test:**
+1. **Login:** `user1@sjsu.edu` / `Password123`
+2. **Profile:** Should show "Verified ✅" badge
+3. **Search Trips:**
+   - Toggle "To SJSU" → should show trips from Bay Area hubs to SJSU
+   - Toggle "From SJSU" → should show trips from SJSU to Bay Area
+   - Switch to **Map view** → pins at correct locations (origin for To SJSU, destination for From SJSU)
+   - Search "San Francisco" → 10+ trips, "Fremont" → 8+ trips
+4. **Book a Ride:**
+   - Tap any trip → "Book Ride" → confirm → complete payment
+   - **Check your email** for booking confirmation and payment receipt
+
+**Account management:**
+- **Profile → Change Password:** Current `Password123` → New `NewPass123!` → logout → login with new password
+- **Profile → Help & Support:** FAQ (6+ questions), Contact Support (mail composer), Report Issue (form with validation)
+- **Profile → About:** App info, mission, team, impact stats
+
+**Map & Search:**
+- Map markers update when toggling To/From SJSU
+- Tap pin → trip details bottom sheet
+- Sort by: All / Leaving Soon / Best Rated / Cheapest
+
+**Common issues:**
+- **"Invalid token"**: Logout/login (tokens expire after 15 min)
+- **"Verification required"**: Check Profile shows "Verified", refresh app if needed
+- **No trips**: Verify all 8 backend services running
+- **No email**: Check Gmail spam, verify `SMTP_PASS` in `.env`, check notification-service logs
+
+---
+
 ## Test User Credentials
 
-After running `npm run seed`, these accounts are ready to use:
+After running `npm run seed`, the database contains:
 
-### Verified Drivers (can create trips)
-- Emails: `driver-1@sjsu.edu` through `driver-25@sjsu.edu`
-- Password: `Password123`
-- All have vehicles set up and are SJSU-verified
-
-### Verified Riders (can book rides)
+**50 users:**
 - Emails: `user1@sjsu.edu` through `user50@sjsu.edu`
-- Password: `Password123`
-- All are verified and ready to book
+- Password: **`Password123`** (all accounts)
+- 25 drivers (with vehicles), 25 riders
+- All verified (`sjsu_id_status = 'verified'`)
+
+**108 trips:**
+- 54 trips **TO SJSU** from 10 Bay Area hubs
+- 54 trips **FROM SJSU** to same hubs
+- Locations: SF Caltrain (66 km), Oakland BART (58 km), Fremont BART (24 km), Palo Alto Caltrain (28 km), Milpitas, Santa Clara, Sunnyvale, Mountain View, Cupertino, Berkeley
+- Times: Morning rush (7–9 AM) for To SJSU, afternoon/evening (3–7 PM) for From SJSU
 
 ### Testing New Registration + Verification
 
@@ -475,12 +519,13 @@ SJSU_Ridesharing/
 │   ├── trip-service/               # Port 3003 — trip CRUD, geospatial search
 │   ├── booking-service/            # Port 3004 — bookings, payments
 │   ├── payment-service/            # Port 3005 — Stripe PaymentIntents
-│   ├── notification-service/       # Port 3006 — email/push stubs
+│   ├── notification-service/       # Port 3006 — real email (nodemailer) + push notifications
 │   └── cost-calculation-service/   # Port 3009 — fare calculation
 ├── shared/                         # Shared types and utilities (@lessgo/shared)
 ├── tests/                          # Backend API test scripts
 │   ├── test-auth.sh
 │   ├── test-trip.sh
+│   ├── test-ios-features.sh        # Email, password change, notifications, support
 │   └── run-all-tests.sh
 └── SETUP.md                        # This file
 ```

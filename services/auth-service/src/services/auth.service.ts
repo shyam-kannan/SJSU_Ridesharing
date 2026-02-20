@@ -20,6 +20,12 @@ export const createUser = async (
 ): Promise<SafeUser> => {
   const { name, email, password, role } = userData;
 
+  // Check if user with this email already exists
+  const existingUser = await findUserByEmail(email);
+  if (existingUser) {
+    throw new Error('An account with this email already exists');
+  }
+
   // Hash password
   const passwordHash = await hashPassword(password);
 

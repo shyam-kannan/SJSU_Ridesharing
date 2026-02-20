@@ -8,7 +8,7 @@ struct PrimaryButton: View {
     var icon: String? = nil
     var isLoading: Bool = false
     var isEnabled: Bool = true
-    var color: ButtonColor = .green
+    var color: ButtonColor = .blue
     let action: () -> Void
 
     enum ButtonColor { case green, blue, red }

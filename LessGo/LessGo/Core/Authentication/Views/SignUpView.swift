@@ -17,6 +17,7 @@ struct SignUpView: View {
     @State private var confirmError:  String?
 
     @State private var showIDVerification = false
+    @State private var showDuplicateEmailAlert = false
     @FocusState private var focusedField: Field?
 
     enum Field { case name, email, password, confirm }
@@ -174,6 +175,18 @@ struct SignUpView: View {
                     }
                 }
             }
+            .alert("Email Already Registered", isPresented: $showDuplicateEmailAlert) {
+                Button("Go to Login") {
+                    dismiss()
+                }
+                Button("Try Different Email", role: .cancel) {
+                    email = ""
+                    emailError = "This email is already registered"
+                    focusedField = .email
+                }
+            } message: {
+                Text("An account with this email already exists. Please login instead or use a different email address.")
+            }
         }
     }
 
@@ -191,7 +204,17 @@ struct SignUpView: View {
         }
 
         focusedField = nil
-        Task { await authVM.register(name: name, email: email, password: password, role: role) }
+        Task {
+            await authVM.register(name: name, email: email, password: password, role: role)
+
+            // Check for duplicate email error
+            if let errorMsg = authVM.errorMessage,
+               errorMsg.lowercased().contains("email already exists") ||
+               errorMsg.lowercased().contains("account with this email") {
+                emailError = "This email is already registered"
+                showDuplicateEmailAlert = true
+            }
+        }
     }
 }
 

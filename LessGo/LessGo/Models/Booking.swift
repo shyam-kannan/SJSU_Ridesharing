@@ -116,3 +116,41 @@ struct CreateRatingRequest: Codable {
     let score: Int
     let comment: String?
 }
+
+// MARK: - Driver Models
+
+struct BookingWithRider: Codable, Identifiable {
+    let id: String
+    let tripId: String
+    let riderId: String
+    let riderName: String
+    let riderEmail: String?
+    let riderPhone: String?
+    let riderRating: Double
+    let riderPicture: String?
+    let seatsBooked: Int
+    let status: BookingStatus
+    let pickupLocation: PickupLocation?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case tripId = "trip_id"
+        case riderId = "rider_id"
+        case riderName = "rider_name"
+        case riderEmail = "rider_email"
+        case riderPhone = "rider_phone"
+        case riderRating = "rider_rating"
+        case riderPicture = "rider_picture"
+        case seatsBooked = "seats_booked"
+        case status
+        case pickupLocation = "pickup_location"
+        case createdAt = "created_at"
+    }
+}
+
+struct PickupLocation: Codable {
+    let lat: Double
+    let lng: Double
+    let address: String?
+}

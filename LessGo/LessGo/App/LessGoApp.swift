@@ -22,27 +22,33 @@ struct LessGoApp: App {
     }
 
     private func configureAppearance() {
+        // SJSU Blue for navigation bar titles
+        let sjsuBlue = UIColor(red: 0/255, green: 85/255, blue: 162/255, alpha: 1) // #0055A2
+
         let navAppearance = UINavigationBarAppearance()
         navAppearance.configureWithOpaqueBackground()
         navAppearance.backgroundColor = UIColor.white
         navAppearance.shadowColor = .clear
         navAppearance.titleTextAttributes = [
             .font: UIFont.systemFont(ofSize: 17, weight: .semibold),
-            .foregroundColor: UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)
+            .foregroundColor: sjsuBlue
         ]
         navAppearance.largeTitleTextAttributes = [
             .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-            .foregroundColor: UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)
+            .foregroundColor: sjsuBlue
         ]
         UINavigationBar.appearance().standardAppearance = navAppearance
         UINavigationBar.appearance().compactAppearance = navAppearance
         UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
 
+        // SJSU Blue for selected tab items
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithOpaqueBackground()
         tabAppearance.backgroundColor = .white
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+        UITabBar.appearance().tintColor = sjsuBlue
+        UITabBar.appearance().unselectedItemTintColor = UIColor(red: 0.61, green: 0.64, blue: 0.69, alpha: 1) // textTertiary
     }
 }
 

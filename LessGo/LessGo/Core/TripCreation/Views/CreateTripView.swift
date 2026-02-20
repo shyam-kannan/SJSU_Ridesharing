@@ -20,9 +20,10 @@ struct CreateTripView: View {
 
                     // ── Step Content ──
                     TabView(selection: $vm.currentStep) {
-                        Step0LocationView(vm: vm).tag(0)
-                        Step1ScheduleView(vm: vm).tag(1)
-                        Step2DetailsView(vm: vm).tag(2)
+                        Step0DirectionView(vm: vm).tag(0)
+                        Step1LocationView(vm: vm).tag(1)
+                        Step2ScheduleView(vm: vm).tag(2)
+                        Step3DetailsView(vm: vm).tag(3)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: vm.currentStep)
@@ -72,52 +73,187 @@ struct CreateTripView: View {
 
     private var stepTitle: String {
         switch vm.currentStep {
-        case 0: return "Where are you going?"
-        case 1: return "When do you leave?"
+        case 0: return "Trip direction"
+        case 1: return "Your location"
+        case 2: return "When do you leave?"
         default: return "Trip details"
         }
     }
 }
 
-// MARK: - Step 0: Location
+// MARK: - Step 0: Direction
 
-private struct Step0LocationView: View {
+private struct Step0DirectionView: View {
+    @ObservedObject var vm: CreateTripViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Choose your direction")
+                        .font(DesignSystem.Typography.title1)
+                        .foregroundColor(DesignSystem.Colors.textPrimary)
+                    Text("Are you driving to campus or leaving campus?")
+                        .font(DesignSystem.Typography.callout)
+                        .foregroundColor(DesignSystem.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 32)
+
+                // Direction Cards
+                VStack(spacing: 16) {
+                    DirectionCard(
+                        icon: "building.2.fill",
+                        title: "To SJSU",
+                        subtitle: "Driving to campus from home or another location",
+                        isSelected: vm.tripDirection == .toSJSU
+                    ) {
+                        withAnimation(DesignSystem.Animation.quick) {
+                            vm.tripDirection = .toSJSU
+                        }
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+
+                    DirectionCard(
+                        icon: "house.fill",
+                        title: "From SJSU",
+                        subtitle: "Leaving campus to go home or another location",
+                        isSelected: vm.tripDirection == .fromSJSU
+                    ) {
+                        withAnimation(DesignSystem.Animation.quick) {
+                            vm.tripDirection = .fromSJSU
+                        }
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    }
+                }
+
+                // Info Box
+                HStack(spacing: 12) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(DesignSystem.Colors.sjsuBlue)
+                        .font(.system(size: 20))
+                    Text("All LessGo trips connect to SJSU. We'll automatically set your \(vm.tripDirection == .toSJSU ? "destination" : "starting point") to campus.")
+                        .font(DesignSystem.Typography.footnote)
+                        .foregroundColor(DesignSystem.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(DesignSystem.Spacing.md)
+                .background(DesignSystem.Colors.sjsuBlue.opacity(0.08))
+                .cornerRadius(DesignSystem.CornerRadius.medium)
+
+                PrimaryButton(title: "Continue", icon: "arrow.right", isEnabled: vm.isStep0Valid) {
+                    vm.nextStep()
+                }
+                .padding(.top, DesignSystem.Spacing.lg)
+
+                Spacer().frame(height: 60)
+            }
+            .padding(.horizontal, DesignSystem.Spacing.screenPadding)
+        }
+    }
+}
+
+// MARK: - Direction Card
+
+private struct DirectionCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? DesignSystem.Colors.sjsuBlue : DesignSystem.Colors.surfaceBackground)
+                        .frame(width: 56, height: 56)
+                    Image(systemName: icon)
+                        .font(.system(size: 24))
+                        .foregroundColor(isSelected ? .white : DesignSystem.Colors.sjsuBlue)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(DesignSystem.Typography.bodyBold)
+                        .foregroundColor(DesignSystem.Colors.textPrimary)
+                    Text(subtitle)
+                        .font(DesignSystem.Typography.footnote)
+                        .foregroundColor(DesignSystem.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(DesignSystem.Colors.sjsuBlue)
+                }
+            }
+            .padding(DesignSystem.Spacing.md)
+            .background(DesignSystem.Colors.cardBackground)
+            .cornerRadius(DesignSystem.CornerRadius.large)
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                    .strokeBorder(
+                        isSelected ? DesignSystem.Colors.sjsuBlue : DesignSystem.Colors.border,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+            .shadow(
+                color: isSelected ? DesignSystem.Colors.sjsuBlue.opacity(0.2) : DesignSystem.Shadow.card.color,
+                radius: isSelected ? 12 : DesignSystem.Shadow.card.radius,
+                x: 0,
+                y: 2
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Step 1: Location
+
+private struct Step1LocationView: View {
     @ObservedObject var vm: CreateTripViewModel
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Set your route").font(.system(size: 26, weight: .bold)).foregroundColor(.textPrimary)
-                    Text("Where are you starting and heading?")
-                        .font(.system(size: 15)).foregroundColor(.textSecondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(vm.tripDirection == .toSJSU ? "Where are you starting?" : "Where are you headed?")
+                        .font(DesignSystem.Typography.title1)
+                        .foregroundColor(DesignSystem.Colors.textPrimary)
+                    Text(vm.tripDirection == .toSJSU ? "Enter your pickup location" : "Enter your destination")
+                        .font(DesignSystem.Typography.callout)
+                        .foregroundColor(DesignSystem.Colors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 28)
 
-                // Origin Field
+                // Single Location Field
                 LabeledTextField(
-                    label: "Starting Point",
-                    placeholder: "e.g. SJSU Campus, San Jose",
-                    text: $vm.origin,
-                    icon: "location.circle.fill"
+                    label: vm.tripDirection == .toSJSU ? "Starting Point" : "Destination",
+                    placeholder: vm.tripDirection == .toSJSU ? "e.g. San Francisco, Palo Alto" : "e.g. San Francisco, Palo Alto",
+                    text: $vm.userLocation,
+                    icon: vm.tripDirection == .toSJSU ? "location.circle.fill" : "mappin.circle.fill"
                 )
 
                 // Quick select buttons
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("QUICK SELECT").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary)
+                    Text("POPULAR LOCATIONS").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary).kerning(0.5)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(["SJSU Campus", "Caltrain Station", "Downtown SJ"], id: \.self) { place in
-                                Button(action: { vm.origin = place }) {
+                            ForEach(["San Francisco", "Palo Alto", "Santa Clara", "Fremont", "Milpitas"], id: \.self) { place in
+                                Button(action: { vm.userLocation = place }) {
                                     HStack(spacing: 6) {
                                         Image(systemName: "location.fill").font(.system(size: 11))
                                         Text(place).font(.system(size: 13, weight: .medium))
                                     }
-                                    .foregroundColor(.brand)
+                                    .foregroundColor(DesignSystem.Colors.sjsuBlue)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
-                                    .background(Color.brand.opacity(0.1))
+                                    .background(DesignSystem.Colors.sjsuBlue.opacity(0.1))
                                     .cornerRadius(10)
                                 }
                             }
@@ -125,19 +261,40 @@ private struct Step0LocationView: View {
                     }
                 }
 
-                // Destination Field
-                LabeledTextField(
-                    label: "Destination",
-                    placeholder: "e.g. San Francisco, Palo Alto",
-                    text: $vm.destination,
-                    icon: "mappin.circle.fill"
-                )
+                // Fixed SJSU Endpoint Display
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("FIXED ENDPOINT").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary).kerning(0.5)
 
-                if !vm.origin.isEmpty && !vm.destination.isEmpty {
+                    HStack(spacing: 12) {
+                        Image(systemName: vm.tripDirection == .toSJSU ? "mappin.circle.fill" : "location.circle.fill")
+                            .foregroundColor(DesignSystem.Colors.sjsuGold)
+                            .font(.system(size: 20))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(vm.tripDirection == .toSJSU ? "Destination" : "Starting Point")
+                                .font(.system(size: 11))
+                                .foregroundColor(.textTertiary)
+                            Text("San Jose State University")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                        }
+                        Spacer()
+                        Image(systemName: "lock.fill")
+                            .foregroundColor(.textTertiary)
+                            .font(.system(size: 14))
+                    }
+                    .padding(14)
+                    .background(DesignSystem.Colors.sjsuGold.opacity(0.08))
+                    .cornerRadius(12)
+                }
+
+                // Route Preview
+                if !vm.userLocation.isEmpty {
                     HStack(spacing: 10) {
-                        Image(systemName: "arrow.right.circle.fill").foregroundColor(.brandGreen)
-                        Text("\(vm.origin) → \(vm.destination)")
-                            .font(.system(size: 14, weight: .medium)).foregroundColor(.textPrimary)
+                        Image(systemName: "arrow.right.circle.fill")
+                            .foregroundColor(.brandGreen)
+                        Text(vm.tripDirection == .toSJSU ? "\(vm.userLocation) → SJSU" : "SJSU → \(vm.userLocation)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.textPrimary)
                             .lineLimit(1)
                     }
                     .padding(14)
@@ -146,7 +303,7 @@ private struct Step0LocationView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                PrimaryButton(title: "Continue", icon: "arrow.right", isEnabled: vm.isStep0Valid) {
+                PrimaryButton(title: "Continue", icon: "arrow.right", isEnabled: vm.isStep1Valid) {
                     vm.nextStep()
                 }
                 .padding(.top, 8)
@@ -155,13 +312,13 @@ private struct Step0LocationView: View {
             }
             .padding(.horizontal, AppConstants.pagePadding)
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: vm.origin + vm.destination)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: vm.userLocation)
     }
 }
 
-// MARK: - Step 1: Schedule
+// MARK: - Step 2: Schedule
 
-private struct Step1ScheduleView: View {
+private struct Step2ScheduleView: View {
     @ObservedObject var vm: CreateTripViewModel
 
     var body: some View {
@@ -226,7 +383,7 @@ private struct Step1ScheduleView: View {
                 }
                 .cardStyle()
 
-                PrimaryButton(title: "Continue", icon: "arrow.right", isEnabled: vm.isStep1Valid) {
+                PrimaryButton(title: "Continue", icon: "arrow.right", isEnabled: vm.isStep2Valid) {
                     vm.nextStep()
                 }
                 .padding(.top, 8)
@@ -238,9 +395,9 @@ private struct Step1ScheduleView: View {
     }
 }
 
-// MARK: - Step 2: Details
+// MARK: - Step 3: Details
 
-private struct Step2DetailsView: View {
+private struct Step3DetailsView: View {
     @ObservedObject var vm: CreateTripViewModel
 
     var body: some View {
@@ -306,18 +463,21 @@ private struct Step2DetailsView: View {
                     Text("TRIP SUMMARY")
                         .font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary).kerning(0.5)
 
-                    SummaryRow(icon: "location.circle.fill", label: "From", value: vm.origin, color: .brand)
+                    let fromLocation = vm.tripDirection == .toSJSU ? vm.userLocation : "SJSU"
+                    let toLocation = vm.tripDirection == .toSJSU ? "SJSU" : vm.userLocation
+
+                    SummaryRow(icon: "location.circle.fill", label: "From", value: fromLocation, color: DesignSystem.Colors.sjsuBlue)
                     Divider()
-                    SummaryRow(icon: "mappin.circle.fill", label: "To", value: vm.destination, color: .brandRed)
+                    SummaryRow(icon: "mappin.circle.fill", label: "To", value: toLocation, color: DesignSystem.Colors.sjsuGold)
                     Divider()
                     SummaryRow(icon: "clock.fill", label: "Time",
-                               value: vm.departureDate.tripDateTimeString, color: .brandOrange)
+                               value: vm.departureDate.tripDateTimeString, color: .orange)
                     Divider()
                     SummaryRow(icon: "person.2.fill", label: "Seats",
-                               value: "\(vm.seatsAvailable) available", color: .brandGreen)
+                               value: "\(vm.seatsAvailable) available", color: .green)
                     if let recurrence = vm.recurrenceString {
                         Divider()
-                        SummaryRow(icon: "repeat", label: "Repeat", value: recurrence.capitalized, color: .brand)
+                        SummaryRow(icon: "repeat", label: "Repeat", value: recurrence.capitalized, color: DesignSystem.Colors.sjsuBlue)
                     }
                 }
                 .cardStyle()

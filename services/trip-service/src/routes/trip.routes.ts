@@ -51,6 +51,13 @@ router.get('/', asyncHandler(tripController.listTrips));
 router.get('/:id', asyncHandler(tripController.getTrip));
 
 /**
+ * @route   GET /trips/:id/bookings
+ * @desc    Get all bookings for a trip (passengers list)
+ * @access  Private (Driver only - must own the trip)
+ */
+router.get('/:id/bookings', authenticateToken, asyncHandler(tripController.getTripBookings));
+
+/**
  * @route   PUT /trips/:id
  * @desc    Update trip
  * @access  Private (Own trip only)

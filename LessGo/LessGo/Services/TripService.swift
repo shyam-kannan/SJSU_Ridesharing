@@ -154,4 +154,14 @@ class TripService {
         )
         return trip
     }
+
+    // MARK: - Get Trip Passengers
+
+    func getTripPassengers(tripId: String) async throws -> [BookingWithRider] {
+        let response: [BookingWithRider] = try await network.request(
+            endpoint: "/trips/\(tripId)/bookings",
+            method: .get
+        )
+        return response
+    }
 }

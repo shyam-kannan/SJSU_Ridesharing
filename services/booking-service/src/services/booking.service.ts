@@ -243,13 +243,29 @@ export const confirmBooking = async (
       throw new Error('Quote not found');
     }
 
-    // Create payment via Payment Service
-    const paymentResponse = await axios.post(`${config.paymentServiceUrl}/payments/create-intent`, {
-      booking_id: bookingId,
-      amount: bookingData.quote.max_price,
-    });
+    // Check if payment already exists for this booking
+    let payment = bookingData.payment;
 
-    const payment = paymentResponse.data.data;
+    if (!payment) {
+      // No payment exists - create one via Payment Service
+      console.log(`[CONFIRM] Creating payment for booking ${bookingId}`);
+      try {
+        const paymentResponse = await axios.post(`${config.paymentServiceUrl}/payments/create-intent`, {
+          booking_id: bookingId,
+          amount: bookingData.quote.max_price,
+        });
+        payment = paymentResponse.data.data;
+      } catch (error: any) {
+        console.error(`[CONFIRM] Payment creation failed for booking ${bookingId}:`, error.response?.data || error.message);
+        throw new Error('Failed to create payment intent');
+      }
+    } else {
+      // Payment already exists - verify it's pending
+      console.log(`[CONFIRM] Payment already exists for booking ${bookingId} with status: ${payment.status}`);
+      if (payment.status !== 'pending') {
+        throw new Error(`Cannot confirm booking - payment status is ${payment.status}`);
+      }
+    }
 
     // Update booking status
     await client.query(
@@ -265,11 +281,14 @@ export const confirmBooking = async (
 
     await client.query('COMMIT');
 
+    console.log(`[CONFIRM] Booking ${bookingId} confirmed successfully`);
+
     // Return updated booking
     const updatedBooking = await getBookingById(bookingId);
     return updatedBooking!;
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error(`[CONFIRM] Failed to confirm booking ${bookingId}:`, error);
     throw error;
   } finally {
     client.release();
@@ -413,6 +432,73 @@ export const createRating = async (
   return result.rows[0];
 };
 
+/**
+ * Update pickup location for booking
+ * @param bookingId Booking's UUID
+ * @param userId User's UUID (for authorization)
+ * @param pickupLocation Pickup location {lat, lng, address}
+ * @returns Updated booking
+ */
+export const updatePickupLocation = async (
+  bookingId: string,
+  userId: string,
+  pickupLocation: { lat: number; lng: number; address?: string }
+): Promise<BookingWithDetails> => {
+  // Get booking
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new Error('Booking not found');
+  }
+
+  // Verify user is the rider
+  if (bookingData.rider_id !== userId) {
+    throw new Error('Unauthorized');
+  }
+
+  // Update pickup location
+  const query = `
+    UPDATE bookings
+    SET pickup_location = $1, updated_at = current_timestamp
+    WHERE booking_id = $2
+  `;
+
+  await pool.query(query, [JSON.stringify(pickupLocation), bookingId]);
+
+  // Return updated booking
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
+};
+
+/**
+ * Get all bookings for a specific trip
+ * @param tripId Trip UUID
+ * @returns Array of bookings with rider details
+ */
+export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
+  const query = `
+    SELECT
+      b.booking_id as id,
+      b.trip_id,
+      b.rider_id,
+      b.seats_booked,
+      b.status,
+      b.pickup_location,
+      b.created_at,
+      u.name as rider_name,
+      u.email as rider_email,
+      u.phone as rider_phone,
+      u.rating as rider_rating,
+      u.profile_picture as rider_picture
+    FROM bookings b
+    JOIN users u ON b.rider_id = u.user_id
+    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending')
+    ORDER BY b.created_at DESC
+  `;
+
+  const result = await pool.query(query, [tripId]);
+  return result.rows;
+};
+
 export default {
   createBooking,
   getBookingById,
@@ -420,4 +506,6 @@ export default {
   confirmBooking,
   cancelBooking,
   createRating,
+  updatePickupLocation,
+  getBookingsByTripId,
 };
