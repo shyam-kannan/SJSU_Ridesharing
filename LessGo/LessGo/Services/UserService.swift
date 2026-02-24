@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // MARK: - User Service
 
@@ -22,7 +23,8 @@ class UserService {
     func getCurrentUserProfile() async throws -> User {
         let user: User = try await network.request(
             endpoint: "/users/me",
-            method: .get
+            method: .get,
+            requiresAuth: true
         )
         return user
     }
@@ -41,7 +43,8 @@ class UserService {
         let user: User = try await network.request(
             endpoint: "/users/\(id)",
             method: .put,
-            body: body
+            body: body,
+            requiresAuth: true
         )
 
         return user
@@ -49,13 +52,14 @@ class UserService {
 
     // MARK: - Setup Driver Profile
 
-    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int) async throws -> User {
-        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable)
+    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String) async throws -> User {
+        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate)
 
         let user: User = try await network.request(
             endpoint: "/users/\(id)/driver-setup",
             method: .put,
-            body: body
+            body: body,
+            requiresAuth: true
         )
 
         return user
@@ -68,7 +72,8 @@ class UserService {
         let _: EmptyResponse = try await network.request(
             endpoint: "/users/\(userId)/device-token",
             method: .post,
-            body: TokenRequest(deviceToken: token)
+            body: TokenRequest(deviceToken: token),
+            requiresAuth: true
         )
     }
 
@@ -79,7 +84,8 @@ class UserService {
         let _: EmptyResponse = try await network.request(
             endpoint: "/users/\(userId)/preferences",
             method: .put,
-            body: PrefsRequest(emailNotifications: emailNotifications, pushNotifications: pushNotifications)
+            body: PrefsRequest(emailNotifications: emailNotifications, pushNotifications: pushNotifications),
+            requiresAuth: true
         )
     }
 
@@ -89,7 +95,7 @@ class UserService {
         let response: UserRatingsResponse = try await network.request(
             endpoint: "/users/\(id)/ratings",
             method: .get,
-            requiresAuth: false
+            requiresAuth: true
         )
         return response
     }
@@ -100,10 +106,57 @@ class UserService {
         let stats: UserStats = try await network.request(
             endpoint: "/users/\(id)/stats",
             method: .get,
-            requiresAuth: false
+            requiresAuth: true
         )
         return stats
     }
+
+    // MARK: - Role Switching
+
+    func updateUserRole(userId: String, role: UserRole) async throws -> User {
+        struct RoleUpdateRequest: Encodable {
+            let role: String
+        }
+
+        let user: User = try await network.request(
+            endpoint: "/users/\(userId)/role",
+            method: .put,
+            body: RoleUpdateRequest(role: role.rawValue),
+            requiresAuth: true
+        )
+
+        return user
+    }
+
+    // MARK: - Profile Picture Upload
+
+    func uploadProfilePicture(userId: String, image: UIImage) async throws -> User {
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            throw NetworkError.unknown(NSError(domain: "Image conversion failed", code: 0))
+        }
+
+        let filename = "profile_\(userId)_\(Date().timeIntervalSince1970).jpg"
+
+        let user: User = try await network.uploadMultipart(
+            endpoint: "/users/\(userId)/profile-picture",
+            parameters: [:],
+            files: ["image": (imageData, filename)],
+            requiresAuth: true
+        )
+
+        return user
+    }
+
+    func removeProfilePicture(userId: String) async throws -> User {
+        let user: User = try await network.request(
+            endpoint: "/users/\(userId)/profile-picture",
+            method: .delete,
+            requiresAuth: true
+        )
+
+        return user
+    }
+
 }
 
 // MARK: - Helper Models
@@ -111,10 +164,12 @@ class UserService {
 struct DriverSetupRequest: Codable {
     let vehicleInfo: String
     let seatsAvailable: Int
+    let licensePlate: String
 
     enum CodingKeys: String, CodingKey {
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
+        case licensePlate = "license_plate"
     }
 }
 
@@ -131,15 +186,15 @@ struct UserRatingsResponse: Codable {
 }
 
 struct UserStats: Codable {
-    let totalTripsCompleted: Int
-    let totalBookings: Int
+    let totalRatings: Int
     let averageRating: Double
-    let totalDistanceMiles: Double
+    let totalTripsAsDriver: Int?
+    let totalBookingsAsRider: Int?
 
     enum CodingKeys: String, CodingKey {
-        case totalTripsCompleted = "total_trips_completed"
-        case totalBookings = "total_bookings"
+        case totalRatings = "total_ratings"
         case averageRating = "average_rating"
-        case totalDistanceMiles = "total_distance_miles"
+        case totalTripsAsDriver = "total_trips_as_driver"
+        case totalBookingsAsRider = "total_bookings_as_rider"
     }
 }

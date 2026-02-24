@@ -12,6 +12,14 @@ enum DesignSystem {
         static let sjsuBlue = Color(hex: "0055A2")      // Official SJSU Blue
         static let sjsuGold = Color(hex: "E5A823")      // Official SJSU Gold
         static let sjsuTeal = Color(hex: "008C95")      // SJSU Accent Teal
+        static let ink = Color(hex: "111827")
+        static let mint = Color(hex: "14B8A6")
+        static let lime = Color(hex: "84CC16")
+        static let sand = Color(hex: "F7F5EF")
+        static let mist = Color(hex: "EDF2F8")
+        static let deepNavy = Color(hex: "071A2E")
+        static let sky = Color(hex: "DCEEFF")
+        static let emerald = Color(hex: "10B981")
 
         // Semantic Colors
         static let primary = sjsuBlue
@@ -19,20 +27,20 @@ enum DesignSystem {
         static let accent = sjsuTeal
 
         // Status Colors
-        static let success = Color.green
+        static let success = Color(hex: "16A34A")
         static let warning = sjsuGold
-        static let error = Color.red
+        static let error = Color(hex: "DC2626")
         static let info = sjsuBlue
 
         // Grayscale
-        static let textPrimary = Color(hex: "1A1A1A")
-        static let textSecondary = Color(hex: "6B7280")
-        static let textTertiary = Color(hex: "9CA3AF")
+        static let textPrimary = ink
+        static let textSecondary = Color(hex: "5B6472")
+        static let textTertiary = Color(hex: "8D97A6")
 
         // Backgrounds
-        static let background = Color(hex: "F9FAFB")
-        static let cardBackground = Color.white
-        static let surfaceBackground = Color(hex: "F3F4F6")
+        static let background = sand
+        static let cardBackground = Color.white.opacity(0.96)
+        static let surfaceBackground = mist
 
         // Interactive
         static let buttonPrimary = sjsuBlue
@@ -40,19 +48,19 @@ enum DesignSystem {
         static let buttonDisabled = Color(hex: "D1D5DB")
 
         // Borders
-        static let border = Color(hex: "E5E7EB")
+        static let border = Color(hex: "DDE3EC")
         static let borderFocused = sjsuBlue
-        static let borderError = Color.red
+        static let borderError = error
     }
 
     // MARK: - Typography
 
     enum Typography {
         // Headers
-        static let largeTitle = Font.system(size: 32, weight: .bold)
-        static let title1 = Font.system(size: 28, weight: .bold)
-        static let title2 = Font.system(size: 22, weight: .semibold)
-        static let title3 = Font.system(size: 20, weight: .semibold)
+        static let largeTitle = Font.system(size: 34, weight: .bold, design: .rounded)
+        static let title1 = Font.system(size: 28, weight: .bold, design: .rounded)
+        static let title2 = Font.system(size: 22, weight: .semibold, design: .rounded)
+        static let title3 = Font.system(size: 20, weight: .semibold, design: .rounded)
 
         // Body Text
         static let body = Font.system(size: 17, weight: .regular)
@@ -67,9 +75,9 @@ enum DesignSystem {
         static let captionBold = Font.system(size: 12, weight: .semibold)
 
         // Special
-        static let button = Font.system(size: 17, weight: .semibold)
-        static let buttonSmall = Font.system(size: 15, weight: .semibold)
-        static let label = Font.system(size: 12, weight: .bold)
+        static let button = Font.system(size: 17, weight: .semibold, design: .rounded)
+        static let buttonSmall = Font.system(size: 15, weight: .semibold, design: .rounded)
+        static let label = Font.system(size: 12, weight: .bold, design: .rounded)
     }
 
     // MARK: - Spacing
@@ -110,8 +118,12 @@ enum DesignSystem {
         static let small = (color: Color.black.opacity(0.05), radius: CGFloat(4), x: CGFloat(0), y: CGFloat(2))
         static let medium = (color: Color.black.opacity(0.1), radius: CGFloat(8), x: CGFloat(0), y: CGFloat(2))
         static let large = (color: Color.black.opacity(0.15), radius: CGFloat(12), x: CGFloat(0), y: CGFloat(4))
-        static let card = (color: Color.black.opacity(0.08), radius: CGFloat(8), x: CGFloat(0), y: CGFloat(2))
-        static let button = (color: Color.black.opacity(0.1), radius: CGFloat(8), x: CGFloat(0), y: CGFloat(2))
+        static let card = (color: Color.black.opacity(0.08), radius: CGFloat(22), x: CGFloat(0), y: CGFloat(10))
+        static let button = (color: DesignSystem.Colors.sjsuBlue.opacity(0.22), radius: CGFloat(18), x: CGFloat(0), y: CGFloat(10))
+        // New elevated shadows for premium depth
+        static let elevated = (color: Color.black.opacity(0.16), radius: CGFloat(24), x: CGFloat(0), y: CGFloat(12))
+        static let floating = (color: Color.black.opacity(0.22), radius: CGFloat(32), x: CGFloat(0), y: CGFloat(16))
+        static let sheet = (color: Color.black.opacity(0.18), radius: CGFloat(28), x: CGFloat(0), y: CGFloat(-8))
     }
 
     // MARK: - Layout
@@ -119,6 +131,7 @@ enum DesignSystem {
     enum Layout {
         // Heights
         static let buttonHeight: CGFloat = 56
+        static let buttonHeightLarge: CGFloat = 60        // Figma-quality 60pt buttons
         static let buttonHeightSmall: CGFloat = 44
         static let textFieldHeight: CGFloat = 52
         static let tabBarHeight: CGFloat = 60
@@ -134,6 +147,12 @@ enum DesignSystem {
 
         // Empty State
         static let emptyStateIconSize: CGFloat = 80
+
+        // Map-first layout
+        static let bottomSheetPeek: CGFloat = 320        // Visible at bottom when collapsed
+        static let bottomSheetCornerRadius: CGFloat = 28 // Top corners of bottom sheet
+        static let searchBarFloatTop: CGFloat = 16       // Offset from safe area top
+        static let fabSize: CGFloat = 56                 // Floating action button size
     }
 
     // MARK: - Animation
@@ -147,6 +166,21 @@ enum DesignSystem {
         static let defaultDuration: Double = 0.3
         static let quickDuration: Double = 0.15
         static let slowDuration: Double = 0.5
+
+        // New premium animations
+        static let staggerBase: Double = 0.06            // Delay per card in stagger sequence
+        static let successExpand = SwiftUI.Animation.spring(response: 0.6, dampingFraction: 0.62)
+        static let pinBounce = SwiftUI.Animation.spring(response: 0.4, dampingFraction: 0.5)
+        static let sheetSnap = SwiftUI.Animation.spring(response: 0.38, dampingFraction: 0.84)
+        static let heroEntrance = SwiftUI.Animation.spring(response: 0.7, dampingFraction: 0.78)
+    }
+
+    // MARK: - Glass
+
+    enum Glass {
+        static let fill: Material = .ultraThinMaterial
+        static let borderOpacity: Double = 0.45
+        static let overlayOpacity: Double = 0.15
     }
 
     // MARK: - Opacity
@@ -193,8 +227,28 @@ extension View {
     /// Apply standard card styling with SJSU design system
     func cardStyle() -> some View {
         self
-            .background(DesignSystem.Colors.cardBackground)
-            .cornerRadius(DesignSystem.CornerRadius.card)
+            .background(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.98),
+                                DesignSystem.Colors.cardBackground,
+                                DesignSystem.Colors.sky.opacity(0.35)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.95), lineWidth: 1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.45), lineWidth: 0.6)
+                    )
+            )
             .shadow(
                 color: DesignSystem.Shadow.card.color,
                 radius: DesignSystem.Shadow.card.radius,
@@ -208,5 +262,78 @@ extension View {
         self
             .scaleEffect(isPressed ? 0.95 : 1.0)
             .animation(DesignSystem.Animation.buttonPress, value: isPressed)
+    }
+
+    /// Glassmorphism overlay — frosted glass look with white border
+    func glassMorphism(cornerRadius: CGFloat = 20) -> some View {
+        self
+            .background(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.5), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    /// Elevated card with generous shadow depth
+    func elevatedCard(cornerRadius: CGFloat = 20) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.99), Color.white.opacity(0.94)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(Color.white, lineWidth: 1)
+                    )
+            )
+            .shadow(
+                color: DesignSystem.Shadow.elevated.color,
+                radius: DesignSystem.Shadow.elevated.radius,
+                x: DesignSystem.Shadow.elevated.x,
+                y: DesignSystem.Shadow.elevated.y
+            )
+    }
+
+    /// Staggered appear: slides up + fades in with per-index delay
+    func staggeredAppear(index: Int, delay: Double = 0) -> some View {
+        self.modifier(StaggeredAppearModifier(index: index, extraDelay: delay))
+    }
+
+    /// Bottom sheet drag handle capsule overlaid at top
+    func bottomSheetHandle() -> some View {
+        self.overlay(alignment: .top) {
+            Capsule()
+                .fill(Color.gray.opacity(0.28))
+                .frame(width: 40, height: 5)
+                .padding(.top, 10)
+        }
+    }
+}
+
+// MARK: - Staggered Appear Modifier
+
+struct StaggeredAppearModifier: ViewModifier {
+    let index: Int
+    let extraDelay: Double
+    @State private var appeared = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 18)
+            .onAppear {
+                withAnimation(
+                    .spring(response: 0.42, dampingFraction: 0.76)
+                    .delay(Double(index) * DesignSystem.Animation.staggerBase + extraDelay)
+                ) {
+                    appeared = true
+                }
+            }
     }
 }

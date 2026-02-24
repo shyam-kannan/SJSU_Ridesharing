@@ -9,7 +9,7 @@ import { GeoPoint } from '@lessgo/shared';
  */
 export const geocodeAddress = async (address: string): Promise<GeoPoint> => {
   if (!config.googleMapsApiKey) {
-    throw new Error('Google Maps API key not configured');
+    throw new Error('Geocoding failed: Google Maps API key not configured');
   }
 
   try {
@@ -25,7 +25,7 @@ export const geocodeAddress = async (address: string): Promise<GeoPoint> => {
     }
 
     if (response.data.results.length === 0) {
-      throw new Error('No results found for address');
+      throw new Error('Geocoding failed: No results found for address');
     }
 
     const location = response.data.results[0].geometry.location;
@@ -37,7 +37,7 @@ export const geocodeAddress = async (address: string): Promise<GeoPoint> => {
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error('Geocoding API error:', error.response?.data || error.message);
-      throw new Error('Failed to geocode address');
+      throw new Error('Geocoding failed: Unable to reach geocoding provider');
     }
     throw error;
   }

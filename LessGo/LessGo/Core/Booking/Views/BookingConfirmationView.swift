@@ -9,24 +9,27 @@ struct BookingConfirmationView: View {
 
     let trip: Trip
     let seats: Int
+    var onBookingFinished: (() -> Void)? = nil
 
-    @State private var step: Step = .review
     @State private var showSuccess = false
     @State private var showVerificationAlert = false
     @State private var showIDVerificationSheet = false
     @State private var isBookingComplete = false
 
-    enum Step { case review, paying }
-
-    var estimatedPrice: Double { Double(seats) * 8.50 }
+    private var displayedPrice: Double {
+        bookingVM.currentBooking?.quote?.maxPrice ?? Double(seats) * 8.50
+    }
 
     var body: some View {
         NavigationView {
             ZStack {
-                Color.appBackground.ignoresSafeArea()
+                Color.canvasGradient.ignoresSafeArea()
 
                 if showSuccess {
-                    BookingSuccessView(trip: trip) { dismiss() }
+                    BookingSuccessView(trip: trip, bookingId: bookingVM.currentBooking?.id) {
+                        dismiss()
+                        onBookingFinished?()
+                    }
                         .transition(.asymmetric(insertion: .scale.combined(with: .opacity),
                                                 removal: .opacity))
                 } else {
@@ -35,14 +38,22 @@ struct BookingConfirmationView: View {
 
                             // ── Summary Header ──
                             VStack(spacing: 6) {
-                                Text("Confirm Booking")
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(.textPrimary)
+                                VStack(spacing: 8) {
+                                    Text("Confirm Booking")
+                                        .font(DesignSystem.Typography.title1)
+                                        .foregroundColor(.textPrimary)
+                                    Rectangle()
+                                        .fill(DesignSystem.Colors.sjsuBlue)
+                                        .frame(width: 40, height: 4)
+                                        .cornerRadius(2)
+                                }
                                 Text("Review your trip details")
                                     .font(.system(size: 15))
                                     .foregroundColor(.textSecondary)
                             }
                             .padding(.top, 28)
+                            .padding(.horizontal, AppConstants.pagePadding)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             // ── Trip Summary ──
                             VStack(spacing: 0) {
@@ -72,6 +83,9 @@ struct BookingConfirmationView: View {
                                 // Driver info
                                 HStack(spacing: 12) {
                                     ZStack {
+                                        Circle()
+                                            .strokeBorder(DesignSystem.Colors.sjsuBlue.opacity(0.35), lineWidth: 2)
+                                            .frame(width: 46, height: 46)
                                         Circle().fill(Color.brand.opacity(0.12)).frame(width: 42, height: 42)
                                         Text(trip.driver?.name.prefix(1).uppercased() ?? "?")
                                             .font(.system(size: 17, weight: .bold)).foregroundColor(.brand)
@@ -92,9 +106,15 @@ struct BookingConfirmationView: View {
                                 }
                                 .padding(AppConstants.cardPadding)
                             }
-                            .background(Color.cardBackground)
-                            .cornerRadius(AppConstants.cardRadius)
-                            .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    .fill(Color.panelGradient)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                            .strokeBorder(Color.brand.opacity(0.08), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: 8)
                             .padding(.horizontal, AppConstants.pagePadding)
 
                             // ── Price Breakdown ──
@@ -104,12 +124,22 @@ struct BookingConfirmationView: View {
                                     .foregroundColor(.textPrimary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                                PriceRow(label: "Per seat", value: "$8.50")
+                                PriceRow(label: "Per seat", value: String(format: "$%.2f", displayedPrice / Double(max(seats, 1))))
                                 PriceRow(label: "Seats", value: "× \(seats)")
-                                Divider()
-                                PriceRow(label: "Total", value: String(format: "$%.2f", estimatedPrice), isBold: true)
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [DesignSystem.Colors.sjsuGold, DesignSystem.Colors.sjsuGold.opacity(0.3)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(height: 1.5)
+                                    .cornerRadius(1)
+                                PriceRow(label: "Total", value: String(format: "$%.2f", displayedPrice), isBold: true)
                             }
-                            .cardStyle()
+                            .padding(16)
+                            .elevatedCard(cornerRadius: 20)
                             .padding(.horizontal, AppConstants.pagePadding)
 
                             // ── Error ──
@@ -134,14 +164,15 @@ struct BookingConfirmationView: View {
                         VStack(spacing: 0) {
                             Divider()
                             PrimaryButton(
-                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", estimatedPrice))",
+                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", displayedPrice))",
                                 icon: isBookingComplete ? "checkmark" : "lock.fill",
                                 isLoading: bookingVM.isCreating || bookingVM.isLoading,
                                 isEnabled: !isBookingComplete
                             ) { confirmBooking() }
                             .padding(.horizontal, AppConstants.pagePadding)
                             .padding(.vertical, 16)
-                            .background(Color.cardBackground)
+                            .background(.ultraThinMaterial)
+                            .overlay(alignment: .top) { Divider().opacity(0.3) }
                         }
                     }
                 }
@@ -151,7 +182,7 @@ struct BookingConfirmationView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.textSecondary).padding(8).background(Color.appBackground).clipShape(Circle())
+                            .foregroundColor(.textSecondary).padding(8).background(Color.panelGradient).clipShape(Circle())
                     }
                 }
             }
@@ -185,7 +216,7 @@ struct BookingConfirmationView: View {
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
             if success, let bookingId = bookingVM.currentBooking?.id {
-                let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: estimatedPrice)
+                let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: displayedPrice)
                 if paid {
                     withAnimation { showSuccess = true }
                 } else {
@@ -231,14 +262,16 @@ private struct PriceRow: View {
 
 struct BookingSuccessView: View {
     let trip: Trip
+    let bookingId: String?
     let onDone: () -> Void
 
     @State private var scale: CGFloat = 0.5
     @State private var opacity: Double = 0
-    @State private var showLocationPrompt = false
     @State private var showManualAddress = false
     @State private var manualAddress = ""
     @State private var isUpdatingLocation = false
+    @State private var glowScale: CGFloat = 0.8
+    @State private var glowOpacity: Double = 0.8
 
     @StateObject private var locationManager = LocationManager.shared
 
@@ -253,6 +286,10 @@ struct BookingSuccessView: View {
 
             // Animated checkmark
             ZStack {
+                Circle()
+                    .stroke(DesignSystem.Colors.sjsuGold.opacity(glowOpacity), lineWidth: 2)
+                    .frame(width: 160, height: 160)
+                    .scaleEffect(glowScale)
                 Circle().fill(Color.brandGreen.opacity(0.1)).frame(width: 130, height: 130)
                 Circle().fill(Color.brandGreen.opacity(0.2)).frame(width: 100, height: 100)
                 Image(systemName: "checkmark.circle.fill")
@@ -264,7 +301,7 @@ struct BookingSuccessView: View {
 
             VStack(spacing: 10) {
                 Text("Booking Confirmed!")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(DesignSystem.Typography.title1)
                     .foregroundColor(.textPrimary)
                 Text("Your ride to \(trip.destination) is booked.\nHave a great trip!")
                     .font(.system(size: 16))
@@ -282,8 +319,14 @@ struct BookingSuccessView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(Color.brand.opacity(0.08))
-            .cornerRadius(14)
+            .background(
+                LinearGradient(
+                    colors: [Color.brand.opacity(0.12), Color.brand.opacity(0.05)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(18)
 
             // Location sharing prompt (only for To SJSU trips)
             if isToSJSU && !showManualAddress {
@@ -332,9 +375,7 @@ struct BookingSuccessView: View {
                     .padding(.horizontal, 20)
                 }
                 .padding(16)
-                .background(Color.cardBackground)
-                .cornerRadius(16)
-                .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                .elevatedCard(cornerRadius: 20)
                 .padding(.horizontal, 20)
             }
 
@@ -382,16 +423,17 @@ struct BookingSuccessView: View {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
                 scale = 1; opacity = 1
             }
+            withAnimation(DesignSystem.Animation.successExpand.delay(0.3)) {
+                glowScale = 1.3
+                glowOpacity = 0
+            }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
 
-            // Auto-navigate to My Trips after 2 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                onDone()
-            }
         }
     }
 
     private func shareCurrentLocation() {
+        guard let bookingId else { return }
         isUpdatingLocation = true
         locationManager.startUpdating()
 
@@ -401,13 +443,12 @@ struct BookingSuccessView: View {
                 Task {
                     do {
                         _ = try await BookingService.shared.updatePickupLocation(
-                            id: trip.id,
+                            id: bookingId,
                             lat: location.coordinate.latitude,
                             lng: location.coordinate.longitude,
                             address: nil
                         )
                         isUpdatingLocation = false
-                        showLocationPrompt = false
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                     } catch {
                         print("Failed to update pickup location: \(error)")
@@ -422,13 +463,14 @@ struct BookingSuccessView: View {
 
     private func shareManualAddress() {
         guard !manualAddress.isEmpty else { return }
+        guard let bookingId else { return }
         isUpdatingLocation = true
 
         Task {
             do {
                 // Use default SJSU coordinates with manual address
                 _ = try await BookingService.shared.updatePickupLocation(
-                    id: trip.id,
+                    id: bookingId,
                     lat: AppConstants.sjsuCoordinate.latitude,
                     lng: AppConstants.sjsuCoordinate.longitude,
                     address: manualAddress
@@ -449,19 +491,21 @@ struct BookingListView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var vm = BookingViewModel()
     @State private var showAsDriver = false
+    @State private var showAccountMenu = false
+    @State private var showReportUser = false
+    @State private var reportedUserId: String?
+    @State private var reportedUserName: String?
+    @State private var reportTripId: String?
 
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Segment
-                if authVM.isDriver {
-                    Picker("View", selection: $showAsDriver) {
-                        Text("As Rider").tag(false)
-                        Text("As Driver").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding()
-                    .background(Color.cardBackground)
+                bookingsHeader
+
+                if let err = vm.errorMessage {
+                    ToastBanner(message: err, type: .error)
+                        .padding(.horizontal, AppConstants.pagePadding)
+                        .padding(.top, 8)
                 }
 
                 if vm.isLoading {
@@ -476,26 +520,153 @@ struct BookingListView: View {
                     ) {}
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: AppConstants.itemSpacing) {
+                        LazyVStack(spacing: 14) {
                             ForEach(vm.bookings) { booking in
-                                BookingRow(booking: booking, vm: vm)
-                                    .padding(.horizontal, AppConstants.pagePadding)
+                                BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
+                                    reportedUserId = userId
+                                    reportedUserName = userName
+                                    reportTripId = tripId
+                                    showReportUser = true
+                                }
+                                .padding(.horizontal, AppConstants.pagePadding)
                             }
                         }
-                        .padding(.top, 12)
+                        .padding(.top, 14)
                         .padding(.bottom, 100)
                     }
                     .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
                 }
             }
-            .background(Color.appBackground.ignoresSafeArea())
-            .navigationTitle(showAsDriver ? "Passengers" : "My Trips")
-            .navigationBarTitleDisplayMode(.large)
-            .task { await vm.loadBookings(asDriver: showAsDriver) }
+            .background(
+                ZStack {
+                    Color(hex: "F4F6F2").ignoresSafeArea()
+                    Circle()
+                        .fill(Color(hex: "A3E635").opacity(0.10))
+                        .frame(width: 260)
+                        .offset(x: 140, y: 520)
+                        .ignoresSafeArea()
+                }
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarHidden(true)
+            .task {
+                if authVM.isDriver { showAsDriver = true }
+                await vm.loadBookings(asDriver: showAsDriver)
+            }
+            .onAppear {
+                Task {
+                    if authVM.isDriver, !showAsDriver {
+                        showAsDriver = true
+                    } else {
+                        await vm.loadBookings(asDriver: showAsDriver)
+                    }
+                }
+            }
             .onChange(of: showAsDriver) { newVal in
                 Task { await vm.loadBookings(asDriver: newVal) }
             }
+            .onChange(of: authVM.currentUser?.id) { _ in
+                Task {
+                    showAsDriver = authVM.isDriver
+                    await vm.loadBookings(asDriver: showAsDriver)
+                }
+            }
+            .sheet(isPresented: $showReportUser) {
+                if let userId = reportedUserId, let userName = reportedUserName {
+                    ReportUserView(reportedUserId: userId, reportedUserName: userName, tripId: reportTripId)
+                        .environmentObject(authVM)
+                }
+            }
+            .sheet(isPresented: $showAccountMenu) {
+                InAppAccountMenuView()
+                    .environmentObject(authVM)
+            }
         }
+    }
+
+    private var bookingsHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(showAsDriver ? "Passenger Rides" : "My Trips")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                    Text(showAsDriver ? "Manage riders and trip activity" : "Track upcoming and past bookings")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
+                }
+                Spacer()
+                Button(action: { showAccountMenu = true }) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 42, height: 42)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                        Text(authVM.currentUser?.name.prefix(1).uppercased() ?? "?")
+                        .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, AppConstants.pagePadding)
+            .padding(.top, 14)
+
+            if authVM.isDriver {
+                Picker("View", selection: $showAsDriver) {
+                    Text("As Rider").tag(false)
+                    Text("As Driver").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        )
+                )
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showAsDriver)
+                .padding(.horizontal, AppConstants.pagePadding)
+            }
+
+            HStack(spacing: 8) {
+                headerChip(showAsDriver ? "Passengers" : "Rider History", icon: showAsDriver ? "person.2.fill" : "car.fill")
+                headerChip("Live Chat", icon: "message.fill")
+                headerChip("Tracking", icon: "location.fill")
+            }
+            .padding(.horizontal, AppConstants.pagePadding)
+        }
+        .padding(.bottom, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.black.opacity(0.84))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+    }
+
+    private func headerChip(_ title: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(.white.opacity(0.8))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.08))
+        .clipShape(Capsule())
     }
 }
 
@@ -504,6 +675,8 @@ struct BookingListView: View {
 private struct BookingRow: View {
     let booking: Booking
     @ObservedObject var vm: BookingViewModel
+    let showAsDriver: Bool
+    var onReport: ((String, String, String?) -> Void)?
 
     var statusColor: Color {
         switch booking.status {
@@ -519,7 +692,7 @@ private struct BookingRow: View {
             HStack {
                 // Status
                 HStack(spacing: 5) {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
+                    Circle().fill(statusColor).frame(width: 10, height: 10)
                     Text(booking.status.rawValue.capitalized)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(statusColor)
@@ -531,26 +704,171 @@ private struct BookingRow: View {
             }
 
             if let trip = booking.trip {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.right.circle.fill")
-                        .foregroundColor(.brand).font(.system(size: 16))
-                    Text("\(trip.origin) → \(trip.destination)")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.textPrimary)
-                        .lineLimit(1)
+                NavigationLink(
+                    destination: BookingRideDetailView(booking: booking, vm: vm, showAsDriver: showAsDriver)
+                ) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "list.bullet.rectangle")
+                        Text("View Ride Details")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .opacity(0.8)
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(Color(hex: "0F172A"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .cornerRadius(14)
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Circle().fill(Color.brand).frame(width: 7, height: 7)
+                        Text(trip.origin)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 8) {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundColor(.brandRed)
+                            .font(.system(size: 12))
+                        Text(trip.destination)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(10)
+                .background(Color(hex: "F8FAFC"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                )
+                .cornerRadius(12)
 
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "clock").font(.system(size: 12))
-                        Text(trip.departureTime.tripDateTimeString).font(.system(size: 13))
+                        Text(trip.departureTime.tripDateTimeString)
+                            .font(.system(size: 13))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
                     .foregroundColor(.textSecondary)
                     Spacer()
                     if let amount = booking.quote?.maxPrice {
-                        Text(String(format: "$%.2f", amount))
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.brandGreen)
+                        HStack(spacing: 6) {
+                            Text(String(format: "$%.2f", amount))
+                                .font(.system(size: 14, weight: .bold))
+                            Text(paymentStatusLabel)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(paymentStatusPillColor)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(paymentStatusPillColor.opacity(0.12))
+                                .cornerRadius(999)
+                        }
+                        .foregroundColor(.black.opacity(0.85))
+                    }
+                }
+            }
+
+            // Driver details for confirmed/completed bookings
+            if (booking.status == .confirmed || booking.status == .completed),
+               let trip = booking.trip, let driver = trip.driver {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle().fill(Color.brand.opacity(0.12)).frame(width: 40, height: 40)
+                            Text(driver.name.prefix(1).uppercased())
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.brand)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(driver.name)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                            if let vehicle = driver.vehicleInfo {
+                                Text(vehicle)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.textSecondary)
+                            }
+                            if let plate = driver.licensePlate {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "creditcard.fill")
+                                        .font(.system(size: 9))
+                                    Text("License: \(plate)")
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .foregroundColor(.textTertiary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.brandGold.opacity(0.15))
+                                .cornerRadius(6)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
+
+            // Track / simulate ride entry (confirmed bookings)
+            if booking.status == .confirmed, let trip = booking.trip {
+                NavigationLink(destination: ActiveTripView(trip: trip, booking: booking, isDriver: showAsDriver)) {
+                    HStack(spacing: 8) {
+                        Image(systemName: [.enRoute, .arrived, .inProgress].contains(trip.status) ? "location.fill" : "sparkles")
+                        Text([.enRoute, .arrived, .inProgress].contains(trip.status) ? "Track Trip Live" : "Simulate Ride")
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [DesignSystem.Colors.sjsuBlue, DesignSystem.Colors.sjsuTeal],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(12)
+                }
+            }
+
+            // Chat button for confirmed/completed bookings so riders can reopen chat history
+            if (booking.status == .confirmed || booking.status == .completed), let trip = booking.trip {
+                if showAsDriver, let rider = booking.rider {
+                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "message.fill")
+                            Text("Chat with \(rider.name)")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Color.brand.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                } else if !showAsDriver {
+                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: trip.driver?.name ?? "Driver", isDriver: false)) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "message.fill")
+                            Text("Chat with Driver")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Color.brand.opacity(0.1))
+                        .cornerRadius(10)
                     }
                 }
             }
@@ -567,7 +885,410 @@ private struct BookingRow: View {
                         .cornerRadius(10)
                 }
             }
+
+            // Report button for completed bookings
+            if booking.status == .completed, let trip = booking.trip, let driver = trip.driver {
+                Button(action: {
+                    onReport?(driver.id, driver.name, trip.id)
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flag.fill")
+                        Text("Report Issue")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.brandRed)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.brandRed.opacity(0.08))
+                    .cornerRadius(10)
+                }
+            }
         }
-        .cardStyle()
+        .padding(15)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(statusColor == .brandGreen ? Color(hex: "84CC16").opacity(0.6) : Color.black.opacity(0.06), lineWidth: 1)
+                )
+                .overlay(alignment: .top) {
+                    LinearGradient(
+                        colors: [statusColor.opacity(0.10), .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 42)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+        )
+        .shadow(color: .black.opacity(0.045), radius: 10, x: 0, y: 4)
+    }
+
+    private var paymentStatusLabel: String {
+        switch booking.payment?.status {
+        case .captured: return "Paid"
+        case .pending: return "Authorized"
+        case .refunded: return "Refunded"
+        case .failed: return "Failed"
+        case .none: return "Quoted"
+        }
+    }
+
+    private var paymentStatusPillColor: Color {
+        switch booking.payment?.status {
+        case .captured: return .brandGreen
+        case .pending: return .brandOrange
+        case .refunded: return .brand
+        case .failed: return .brandRed
+        case .none: return .textSecondary
+        }
+    }
+}
+
+// MARK: - Booking Ride Detail View
+
+private struct BookingRideDetailView: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    let booking: Booking
+    @ObservedObject var vm: BookingViewModel
+    let showAsDriver: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                if let trip = booking.trip {
+                    RouteMapView(
+                        origin: trip.originPoint?.clLocationCoordinate2D,
+                        destination: trip.destinationPoint?.clLocationCoordinate2D,
+                        driver: nil,
+                        showsUserLocation: false
+                    )
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(alignment: .topLeading) {
+                        statusBadge
+                            .padding(14)
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 20)
+
+                    routeCard(trip: trip)
+                        .padding(.horizontal, 20)
+
+                    counterpartCard(trip: trip)
+                        .padding(.horizontal, 20)
+
+                    paymentCard
+                        .padding(.horizontal, 20)
+
+                    actionsCard(trip: trip)
+                        .padding(.horizontal, 20)
+                } else {
+                    EmptyStateView(
+                        icon: "car.2",
+                        title: "Ride details unavailable",
+                        message: "We couldn't load the trip details for this booking.",
+                        actionTitle: nil
+                    ) {}
+                    .padding(.top, 60)
+                }
+            }
+            .padding(.top, 14)
+            .padding(.bottom, 124)
+        }
+        .background(Color.appBackground.ignoresSafeArea())
+        .navigationTitle("Ride Details")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var statusBadge: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            Text(booking.status.rawValue.capitalized)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(statusColor)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.96))
+        .overlay(Capsule().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    private func routeCard(trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle("Trip")
+
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 4) {
+                    Circle().fill(Color.brand).frame(width: 10, height: 10)
+                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 2, height: 22)
+                    Image(systemName: "flag.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.brandGreen)
+                        .frame(width: 10, height: 10)
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(trip.origin)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(trip.destination)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: "F8FAFC"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+            )
+
+            Divider()
+
+            HStack(spacing: 10) {
+                infoPill(icon: "calendar", text: trip.departureTime.tripDateString, tint: .textSecondary)
+                Spacer(minLength: 8)
+                infoPill(icon: "clock", text: trip.departureTime.tripTimeString, tint: .brand)
+            }
+        }
+        .cardStyle(padding: 20, cornerRadius: 20)
+    }
+
+    private func counterpartCard(trip: Trip) -> some View {
+        let title = showAsDriver ? "Rider" : "Driver"
+        let name = showAsDriver ? (booking.rider?.name ?? "Rider") : (trip.driver?.name ?? "Driver")
+        let rating = showAsDriver ? (booking.rider?.rating ?? 0) : (trip.driver?.rating ?? 0)
+        let vehicle = trip.driver?.vehicleInfo
+        let plate = trip.driver?.licensePlate
+
+        return VStack(alignment: .leading, spacing: 14) {
+            sectionTitle(title)
+
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Color.brand.opacity(0.12)).frame(width: 46, height: 46)
+                    Text(name.prefix(1).uppercased())
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.brand)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    StarRatingView(rating: rating, size: 12)
+                    if !showAsDriver, let vehicle {
+                        Text(vehicle)
+                            .font(.system(size: 12))
+                            .foregroundColor(.textSecondary)
+                    }
+                    if !showAsDriver, let plate {
+                        Text("Plate: \(plate)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.textTertiary)
+                    }
+                }
+                Spacer()
+                Text("\(booking.seatsBooked) seat\(booking.seatsBooked == 1 ? "" : "s")")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.brandGreen)
+                    .clipShape(Capsule())
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: "F8FAFC"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+            )
+        }
+        .cardStyle(padding: 20, cornerRadius: 20)
+    }
+
+    private var paymentCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle("Booking & Payment")
+
+            VStack(spacing: 10) {
+                detailRow(label: "Booking ID", value: "\(String(booking.id.prefix(8)))…")
+
+                if let quote = booking.quote {
+                    detailRow(
+                        label: "Quoted Total",
+                        value: String(format: "$%.2f", quote.maxPrice),
+                        valueColor: .brandGreen,
+                        valueWeight: .bold
+                    )
+                }
+
+                if let payment = booking.payment {
+                    HStack {
+                        Text("Payment Status")
+                            .font(.system(size: 13))
+                            .foregroundColor(.textSecondary)
+                        Spacer()
+                        Text(paymentStatusLabel(payment.status))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(paymentStatusColor(payment.status))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(paymentStatusColor(payment.status).opacity(0.10))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: "F8FAFC"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+            )
+        }
+        .cardStyle(padding: 20, cornerRadius: 20)
+    }
+
+    @ViewBuilder
+    private func actionsCard(trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Actions")
+            if booking.status == .confirmed, [.enRoute, .arrived, .inProgress].contains(trip.status) {
+                NavigationLink(destination: ActiveTripView(trip: trip, booking: booking, isDriver: showAsDriver)) {
+                    actionPill(title: "Track Live Ride", icon: "location.fill", fill: Color.brand, fg: .white)
+                }
+            }
+
+            if booking.status == .confirmed || booking.status == .completed {
+                if showAsDriver, let rider = booking.rider {
+                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
+                        actionPill(title: "Chat with \(rider.name)", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
+                    }
+                } else if !showAsDriver {
+                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: trip.driver?.name ?? "Driver", isDriver: false)) {
+                        actionPill(title: "Chat with Driver", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
+                    }
+                }
+            }
+
+            if !showAsDriver && booking.status == .pending {
+                Button(action: { Task { await vm.cancelBooking(id: booking.id) } }) {
+                    actionPill(title: "Cancel Booking", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
+                }
+            }
+        }
+        .cardStyle(padding: 20, cornerRadius: 20)
+    }
+
+    private func actionPill(title: String, icon: String, fill: Color, fg: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+            Text(title)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .bold))
+                .opacity(fg == .white ? 0.85 : 0.55)
+        }
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundColor(fg)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(fill)
+        .cornerRadius(10)
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 15, weight: .bold))
+            .foregroundColor(.textPrimary)
+    }
+
+    private func infoPill(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text)
+                .lineLimit(1)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundColor(tint)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color(hex: "F8FAFC"))
+        .overlay(
+            Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(Capsule())
+    }
+
+    private func detailRow(
+        label: String,
+        value: String,
+        valueColor: Color = .textPrimary,
+        valueWeight: Font.Weight = .medium
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundColor(.textSecondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 13, weight: valueWeight))
+                .foregroundColor(valueColor)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    private var statusColor: Color {
+        switch booking.status {
+        case .pending: return .brandOrange
+        case .confirmed: return .brandGreen
+        case .cancelled: return .brandRed
+        case .completed: return .textTertiary
+        }
+    }
+
+    private func paymentStatusColor(_ status: PaymentStatus) -> Color {
+        switch status {
+        case .pending: return .brandOrange
+        case .captured: return .brandGreen
+        case .refunded: return .brand
+        case .failed: return .brandRed
+        }
+    }
+
+    private func paymentStatusLabel(_ status: PaymentStatus) -> String {
+        switch status {
+        case .pending:
+            return "Authorized"
+        case .captured:
+            return "Captured"
+        case .refunded:
+            return "Refunded"
+        case .failed:
+            return "Failed"
+        }
     }
 }

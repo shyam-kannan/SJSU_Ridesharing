@@ -7,6 +7,7 @@ export type { AuthRequest } from './middleware/auth';
 export { AppError, errorHandler, notFoundHandler, asyncHandler } from './middleware/errorHandler';
 export { requestLogger, devLogger } from './middleware/logger';
 export { corsMiddleware, devCorsMiddleware } from './middleware/cors';
+export { validateRequest } from './middleware/validateRequest';
 
 // Utilities
 export { successResponse, errorResponse, paginatedResponse } from './utils/response';

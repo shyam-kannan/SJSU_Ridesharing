@@ -41,8 +41,8 @@ export const createBooking = async (
 
   const trip = tripResult.rows[0];
 
-  if (trip.status !== 'active') {
-    throw new Error('Trip is not active');
+  if (trip.status !== 'pending') {
+    throw new Error('Trip is not available for booking');
   }
 
   if (trip.seats_available < seats_booked) {
@@ -68,7 +68,9 @@ export const createBooking = async (
   ]);
   const booking = bookingResult.rows[0];
 
-  // Generate quote via Cost Calculation Service
+  // Generate quote via Cost Calculation Service (with fallback)
+  let maxPrice: number;
+
   try {
     const costResponse = await axios.post(`${config.costServiceUrl}/cost/calculate`, {
       origin: trip.origin,
@@ -77,9 +79,18 @@ export const createBooking = async (
       trip_id: trip_id,
     });
 
-    const maxPrice = costResponse.data.data.max_price;
+    maxPrice = costResponse.data.data.max_price;
+  } catch (error) {
+    // Fallback: calculate price locally if cost service is unavailable
+    console.warn('Cost service unavailable, using fallback pricing');
+    const basePricePerRider = 5.0;
+    const estimatedDistanceMiles = 10;
+    const pricePerMile = 0.5;
+    const totalTripCost = basePricePerRider + estimatedDistanceMiles * pricePerMile;
+    maxPrice = parseFloat((totalTripCost / seats_booked).toFixed(2));
+  }
 
-    // Create quote
+  try {
     const quoteQuery = `
       INSERT INTO quotes (booking_id, max_price)
       VALUES ($1, $2)
@@ -90,10 +101,9 @@ export const createBooking = async (
 
     return { booking, quote };
   } catch (error) {
-    // If cost service fails, delete booking and throw error
     await pool.query('DELETE FROM bookings WHERE booking_id = $1', [booking.booking_id]);
-    console.error('Cost calculation failed:', error);
-    throw new Error('Failed to generate quote. Booking cancelled.');
+    console.error('Quote creation failed:', error);
+    throw new Error('Unable to calculate price. Please try again.');
   }
 };
 
@@ -113,6 +123,10 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       ST_Y(t.destination_point::geometry) as destination_lat,
       t.departure_time, t.seats_available as trip_seats_available, t.recurrence, t.status as trip_status,
       t.created_at as trip_created_at, t.updated_at as trip_updated_at,
+      d.user_id as driver_user_id, d.name as driver_name, d.email as driver_email,
+      d.role as driver_role, d.sjsu_id_status as driver_sjsu_id_status, d.rating as driver_rating,
+      d.vehicle_info as driver_vehicle_info, d.license_plate as driver_license_plate,
+      d.created_at as driver_created_at, d.updated_at as driver_updated_at,
       r.user_id as rider_user_id, r.name as rider_name, r.email as rider_email,
       r.role as rider_role, r.sjsu_id_status as rider_sjsu_id_status, r.rating as rider_rating,
       r.created_at as rider_created_at, r.updated_at as rider_updated_at,
@@ -121,6 +135,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       p.created_at as payment_created_at, p.updated_at as payment_updated_at
     FROM bookings b
     JOIN trips t ON b.trip_id = t.trip_id
+    JOIN users d ON t.driver_id = d.user_id
     JOIN users r ON b.rider_id = r.user_id
     LEFT JOIN quotes q ON b.booking_id = q.booking_id
     LEFT JOIN payments p ON b.booking_id = p.booking_id
@@ -156,6 +171,18 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       status: row.trip_status,
       created_at: row.trip_created_at,
       updated_at: row.trip_updated_at,
+      driver: {
+        user_id: row.driver_user_id,
+        name: row.driver_name,
+        email: row.driver_email,
+        role: row.driver_role,
+        sjsu_id_status: row.driver_sjsu_id_status,
+        rating: row.driver_rating,
+        vehicle_info: row.driver_vehicle_info,
+        license_plate: row.driver_license_plate,
+        created_at: row.driver_created_at,
+        updated_at: row.driver_updated_at,
+      },
     },
     rider: {
       user_id: row.rider_user_id,
@@ -220,6 +247,7 @@ export const confirmBooking = async (
   userId: string
 ): Promise<BookingWithDetails> => {
   const client = await pool.connect();
+  let createdPaymentId: string | null = null;
 
   try {
     await client.query('BEGIN');
@@ -255,6 +283,7 @@ export const confirmBooking = async (
           amount: bookingData.quote.max_price,
         });
         payment = paymentResponse.data.data;
+        createdPaymentId = payment?.payment_id || null;
       } catch (error: any) {
         console.error(`[CONFIRM] Payment creation failed for booking ${bookingId}:`, error.response?.data || error.message);
         throw new Error('Failed to create payment intent');
@@ -267,17 +296,29 @@ export const confirmBooking = async (
       }
     }
 
-    // Update booking status
-    await client.query(
-      'UPDATE bookings SET status = $1, updated_at = current_timestamp WHERE booking_id = $2',
-      [BookingStatus.Confirmed, bookingId]
+    // Update booking status only if still pending (prevents double-confirm race)
+    const bookingUpdate = await client.query(
+      `UPDATE bookings
+       SET status = $1, updated_at = current_timestamp
+       WHERE booking_id = $2 AND status = $3`,
+      [BookingStatus.Confirmed, bookingId, BookingStatus.Pending]
     );
+    if (bookingUpdate.rowCount === 0) {
+      throw new Error('Booking is not pending');
+    }
 
-    // Reduce trip seats
-    await client.query(
-      'UPDATE trips SET seats_available = seats_available - $1, updated_at = current_timestamp WHERE trip_id = $2',
+    // Reduce trip seats atomically with capacity guard (prevents overbooking race)
+    const tripUpdate = await client.query(
+      `UPDATE trips
+       SET seats_available = seats_available - $1, updated_at = current_timestamp
+       WHERE trip_id = $2
+         AND status = 'pending'
+         AND seats_available >= $1`,
       [bookingData.seats_booked, bookingData.trip_id]
     );
+    if (tripUpdate.rowCount === 0) {
+      throw new Error('Not enough seats available');
+    }
 
     await client.query('COMMIT');
 
@@ -288,6 +329,13 @@ export const confirmBooking = async (
     return updatedBooking!;
   } catch (error) {
     await client.query('ROLLBACK');
+    if (createdPaymentId) {
+      try {
+        await axios.post(`${config.paymentServiceUrl}/payments/${createdPaymentId}/cancel`);
+      } catch (cancelErr) {
+        console.error(`[CONFIRM] Failed to cancel orphaned payment ${createdPaymentId}:`, cancelErr);
+      }
+    }
     console.error(`[CONFIRM] Failed to confirm booking ${bookingId}:`, error);
     throw error;
   } finally {
@@ -328,8 +376,10 @@ export const cancelBooking = async (
       throw new Error('Cannot cancel completed booking');
     }
 
+    const wasConfirmed = bookingData.status === BookingStatus.Confirmed;
+
     // If confirmed with a payment, handle based on payment status
-    if (bookingData.status === BookingStatus.Confirmed && bookingData.payment) {
+    if (wasConfirmed && bookingData.payment) {
       if (bookingData.payment.status === 'captured') {
         // Refund captured payments
         await axios.post(`${config.paymentServiceUrl}/payments/${bookingData.payment.payment_id}/refund`);
@@ -345,11 +395,13 @@ export const cancelBooking = async (
       [BookingStatus.Cancelled, bookingId]
     );
 
-    // Restore trip seats
-    await client.query(
-      'UPDATE trips SET seats_available = seats_available + $1, updated_at = current_timestamp WHERE trip_id = $2',
-      [bookingData.seats_booked, bookingData.trip_id]
-    );
+    // Restore trip seats only if they were deducted previously (confirmed bookings)
+    if (wasConfirmed) {
+      await client.query(
+        'UPDATE trips SET seats_available = seats_available + $1, updated_at = current_timestamp WHERE trip_id = $2',
+        [bookingData.seats_booked, bookingData.trip_id]
+      );
+    }
 
     await client.query('COMMIT');
 
@@ -486,9 +538,7 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       b.created_at,
       u.name as rider_name,
       u.email as rider_email,
-      u.phone as rider_phone,
-      u.rating as rider_rating,
-      u.profile_picture as rider_picture
+      u.rating as rider_rating
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
     WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending')

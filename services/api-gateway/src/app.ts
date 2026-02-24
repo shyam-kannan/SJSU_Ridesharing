@@ -12,7 +12,8 @@ const app = express();
 // CORS Configuration
 app.use(cors({
   origin: '*',
-  credentials: true,
+  // Wildcard origins cannot be used with credentials in browsers.
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID'],
 }));
@@ -36,10 +37,11 @@ const SERVICES = {
   cost: process.env.COST_SERVICE_URL || 'http://127.0.0.1:3009',
 };
 
-// Rate Limiting
+// Rate Limiting (relaxed in development, strict in production)
+const isDev = process.env.NODE_ENV !== 'production';
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || (isDev ? '60000' : '900000')),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || (isDev ? '1000' : '100')),
   message: { status: 'error', message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,

@@ -16,9 +16,12 @@ export enum SJSUIdStatus {
 }
 
 export enum TripStatus {
-  Active = 'active',
-  Completed = 'completed',
-  Cancelled = 'cancelled',
+  Pending = 'pending',        // Trip created, waiting for driver to start
+  EnRoute = 'en_route',       // Driver heading to pickup location
+  Arrived = 'arrived',        // Driver at pickup location
+  InProgress = 'in_progress', // Rider in car, heading to destination
+  Completed = 'completed',    // Trip finished
+  Cancelled = 'cancelled',    // Trip cancelled
 }
 
 export enum BookingStatus {
@@ -67,6 +70,8 @@ export interface SafeUser {
   rating: number;
   vehicle_info?: string;
   seats_available?: number;
+  license_plate?: string;
+  earnings?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -257,6 +262,7 @@ export interface CreateRatingRequest {
 export interface DriverSetupRequest {
   vehicle_info: string;
   seats_available: number;
+  license_plate: string;
 }
 
 // ========== API RESPONSE TYPES ==========

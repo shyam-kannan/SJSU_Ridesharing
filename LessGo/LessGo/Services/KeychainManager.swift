@@ -60,15 +60,49 @@ class KeychainManager {
         deleteUserId()
     }
 
+    func clearActiveSession() {
+        clearAll()
+    }
+
+    // MARK: - Multi-account token storage
+
+    func saveAccessToken(_ token: String, for userId: String) {
+        save(token, forAccount: "saved_access_\(userId)")
+    }
+
+    func getAccessToken(for userId: String) -> String? {
+        get(forAccount: "saved_access_\(userId)")
+    }
+
+    func deleteAccessToken(for userId: String) {
+        delete(forAccount: "saved_access_\(userId)")
+    }
+
+    func saveRefreshToken(_ token: String, for userId: String) {
+        save(token, forAccount: "saved_refresh_\(userId)")
+    }
+
+    func getRefreshToken(for userId: String) -> String? {
+        get(forAccount: "saved_refresh_\(userId)")
+    }
+
+    func deleteRefreshToken(for userId: String) {
+        delete(forAccount: "saved_refresh_\(userId)")
+    }
+
     // MARK: - Private Helpers
 
     private func save(_ value: String, for key: Key) {
+        save(value, forAccount: key.rawValue)
+    }
+
+    private func save(_ value: String, forAccount account: String) {
         let data = Data(value.utf8)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
+            kSecAttrAccount as String: account,
             kSecValueData as String: data
         ]
 
@@ -80,10 +114,14 @@ class KeychainManager {
     }
 
     private func get(for key: Key) -> String? {
+        get(forAccount: key.rawValue)
+    }
+
+    private func get(forAccount account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -101,10 +139,14 @@ class KeychainManager {
     }
 
     private func delete(for key: Key) {
+        delete(forAccount: key.rawValue)
+    }
+
+    private func delete(forAccount account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue
+            kSecAttrAccount as String: account
         ]
 
         SecItemDelete(query as CFDictionary)

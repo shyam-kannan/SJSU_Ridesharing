@@ -32,55 +32,70 @@ struct LoadingOverlay: View {
 
 struct SkeletonTripCard: View {
     @State private var isAnimating = false
+    var index: Int = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            // Top: time pill + countdown
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(Color.gray.opacity(shimmerOpacity))
+                    .frame(width: 90, height: 28)
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(Color.gray.opacity(shimmerOpacity * 0.7))
+                    .frame(width: 70, height: 28)
+                Spacer()
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(Color.gray.opacity(shimmerOpacity * 0.6))
+                    .frame(width: 58, height: 24)
+            }
+
+            // Driver row
             HStack(spacing: 12) {
                 Circle()
                     .fill(Color.gray.opacity(shimmerOpacity))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 50, height: 50)
 
                 VStack(alignment: .leading, spacing: 6) {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.gray.opacity(shimmerOpacity))
-                        .frame(width: 120, height: 14)
-
+                        .frame(width: 110, height: 14)
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.gray.opacity(shimmerOpacity * 0.7))
-                        .frame(width: 80, height: 11)
+                        .frame(width: 75, height: 11)
                 }
                 Spacer()
-
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color.gray.opacity(shimmerOpacity))
-                    .frame(width: 56, height: 28)
+                    .frame(width: 36, height: 36)
             }
 
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.gray.opacity(shimmerOpacity))
+            // Route
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.gray.opacity(shimmerOpacity * 0.5))
                 .frame(maxWidth: .infinity)
-                .frame(height: 12)
+                .frame(height: 56)
 
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.gray.opacity(shimmerOpacity * 0.7))
-                .frame(width: 200, height: 12)
-
-            HStack(spacing: 16) {
-                ForEach(0..<3) { _ in
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(shimmerOpacity * 0.7))
-                        .frame(width: 70, height: 26)
-                }
+            // Bottom row
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(Color.gray.opacity(shimmerOpacity * 0.7))
+                    .frame(width: 80, height: 26)
                 Spacer()
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(Color.gray.opacity(shimmerOpacity * 0.6))
+                    .frame(width: 56, height: 26)
             }
         }
-        .padding(AppConstants.cardPadding)
-        .background(Color.cardBackground)
-        .cornerRadius(AppConstants.cardRadius)
+        .padding(16)
+        .background(Color.white.opacity(0.97))
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 6)
+        .staggeredAppear(index: index, delay: 0.1)
         .onAppear { startAnimation() }
     }
 
-    private var shimmerOpacity: Double { isAnimating ? 0.1 : 0.2 }
+    private var shimmerOpacity: Double { isAnimating ? 0.08 : 0.18 }
 
     private func startAnimation() {
         withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
@@ -93,9 +108,9 @@ struct SkeletonTripCard: View {
 
 struct SkeletonTripList: View {
     var body: some View {
-        VStack(spacing: AppConstants.itemSpacing) {
-            ForEach(0..<4, id: \.self) { _ in
-                SkeletonTripCard()
+        VStack(spacing: 14) {
+            ForEach(0..<4, id: \.self) { i in
+                SkeletonTripCard(index: i)
             }
         }
         .padding(.horizontal, AppConstants.pagePadding)

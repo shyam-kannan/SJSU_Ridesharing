@@ -13,6 +13,8 @@ struct PrimaryButton: View {
 
     enum ButtonColor { case green, blue, red }
 
+    @GestureState private var isPressed = false
+
     private var gradient: LinearGradient {
         switch color {
         case .green: return Color.greenGradient
@@ -25,41 +27,71 @@ struct PrimaryButton: View {
         }
     }
 
+    private var shadowColor: Color {
+        switch color {
+        case .green: return Color.brandGreen.opacity(0.38)
+        case .blue:  return DesignSystem.Colors.sjsuBlue.opacity(0.38)
+        case .red:   return Color.brandRed.opacity(0.38)
+        }
+    }
+
     var body: some View {
-        Button(action: {
-            guard isEnabled && !isLoading else { return }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            action()
-        }) {
-            ZStack {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.9)
-                } else {
-                    HStack(spacing: 8) {
-                        if let icon = icon {
-                            Image(systemName: icon)
-                                .font(.system(size: 17, weight: .semibold))
-                        }
-                        Text(title)
+        ZStack {
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(0.9)
+            } else {
+                HStack(spacing: 8) {
+                    if let icon = icon {
+                        Image(systemName: icon)
                             .font(.system(size: 17, weight: .semibold))
                     }
+                    Text(title)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
                 }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: AppConstants.buttonHeight)
-            .background(
-                (isEnabled && !isLoading)
-                    ? AnyView(gradient)
-                    : AnyView(Color.gray.opacity(0.35))
-            )
-            .foregroundColor(.white)
-            .cornerRadius(AppConstants.buttonRadius)
         }
-        .disabled(!isEnabled || isLoading)
-        .scaleEffect(isEnabled ? 1 : 0.98)
+        .frame(maxWidth: .infinity)
+        .frame(height: DesignSystem.Layout.buttonHeightLarge)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: AppConstants.buttonRadius, style: .continuous)
+                    .fill((isEnabled && !isLoading) ? AnyShapeStyle(gradient) : AnyShapeStyle(Color.gray.opacity(0.28)))
+                // Inner highlight shimmer
+                RoundedRectangle(cornerRadius: AppConstants.buttonRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.22), .clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+                RoundedRectangle(cornerRadius: AppConstants.buttonRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isEnabled ? 0.35 : 0), lineWidth: 1)
+            }
+        )
+        .foregroundColor(.white)
+        .shadow(
+            color: (isEnabled && !isLoading) ? shadowColor : .clear,
+            radius: isPressed ? 8 : 16,
+            x: 0,
+            y: isPressed ? 4 : 10
+        )
+        .scaleEffect(isPressed && isEnabled ? 0.96 : (isEnabled ? 1.0 : 0.985))
+        .opacity(isEnabled ? 1 : 0.72)
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isPressed)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isEnabled)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($isPressed) { _, state, _ in state = true }
+                .onEnded { _ in
+                    guard isEnabled && !isLoading else { return }
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    action()
+                }
+        )
+        .allowsHitTesting(isEnabled && !isLoading)
     }
 }
 
@@ -71,29 +103,39 @@ struct SecondaryButton: View {
     var color: Color = .brand
     let action: () -> Void
 
+    @GestureState private var isPressed = false
+
     var body: some View {
-        Button(action: {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            action()
-        }) {
-            HStack(spacing: 8) {
-                if let icon = icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 17, weight: .semibold))
-                }
-                Text(title)
+        HStack(spacing: 8) {
+            if let icon = icon {
+                Image(systemName: icon)
                     .font(.system(size: 17, weight: .semibold))
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: AppConstants.buttonHeight)
-            .background(Color.white)
-            .foregroundColor(color)
-            .overlay(
-                RoundedRectangle(cornerRadius: AppConstants.buttonRadius)
-                    .strokeBorder(color, lineWidth: 1.5)
-            )
-            .cornerRadius(AppConstants.buttonRadius)
+            Text(title)
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: DesignSystem.Layout.buttonHeightLarge)
+        .background(
+            RoundedRectangle(cornerRadius: AppConstants.buttonRadius, style: .continuous)
+                .fill(Color.cardBackground)
+        )
+        .foregroundColor(color)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppConstants.buttonRadius, style: .continuous)
+                .strokeBorder(color.opacity(0.45), lineWidth: 1.25)
+        )
+        .shadow(color: .black.opacity(isPressed ? 0.02 : 0.07), radius: isPressed ? 6 : 12, x: 0, y: isPressed ? 2 : 5)
+        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isPressed)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($isPressed) { _, state, _ in state = true }
+                .onEnded { _ in
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    action()
+                }
+        )
     }
 }
 
@@ -112,7 +154,12 @@ struct GhostButton: View {
             Text(title)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(color.opacity(0.08))
+                .cornerRadius(10)
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -140,6 +187,65 @@ struct IconButton: View {
     }
 }
 
+// MARK: - Floating Action Button
+
+struct FloatingActionButton: View {
+    let icon: String
+    var color: Color = .brand
+    var badgeCount: Int = 0
+    let action: () -> Void
+
+    @GestureState private var isPressed = false
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [color, color.opacity(0.78)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: DesignSystem.Layout.fabSize, height: DesignSystem.Layout.fabSize)
+                    .shadow(
+                        color: color.opacity(isPressed ? 0.2 : 0.38),
+                        radius: isPressed ? 10 : 18,
+                        x: 0,
+                        y: isPressed ? 4 : 10
+                    )
+
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            .scaleEffect(isPressed ? 0.93 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.7), value: isPressed)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($isPressed) { _, state, _ in state = true }
+                    .onEnded { _ in
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        action()
+                    }
+            )
+
+            if badgeCount > 0 {
+                ZStack {
+                    Circle()
+                        .fill(Color.brandRed)
+                        .frame(width: 20, height: 20)
+                    Text("\(min(badgeCount, 9))")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .offset(x: 4, y: -4)
+            }
+        }
+    }
+}
+
 // MARK: - Chip / Tag Button
 
 struct ChipButton: View {
@@ -153,17 +259,33 @@ struct ChipButton: View {
             action()
         }) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(isSelected ? .white : .textSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.brand : Color.appBackground)
-                .cornerRadius(20)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(isSelected ? Color.clear : Color.gray.opacity(0.25), lineWidth: 1)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .background(
+                    Group {
+                        if isSelected {
+                            AnyView(
+                                LinearGradient(
+                                    colors: [DesignSystem.Colors.sjsuBlue, DesignSystem.Colors.sjsuTeal],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                        } else {
+                            AnyView(Color.appBackground)
+                        }
+                    }
                 )
+                .cornerRadius(999)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(isSelected ? Color.clear : Color.gray.opacity(0.22), lineWidth: 1)
+                )
+                .shadow(color: isSelected ? DesignSystem.Colors.sjsuBlue.opacity(0.25) : .clear, radius: 8, x: 0, y: 4)
         }
+        .buttonStyle(.plain)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }
 }

@@ -84,6 +84,33 @@ export const capturePayment = async (paymentId: string): Promise<Payment> => {
     WHERE payment_id = $2 RETURNING *
   `;
   const result = await pool.query(updateQuery, [PaymentStatus.Captured, paymentId]);
+
+  // Update driver earnings after successful capture
+  try {
+    const bookingQuery = `
+      SELECT b.*, t.driver_id
+      FROM bookings b
+      JOIN trips t ON b.trip_id = t.trip_id
+      WHERE b.booking_id = $1
+    `;
+    const bookingResult = await pool.query(bookingQuery, [paymentData.booking_id]);
+
+    if (bookingResult.rows.length > 0) {
+      const driverId = bookingResult.rows[0].driver_id;
+      const amount = paymentData.amount;
+
+      await pool.query(
+        `UPDATE users SET earnings = earnings + $1, updated_at = current_timestamp WHERE user_id = $2`,
+        [amount, driverId]
+      );
+
+      console.log(`✅ Updated driver ${driverId} earnings by $${amount}`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to update driver earnings:', error);
+    // Don't throw - payment capture succeeded even if earnings update failed
+  }
+
   return result.rows[0];
 };
 
@@ -109,6 +136,36 @@ export const refundPayment = async (paymentId: string): Promise<Payment> => {
     WHERE payment_id = $2 RETURNING *
   `;
   const result = await pool.query(updateQuery, [PaymentStatus.Refunded, paymentId]);
+
+  // Reverse driver earnings credited on capture
+  try {
+    const bookingQuery = `
+      SELECT t.driver_id
+      FROM bookings b
+      JOIN trips t ON b.trip_id = t.trip_id
+      WHERE b.booking_id = $1
+    `;
+    const bookingResult = await pool.query(bookingQuery, [paymentData.booking_id]);
+
+    if (bookingResult.rows.length > 0) {
+      const driverId = bookingResult.rows[0].driver_id;
+      const amount = paymentData.amount;
+
+      await pool.query(
+        `UPDATE users
+         SET earnings = GREATEST(COALESCE(earnings, 0) - $1, 0),
+             updated_at = current_timestamp
+         WHERE user_id = $2`,
+        [amount, driverId]
+      );
+
+      console.log(`✅ Reversed driver ${driverId} earnings by $${amount}`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to reverse driver earnings after refund:', error);
+    // Refund succeeded; do not mask it
+  }
+
   return result.rows[0];
 };
 

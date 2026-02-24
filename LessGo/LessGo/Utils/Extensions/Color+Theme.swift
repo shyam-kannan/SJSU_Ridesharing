@@ -7,9 +7,9 @@ extension Color {
     static let brandTeal = DesignSystem.Colors.sjsuTeal    // SJSU Teal #008C95
 
     // Backwards compatibility aliases
-    static let brandGreen = Color.green
-    static let brandRed = Color.red
-    static let brandOrange = Color.orange
+    static let brandGreen = DesignSystem.Colors.success
+    static let brandRed = DesignSystem.Colors.error
+    static let brandOrange = Color(hex: "F59E0B")
 
     // MARK: - Background
     static let appBackground = DesignSystem.Colors.background
@@ -25,8 +25,9 @@ extension Color {
     static var brandGradient: LinearGradient {
         LinearGradient(
             colors: [
-                DesignSystem.Colors.sjsuBlue,
-                DesignSystem.Colors.sjsuBlue.opacity(0.8)
+                Color(hex: "0A5FB8"),
+                Color(hex: "0E7ABF"),
+                DesignSystem.Colors.sjsuTeal.opacity(0.95)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -47,6 +48,8 @@ extension Color {
     static var heroGradient: LinearGradient {
         LinearGradient(
             colors: [
+                DesignSystem.Colors.deepNavy,
+                Color(hex: "083C78"),
                 DesignSystem.Colors.sjsuBlue,
                 DesignSystem.Colors.sjsuTeal
             ],
@@ -55,9 +58,32 @@ extension Color {
         )
     }
 
+    static var canvasGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(hex: "F7F8FB"),
+                Color(hex: "EEF4FB"),
+                Color(hex: "F8F4EA")
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var panelGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.96),
+                Color(hex: "F6FAFF").opacity(0.98)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     static var greenGradient: LinearGradient {
         LinearGradient(
-            colors: [Color.green, Color.green.opacity(0.8)],
+            colors: [Color(hex: "16A34A"), Color(hex: "10B981")],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -66,7 +92,7 @@ extension Color {
     // MARK: - Status Gradients
     static var successGradient: LinearGradient {
         LinearGradient(
-            colors: [Color.green, Color.green.opacity(0.8)],
+            colors: [DesignSystem.Colors.emerald, Color.green.opacity(0.85)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )

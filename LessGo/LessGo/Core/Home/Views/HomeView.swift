@@ -10,6 +10,20 @@ struct HomeView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            ZStack {
+                Color.canvasGradient.ignoresSafeArea()
+                LinearGradient(
+                    colors: [
+                        Color.brand.opacity(0.08),
+                        .clear,
+                        Color.brandTeal.opacity(0.05)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+            }
+
             // ── Content ──
             TabView(selection: $selectedTab) {
                 Group {
@@ -30,6 +44,7 @@ struct HomeView: View {
             // hide the default tab bar so we can use our custom one
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
+            .background(Color.clear)
 
             // ── Custom Tab Bar ──
             CustomTabBar(selectedTab: $selectedTab)
@@ -49,6 +64,11 @@ struct HomeView: View {
                     authVM.showIDVerification = true
                 }
                 .padding(.top, VerifyBannerView.windowTopInset)
+            }
+        }
+        .onChange(of: authVM.currentUser?.id) { _ in
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                selectedTab = .home
             }
         }
     }
@@ -73,38 +93,63 @@ private struct CustomTabBar: View {
     ]
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(items, id: \.label) { item in
-                Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        selectedTab = item.tab
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                ForEach(items, id: \.label) { item in
+                    Button(action: {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedTab = item.tab
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            ZStack {
+                                Circle()
+                                    .fill(selectedTab == item.tab ? Color(hex: "A3E635").opacity(0.18) : Color.clear)
+                                    .frame(width: 30, height: 30)
+                                Image(systemName: selectedTab == item.tab ? item.selectedIcon : item.icon)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(selectedTab == item.tab ? .black.opacity(0.9) : .white.opacity(0.65))
+                            }
+
+                            if selectedTab == item.tab {
+                                Text(item.label)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundColor(.black.opacity(0.9))
+                                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule()
+                                .fill(
+                                    selectedTab == item.tab
+                                    ? AnyShapeStyle(Color(hex: "F4F7EE"))
+                                    : AnyShapeStyle(Color.clear)
+                                )
+                        )
+                        .contentShape(Rectangle())
+                        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: selectedTab)
                     }
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: selectedTab == item.tab ? item.selectedIcon : item.icon)
-                            .font(.system(size: 22))
-                            .foregroundColor(selectedTab == item.tab ? .brand : .textTertiary)
-                            .scaleEffect(selectedTab == item.tab ? 1.1 : 1.0)
-                        Text(item.label)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(selectedTab == item.tab ? .brand : .textTertiary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .animation(.spring(response: 0.25, dampingFraction: 0.7), value: selectedTab)
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
         }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 8)
         .background(
-            Color.cardBackground
-                .shadow(color: .black.opacity(0.1), radius: 16, x: 0, y: -4)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "15171B").opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.14), radius: 22, x: 0, y: 10)
         )
-        .overlay(alignment: .top) {
-            Divider()
-        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
     }
 }
-

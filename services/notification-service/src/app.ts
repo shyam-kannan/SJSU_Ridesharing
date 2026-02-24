@@ -6,6 +6,35 @@ const app: Application = express();
 app.use(express.json());
 app.use(cors());
 
+type InAppNotification = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  data?: Record<string, any>;
+  created_at: string;
+  read_at: string | null;
+};
+
+const notificationStore = new Map<string, InAppNotification[]>();
+
+function createNotification(input: Omit<InAppNotification, 'id' | 'created_at' | 'read_at'>): InAppNotification {
+  return {
+    id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+    created_at: new Date().toISOString(),
+    read_at: null,
+    ...input,
+  };
+}
+
+function pushNotification(notification: InAppNotification): void {
+  const current = notificationStore.get(notification.user_id) ?? [];
+  current.unshift(notification);
+  // Keep only the most recent 200 notifications per user to avoid unbounded memory growth.
+  notificationStore.set(notification.user_id, current.slice(0, 200));
+}
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({
@@ -26,7 +55,9 @@ app.post('/notifications/send', (req, res) => {
   }
   console.log(`[NOTIFICATION] type=${type} user=${user_id} title="${title}" message="${message}"`);
   if (data) console.log(`  data=${JSON.stringify(data)}`);
-  res.json({ status: 'success', message: 'Notification sent', data: { user_id, type, title } });
+  const notification = createNotification({ user_id, type, title, message, data });
+  pushNotification(notification);
+  res.json({ status: 'success', message: 'Notification sent', data: notification });
 });
 
 app.post('/notifications/email', (req, res) => {
@@ -40,7 +71,62 @@ app.post('/notifications/push', (req, res) => {
   const { user_id, title, message, data } = req.body;
   console.log(`[PUSH] user=${user_id} title="${title}" message="${message}"`);
   if (data) console.log(`  data=${JSON.stringify(data)}`);
-  res.json({ status: 'success', message: 'Push notification queued', data: { user_id, title } });
+  const notification = createNotification({ user_id, type: 'push', title, message, data });
+  pushNotification(notification);
+  res.json({ status: 'success', message: 'Push notification queued', data: notification });
+});
+
+// In-app notification feed
+app.get('/notifications/user/:userId', (req, res) => {
+  const { userId } = req.params;
+  const unreadOnly = req.query.unread_only === 'true';
+  const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit || '50'), 10) || 50));
+
+  const items = notificationStore.get(userId) ?? [];
+  const filtered = unreadOnly ? items.filter((n) => n.read_at === null) : items;
+  const notifications = filtered.slice(0, limit);
+  const unreadCount = items.filter((n) => n.read_at === null).length;
+
+  res.json({
+    status: 'success',
+    message: 'Notifications retrieved',
+    data: { notifications, total: filtered.length, unread_count: unreadCount }
+  });
+});
+
+app.post('/notifications/user/:userId/read-all', (req, res) => {
+  const { userId } = req.params;
+  const items = notificationStore.get(userId) ?? [];
+  const now = new Date().toISOString();
+
+  const updated = items.map((n) => (n.read_at ? n : { ...n, read_at: now }));
+  notificationStore.set(userId, updated);
+
+  res.json({
+    status: 'success',
+    message: 'All notifications marked as read',
+    data: { user_id: userId, marked: items.filter((n) => !n.read_at).length }
+  });
+});
+
+app.post('/notifications/user/:userId/:notificationId/read', (req, res) => {
+  const { userId, notificationId } = req.params;
+  const items = notificationStore.get(userId) ?? [];
+  let updatedOne = false;
+
+  const updated = items.map((n) => {
+    if (n.id !== notificationId) return n;
+    updatedOne = true;
+    return n.read_at ? n : { ...n, read_at: new Date().toISOString() };
+  });
+  notificationStore.set(userId, updated);
+
+  if (!updatedOne) {
+    res.status(404).json({ status: 'error', message: 'Notification not found' });
+    return;
+  }
+
+  res.json({ status: 'success', message: 'Notification marked as read', data: { id: notificationId } });
 });
 
 // ─── Typed email endpoints ───────────────────────────────────────────────────

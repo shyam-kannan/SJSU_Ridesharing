@@ -8,17 +8,27 @@ class TripSearchViewModel: ObservableObject {
     @Published var trips: [Trip] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var searchText = "" { didSet { locationCompleter.update(query: searchText) } }
+    @Published var searchText = "" {
+        didSet {
+            locationCompleter.update(query: searchText)
+            if !suppressSearchTextSideEffects {
+                selectedSearchCoordinate = nil
+            }
+        }
+    }
     @Published var locationSuggestions: [MKLocalSearchCompletion] = []
     @Published var showSuggestions = false
     @Published var selectedTrip: Trip?
     @Published var showTripDetails = false
     @Published var viewMode: ViewMode = .list
+    @Published var currentUserId: String?
+    @Published var selectedSearchCoordinate: CLLocationCoordinate2D?
     @Published var searchDirection: TravelDirection = .toSJSU {
         didSet {
             searchText = ""
             showSuggestions = false
             locationSuggestions = []
+            selectedSearchCoordinate = nil
         }
     }
 
@@ -64,6 +74,9 @@ class TripSearchViewModel: ObservableObject {
     private let locationManager = LocationManager.shared
     private var searchTask: Task<Void, Never>?
     private let locationCompleter = LocationCompleter()
+    private let upcomingTripGraceWindow: TimeInterval = 5 * 60
+    private var suppressSearchTextSideEffects = false
+    private let smartNearbyRadiusMeters: CLLocationDistance = 8_000
 
     init() {
         locationCompleter.onResults = { [weak self] results in
@@ -74,9 +87,39 @@ class TripSearchViewModel: ObservableObject {
     }
 
     func selectSuggestion(_ suggestion: MKLocalSearchCompletion) {
-        searchText = suggestion.title
+        let fullText = [suggestion.title, suggestion.subtitle]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: ", ")
+        suppressSearchTextSideEffects = true
+        searchText = fullText.isEmpty ? suggestion.title : fullText
+        suppressSearchTextSideEffects = false
         showSuggestions = false
         locationSuggestions = []
+        Task { await resolveSelectedSuggestionAndSearch(suggestion) }
+    }
+
+    func searchUsingTypedAddressIfPossible() async {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+
+        if let selectedSearchCoordinate {
+            await smartSearchNearSelectedCoordinate(selectedSearchCoordinate)
+            return
+        }
+
+        do {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            let response = try await MKLocalSearch(request: request).start()
+            if let coordinate = response.mapItems.first?.placemark.coordinate {
+                selectedSearchCoordinate = coordinate
+                await smartSearchNearSelectedCoordinate(coordinate)
+            } else {
+                await loadAllUpcoming()
+            }
+        } catch {
+            await loadAllUpcoming()
+        }
     }
 
     // MARK: - Search Near Location
@@ -99,7 +142,7 @@ class TripSearchViewModel: ObservableObject {
             originLng: lng,
             radiusMeters: radius,
             minSeats: 1,
-            departureAfter: Date(),
+            departureAfter: Date().addingTimeInterval(-upcomingTripGraceWindow),
             departureBefore: nil
         )
 
@@ -109,16 +152,20 @@ class TripSearchViewModel: ObservableObject {
                 trips = response.trips
             }
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
 
     // MARK: - Refresh
 
     func refresh() async {
-        await searchNearby()
+        if let selectedSearchCoordinate {
+            await smartSearchNearSelectedCoordinate(selectedSearchCoordinate)
+        } else {
+            await searchNearby()
+        }
     }
 
     // MARK: - All Trips (for list view)
@@ -129,25 +176,30 @@ class TripSearchViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let response = try await tripService.listTrips(
-                status: .active,
-                departureAfter: Date()
+                status: .pending,
+                departureAfter: Date().addingTimeInterval(-upcomingTripGraceWindow)
             )
             withAnimation {
                 trips = response.trips
             }
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
 
     // MARK: - Filtered results
 
     var filteredTrips: [Trip] {
+        let visibleTrips = trips.filter { trip in
+            guard let currentUserId else { return true }
+            return trip.driverId != currentUserId
+        }
+
         // First apply direction filter (client-side, since backend only supports origin search)
         let sjsuKeywords = ["sjsu", "san jose state", "san josé state"]
-        let directionFiltered = trips.filter { trip in
+        let directionFiltered = visibleTrips.filter { trip in
             switch searchDirection {
             case .toSJSU:
                 // Show trips whose destination is SJSU
@@ -165,20 +217,35 @@ class TripSearchViewModel: ObservableObject {
         if searchText.isEmpty {
             textFiltered = directionFiltered
         } else {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             textFiltered = directionFiltered.filter { trip in
+                let textMatch: Bool
                 switch searchDirection {
                 case .toSJSU:
-                    return trip.origin.localizedCaseInsensitiveContains(searchText) ||
-                           (trip.driver?.name.localizedCaseInsensitiveContains(searchText) ?? false)
+                    textMatch = trip.origin.localizedCaseInsensitiveContains(query) ||
+                        (trip.driver?.name.localizedCaseInsensitiveContains(query) ?? false)
                 case .fromSJSU:
-                    return trip.destination.localizedCaseInsensitiveContains(searchText) ||
-                           (trip.driver?.name.localizedCaseInsensitiveContains(searchText) ?? false)
+                    textMatch = trip.destination.localizedCaseInsensitiveContains(query) ||
+                        (trip.driver?.name.localizedCaseInsensitiveContains(query) ?? false)
                 }
+
+                guard let selectedSearchCoordinate else { return textMatch }
+                let nearbyMatch = distanceToVariableEndpoint(for: trip, from: selectedSearchCoordinate)
+                    .map { $0 <= smartNearbyRadiusMeters }
+                    ?? false
+                return textMatch || nearbyMatch
             }
         }
 
-        // Apply sort
-        return sortTrips(textFiltered, by: sortOption)
+        let sorted = sortTrips(textFiltered, by: sortOption)
+        guard let selectedSearchCoordinate else { return sorted }
+
+        return sorted.sorted {
+            let d0 = distanceToVariableEndpoint(for: $0, from: selectedSearchCoordinate) ?? .greatestFiniteMagnitude
+            let d1 = distanceToVariableEndpoint(for: $1, from: selectedSearchCoordinate) ?? .greatestFiniteMagnitude
+            if abs(d0 - d1) > 50 { return d0 < d1 }
+            return $0.departureTime < $1.departureTime
+        }
     }
 
     func sortTrips(_ list: [Trip], by option: SortOption) -> [Trip] {
@@ -194,6 +261,69 @@ class TripSearchViewModel: ObservableObject {
             return list.sorted { $0.seatsAvailable > $1.seatsAvailable }
         }
     }
+
+    private func distanceToVariableEndpoint(for trip: Trip, from coordinate: CLLocationCoordinate2D) -> CLLocationDistance? {
+        let endpoint: Coordinate?
+        switch searchDirection {
+        case .toSJSU:
+            endpoint = trip.originPoint
+        case .fromSJSU:
+            endpoint = trip.destinationPoint
+        }
+        guard let endpoint else { return nil }
+        let a = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let b = CLLocation(latitude: endpoint.lat, longitude: endpoint.lng)
+        return a.distance(from: b)
+    }
+
+    private func resolveSelectedSuggestionAndSearch(_ suggestion: MKLocalSearchCompletion) async {
+        do {
+            let request = MKLocalSearch.Request(completion: suggestion)
+            let response = try await MKLocalSearch(request: request).start()
+            if let coordinate = response.mapItems.first?.placemark.coordinate {
+                selectedSearchCoordinate = coordinate
+                await smartSearchNearSelectedCoordinate(coordinate)
+            } else {
+                selectedSearchCoordinate = nil
+                await loadAllUpcoming()
+            }
+        } catch {
+            selectedSearchCoordinate = nil
+            await loadAllUpcoming()
+        }
+    }
+
+    private func smartSearchNearSelectedCoordinate(_ coordinate: CLLocationCoordinate2D) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let radii = [8_000, 16_000, 32_000, 64_000]
+        for radius in radii {
+            let params = TripSearchParams(
+                originLat: coordinate.latitude,
+                originLng: coordinate.longitude,
+                radiusMeters: radius,
+                minSeats: 1,
+                departureAfter: Date().addingTimeInterval(-upcomingTripGraceWindow),
+                departureBefore: nil
+            )
+
+            do {
+                let response = try await tripService.searchTrips(params: params)
+                trips = response.trips
+                if !response.trips.isEmpty || radius == radii.last {
+                    return
+                }
+            } catch let error as NetworkError {
+                errorMessage = error.userMessage
+                return
+            } catch {
+                errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
+                return
+            }
+        }
+    }
 }
 
 // MARK: - Location Completer (NSObject bridge for MKLocalSearchCompleterDelegate)
@@ -205,7 +335,8 @@ final class LocationCompleter: NSObject, MKLocalSearchCompleterDelegate {
 
     private let completer: MKLocalSearchCompleter = {
         let c = MKLocalSearchCompleter()
-        c.resultTypes = [.address, .pointOfInterest]
+        c.resultTypes = [.address, .pointOfInterest, .query]
+        c.pointOfInterestFilter = .includingAll
         return c
     }()
 

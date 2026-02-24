@@ -11,6 +11,8 @@ struct User: Codable, Identifiable {
     let rating: Double
     let vehicleInfo: String?
     let seatsAvailable: Int?
+    let licensePlate: String?
+    let profilePicture: String?
     let createdAt: Date?
     let updatedAt: Date?
 
@@ -21,6 +23,8 @@ struct User: Codable, Identifiable {
         case rating
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
+        case licensePlate = "license_plate"
+        case profilePicture = "profile_picture_url"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -34,6 +38,8 @@ struct User: Codable, Identifiable {
         sjsuIdStatus = try container.decode(SJSUIDStatus.self, forKey: .sjsuIdStatus)
         vehicleInfo  = try container.decodeIfPresent(String.self, forKey: .vehicleInfo)
         seatsAvailable = try container.decodeIfPresent(Int.self, forKey: .seatsAvailable)
+        licensePlate = try container.decodeIfPresent(String.self, forKey: .licensePlate)
+        profilePicture = try container.decodeIfPresent(String.self, forKey: .profilePicture)
         createdAt    = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         updatedAt    = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
 

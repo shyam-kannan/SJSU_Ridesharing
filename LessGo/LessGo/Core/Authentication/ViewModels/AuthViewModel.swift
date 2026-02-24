@@ -9,11 +9,13 @@ class AuthViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var showIDVerification = false
+    @Published var savedLoginProfiles: [SavedLoginProfile] = []
 
     private let authService = AuthService.shared
     private var cancellables = Set<AnyCancellable>()
 
     init() {
+        refreshSavedLoginProfiles()
         Task { await checkAuthentication() }
         // Re-fetch the user whenever the app returns to foreground so
         // verification status and profile data are always current.
@@ -28,9 +30,12 @@ class AuthViewModel: ObservableObject {
     // MARK: - Auth State Check
 
     func checkAuthentication() async {
+        refreshSavedLoginProfiles()
         guard authService.isLoggedIn else { isAuthenticated = false; return }
         do {
             currentUser = try await authService.getCurrentUser()
+            // Keep JWT claims (role / verification status) in sync with current DB user.
+            _ = try? await authService.refreshAccessToken()
             isAuthenticated = true
         } catch {
             isAuthenticated = false
@@ -50,12 +55,13 @@ class AuthViewModel: ObservableObject {
             isAuthenticated = true
             // Always fetch latest record so sjsuIdStatus is current, not JWT-cached.
             await refreshCurrentUser()
+            refreshSavedLoginProfiles()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
@@ -70,12 +76,13 @@ class AuthViewModel: ObservableObject {
             let response = try await authService.register(name: name, email: email, password: password, role: role)
             currentUser = response.user
             isAuthenticated = true
+            refreshSavedLoginProfiles()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
 
@@ -89,6 +96,37 @@ class AuthViewModel: ObservableObject {
         } catch { /* ignore — clear locally anyway */ }
         currentUser = nil
         isAuthenticated = false
+        KeychainManager.shared.clearActiveSession()
+        refreshSavedLoginProfiles()
+    }
+
+    func loginWithSavedProfile(_ profile: SavedLoginProfile) async {
+        errorMessage = nil
+        isLoading = true
+        defer { isLoading = false }
+
+        guard SavedAccountManager.shared.activateProfile(profile.userId) else {
+            refreshSavedLoginProfiles()
+            errorMessage = "Saved account is missing local session tokens. Remove it or log in again."
+            return
+        }
+
+        await checkAuthentication()
+        if !isAuthenticated {
+            refreshSavedLoginProfiles()
+            errorMessage = "Saved session is no longer valid. Log in again or remove this saved account."
+        }
+    }
+
+    func removeSavedLoginProfile(_ profile: SavedLoginProfile) {
+        let isCurrent = currentUser?.id == profile.userId || KeychainManager.shared.getUserId() == profile.userId
+        if isCurrent {
+            KeychainManager.shared.clearActiveSession()
+            currentUser = nil
+            isAuthenticated = false
+        }
+        SavedAccountManager.shared.removeProfile(profile.userId)
+        refreshSavedLoginProfiles()
     }
 
     // MARK: - Refresh current user
@@ -98,11 +136,57 @@ class AuthViewModel: ObservableObject {
     func refreshCurrentUser() async {
         do {
             currentUser = try await authService.getCurrentUser()
+            _ = try? await authService.refreshAccessToken()
+            if let currentUser, let access = KeychainManager.shared.getAccessToken(), let refresh = KeychainManager.shared.getRefreshToken() {
+                SavedAccountManager.shared.saveSession(user: currentUser, accessToken: access, refreshToken: refresh)
+            }
+            refreshSavedLoginProfiles()
         } catch {}
     }
 
     /// Alias kept for call-site compatibility.
     func refreshUser() async { await refreshCurrentUser() }
+
+    // MARK: - Role Switching
+
+    /// Switch user role between Driver and Rider
+    /// - Parameter newRole: The role to switch to
+    /// - Throws: Error if switching to Driver without complete profile
+    func switchRole(to newRole: UserRole) async throws {
+        guard let user = currentUser else {
+            throw NetworkError.unauthorized
+        }
+
+        // Validate driver requirements
+        if newRole == .driver {
+            guard user.vehicleInfo != nil,
+                  user.licensePlate != nil else {
+                errorMessage = "Complete driver setup before switching to driver mode"
+                throw NetworkError.serverError(APIError(
+                    status: "error",
+                    message: "Complete driver setup before switching to driver mode",
+                    errors: nil
+                ))
+            }
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let updatedUser = try await UserService.shared.updateUserRole(userId: user.id, role: newRole)
+            // Role is encoded in JWT claims and checked by backend middleware.
+            _ = try? await authService.refreshAccessToken()
+            currentUser = updatedUser
+            await refreshCurrentUser()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            errorMessage = "Failed to switch role"
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            throw error
+        }
+    }
 
     // MARK: - Debug: instant SJSU ID approval
 
@@ -149,5 +233,9 @@ class AuthViewModel: ObservableObject {
 
     var isDriver: Bool {
         currentUser?.role == .driver
+    }
+
+    func refreshSavedLoginProfiles() {
+        savedLoginProfiles = SavedAccountManager.shared.profiles()
     }
 }

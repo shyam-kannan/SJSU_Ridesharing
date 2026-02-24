@@ -13,6 +13,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
 
   // Service URLs
+  tripServiceUrl: process.env.TRIP_SERVICE_URL || 'http://127.0.0.1:3003',
   paymentServiceUrl: process.env.PAYMENT_SERVICE_URL || 'http://localhost:3005',
   costServiceUrl: process.env.COST_SERVICE_URL || 'http://localhost:3009',
   notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3006',

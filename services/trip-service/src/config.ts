@@ -18,6 +18,11 @@ export const config = {
   // Geospatial defaults (Bay Area spans ~100km from SJSU to SF)
   defaultSearchRadius: 100000, // 100km — covers all Bay Area hubs
   maxSearchRadius: 100000,     // 100km maximum
+
+  // Service URLs
+  bookingServiceUrl: process.env.BOOKING_SERVICE_URL || 'http://127.0.0.1:3004',
+  userServiceUrl: process.env.USER_SERVICE_URL || 'http://127.0.0.1:3002',
+  notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:3006',
 };
 
 // Validate required config

@@ -9,9 +9,93 @@ extension View {
     func cardStyle(padding: CGFloat = 16, cornerRadius: CGFloat = 16) -> some View {
         self
             .padding(padding)
-            .background(Color.cardBackground)
-            .cornerRadius(cornerRadius)
-            .shadow(color: Color.black.opacity(0.07), radius: 12, x: 0, y: 4)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.98),
+                                Color.cardBackground,
+                                Color(hex: "F4FAFF").opacity(0.7)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.95), lineWidth: 1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(Color.brand.opacity(0.08), lineWidth: 0.8)
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.07), radius: 18, x: 0, y: 8)
+    }
+
+    func appScreenBackground() -> some View {
+        self.background(Color.canvasGradient.ignoresSafeArea())
+    }
+
+    func appCanvasBackground() -> some View {
+        self.background(
+            ZStack {
+                Color.canvasGradient.ignoresSafeArea()
+                RadialGradient(
+                    colors: [
+                        Color.brand.opacity(0.08),
+                        .clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 80,
+                    endRadius: 420
+                )
+                .ignoresSafeArea()
+                RadialGradient(
+                    colors: [
+                        Color.brandTeal.opacity(0.07),
+                        .clear
+                    ],
+                    center: .bottomTrailing,
+                    startRadius: 40,
+                    endRadius: 380
+                )
+                .ignoresSafeArea()
+            }
+        )
+    }
+
+    func glassPanel(cornerRadius: CGFloat = 20) -> some View {
+        self.background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.75), lineWidth: 1)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.brand.opacity(0.05), lineWidth: 0.6)
+                )
+        )
+        .shadow(color: .black.opacity(0.08), radius: 18, x: 0, y: 8)
+    }
+
+    func luxuryCard(cornerRadius: CGFloat = 20) -> some View {
+        self.background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.panelGradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.95), lineWidth: 1)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.brand.opacity(0.06), lineWidth: 0.8)
+                )
+        )
+        .shadow(color: .black.opacity(0.10), radius: 20, x: 0, y: 10)
     }
 
     // MARK: - Press Animation

@@ -42,6 +42,9 @@ struct VerifyBannerView: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .foregroundColor(bannerColor)
+                .frame(width: 28, height: 28)
+                .background(bannerColor.opacity(0.14))
+                .clipShape(Circle())
             Text(message)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.textPrimary)
@@ -56,12 +59,20 @@ struct VerifyBannerView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(bannerColor.opacity(0.1))
-        .overlay(
-            Rectangle()
-                .fill(bannerColor.opacity(0.3))
-                .frame(height: 1),
-            alignment: .bottom
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.95), bannerColor.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(bannerColor.opacity(0.25), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
     }
 }

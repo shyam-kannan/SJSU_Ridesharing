@@ -14,6 +14,9 @@ struct ProfileView: View {
     @State private var showChangePassword = false
     @State private var showSupport = false
     @State private var showAbout = false
+    @State private var showAccountMenu = false
+    @State private var showImagePicker = false
+    @State private var selectedProfileImage: UIImage?
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("emailNotificationsEnabled") private var emailNotificationsEnabled = true
     @AppStorage("locationShareEnabled") private var locationShareEnabled = true
@@ -22,13 +25,17 @@ struct ProfileView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 18) {
+                    profileTopBar
 
                     // ── Profile Header ──
                     profileHeader
 
                     // ── Verification Status ──
                     verificationCard
+
+                    // ── Role Switcher ──
+                    roleSwitcherCard
 
                     // ── Stats Row ──
                     statsRow
@@ -57,14 +64,18 @@ struct ProfileView: View {
 
                     Spacer().frame(height: 100)
                 }
-                .padding(.top, 24)
+                .padding(.top, 8)
             }
-            .background(Color.appBackground.ignoresSafeArea())
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.large)
+            .background(
+                Color(hex: "F4F6F2").ignoresSafeArea()
+            )
+            .navigationBarHidden(true)
             .task {
                 if let id = authVM.currentUser?.id {
                     await vm.loadProfile(userId: id)
+                    if authVM.currentUser?.role == .driver {
+                        await vm.loadEarnings(userId: id)
+                    }
                 }
             }
             .sheet(isPresented: $showEdit) {
@@ -90,6 +101,10 @@ struct ProfileView: View {
             .sheet(isPresented: $showAbout) {
                 AboutView()
             }
+            .sheet(isPresented: $showAccountMenu) {
+                InAppAccountMenuView()
+                    .environmentObject(authVM)
+            }
             .confirmationDialog("Sign Out", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) { Task { await authVM.logout() } }
                 Button("Cancel", role: .cancel) {}
@@ -108,60 +123,238 @@ struct ProfileView: View {
 
     // MARK: - Profile Header
 
+    private var profileTopBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Profile")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+                Text("Account, settings, and verification")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.72))
+            }
+            Spacer()
+            Button(action: { showAccountMenu = true }) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                    Text(authVM.currentUser?.name.prefix(1).uppercased() ?? "?")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.black.opacity(0.84))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, AppConstants.pagePadding)
+    }
+
     private var profileHeader: some View {
         VStack(spacing: 14) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(Color.brandGradient)
-                    .frame(width: 90, height: 90)
+            VStack(spacing: 14) {
+                profileAvatarButton
+                profileIdentityBlock
+                editProfileButton
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color(hex: "F8FAFC"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.04), lineWidth: 1)
+                    )
+            )
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                )
+        )
+        .shadow(
+            color: DesignSystem.Shadow.card.color,
+            radius: DesignSystem.Shadow.card.radius,
+            x: DesignSystem.Shadow.card.x,
+            y: DesignSystem.Shadow.card.y
+        )
+        .padding(.horizontal, AppConstants.pagePadding)
+    }
+
+    private var profileAvatarButton: some View {
+        Button(action: { showImagePicker = true }) {
+            ZStack(alignment: .bottomTrailing) {
+                profileAvatarImage
+                profileAvatarCameraBadge
+                    .offset(x: -2, y: -2)
+            }
+            .overlay(profileAvatarRing)
+        }
+        .buttonStyle(.plain)
+        .shadow(color: Color.brand.opacity(0.3), radius: 14, x: 0, y: 7)
+        .background(
+            ProfileImagePickerView(
+                selectedImage: $selectedProfileImage,
+                showPicker: $showImagePicker,
+                onRemovePhoto: {
+                    if let userId = authVM.currentUser?.id {
+                        Task {
+                            await vm.removeProfilePicture(userId: userId)
+                            await authVM.refreshCurrentUser()
+                        }
+                    }
+                }
+            )
+        )
+        .onChange(of: selectedProfileImage) { newImage in
+            if let image = newImage, let userId = authVM.currentUser?.id {
+                Task {
+                    await vm.uploadProfilePicture(userId: userId, image: image)
+                    await authVM.refreshCurrentUser()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var profileAvatarImage: some View {
+        if let profilePicture = authVM.currentUser?.profilePicture,
+           !profilePicture.isEmpty,
+           let url = resolvedProfileImageURL(profilePicture) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    Circle()
+                        .fill(DesignSystem.Colors.sjsuBlue.opacity(0.1))
+                        .frame(width: 90, height: 90)
+                        .overlay(ProgressView())
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 90, height: 90)
+                        .clipShape(Circle())
+                case .failure:
+                    initialsAvatar
+                @unknown default:
+                    EmptyView()
+                }
+            }
+        } else if let selectedImage = selectedProfileImage {
+            Image(uiImage: selectedImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 90, height: 90)
+                .clipShape(Circle())
+        } else {
+            initialsAvatar
+        }
+    }
+
+    private var initialsAvatar: some View {
+        Circle()
+            .fill(DesignSystem.Colors.sjsuBlue)
+            .frame(width: 90, height: 90)
+            .overlay(
                 Text(authVM.currentUser?.name.prefix(1).uppercased() ?? "?")
                     .font(.system(size: 38, weight: .bold))
                     .foregroundColor(.white)
+            )
+    }
+
+    private var profileAvatarCameraBadge: some View {
+        ZStack {
+            Circle()
+                .fill(DesignSystem.Colors.sjsuGold)
+                .frame(width: 28, height: 28)
+            Image(systemName: "camera.fill")
+                .font(.system(size: 13))
+                .foregroundColor(.white)
+        }
+    }
+
+    private var profileAvatarRing: some View {
+        Circle()
+            .strokeBorder(
+                LinearGradient(
+                    colors: [
+                        DesignSystem.Colors.sjsuGold,
+                        DesignSystem.Colors.sjsuGold.opacity(0.4)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 3
+            )
+    }
+
+    private var profileIdentityBlock: some View {
+        VStack(spacing: 7) {
+            Text(authVM.currentUser?.name ?? "")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Text(authVM.currentUser?.email ?? "")
+                .font(.system(size: 14))
+                .foregroundColor(.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            if let role = authVM.currentUser?.role {
+                Text(role.rawValue.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(role == .driver ? .brandOrange : .brand)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background((role == .driver ? Color.brandOrange : Color.brand).opacity(0.12))
+                    .cornerRadius(10)
             }
-            .shadow(color: Color.brand.opacity(0.3), radius: 14, x: 0, y: 7)
 
-            VStack(spacing: 6) {
-                Text(authVM.currentUser?.name ?? "")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.textPrimary)
-
-                Text(authVM.currentUser?.email ?? "")
-                    .font(.system(size: 14))
-                    .foregroundColor(.textSecondary)
-
-                // Role badge
-                if let role = authVM.currentUser?.role {
-                    Text(role.rawValue.uppercased())
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(role == .driver ? .brandOrange : .brand)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background((role == .driver ? Color.brandOrange : Color.brand).opacity(0.12))
-                        .cornerRadius(10)
-                }
-
-                // Member since
-                if let createdAt = authVM.currentUser?.createdAt {
-                    Text("Member since \(createdAt, formatter: memberSinceFormatter)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.textTertiary)
-                }
-            }
-
-            Button(action: { showEdit = true }) {
-                Text("Edit Profile")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.brand)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Color.brand.opacity(0.1))
-                    .cornerRadius(12)
+            if let createdAt = authVM.currentUser?.createdAt {
+                Text("Member since \(createdAt, formatter: memberSinceFormatter)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textTertiary)
             }
         }
-        .frame(maxWidth: .infinity)
-        .cardStyle(padding: 24)
-        .padding(.horizontal, AppConstants.pagePadding)
+    }
+
+    private var editProfileButton: some View {
+        Button(action: { showEdit = true }) {
+            HStack(spacing: 8) {
+                Image(systemName: "pencil")
+                Text("Edit Profile")
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(.brand)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(Color.brand.opacity(0.1))
+            .overlay(
+                Capsule().strokeBorder(Color.brand.opacity(0.12), lineWidth: 1)
+            )
+            .clipShape(Capsule())
+        }
+        .shadow(color: Color.brand.opacity(0.2), radius: 10, x: 0, y: 4)
     }
 
     // MARK: - Verification Card
@@ -239,7 +432,100 @@ struct ProfileView: View {
                     .cornerRadius(12)
             }
         }
-        .cardStyle()
+        .padding(15)
+        .elevatedCard(cornerRadius: 18)
+        .padding(.horizontal, AppConstants.pagePadding)
+    }
+
+    // MARK: - Role Switcher
+
+    private var roleSwitcherCard: some View {
+        let currentRole = authVM.currentUser?.role ?? .rider
+        let canSwitchToDriver = authVM.currentUser?.vehicleInfo != nil && authVM.currentUser?.licensePlate != nil
+
+        return HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.brandGold.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                Image(systemName: currentRole == .driver ? "car.fill" : "figure.walk")
+                    .font(.system(size: 20))
+                    .foregroundColor(.brandGold)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Account Mode")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                Text("Currently: \(currentRole == .driver ? "Driver" : "Rider")")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textSecondary)
+            }
+
+            Spacer()
+
+            if currentRole == .driver {
+                // Switch to Rider (always allowed)
+                Button(action: {
+                    Task {
+                        do {
+                            try await authVM.switchRole(to: .rider)
+                        } catch {
+                            print("Failed to switch role: \(error)")
+                        }
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 13))
+                        Text("Switch to Rider")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.brand)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.brand.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            } else {
+                // Switch to Driver (requires setup)
+                Button(action: {
+                    if canSwitchToDriver {
+                        Task {
+                            do {
+                                try await authVM.switchRole(to: .driver)
+                            } catch {
+                                print("Failed to switch role: \(error)")
+                            }
+                        }
+                    } else {
+                        showDriverSetup = true
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "car.fill")
+                            .font(.system(size: 13))
+                        Text(canSwitchToDriver ? "Switch to Driver" : "Setup Driver")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.brand)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.brand.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            }
+        }
+        .padding(15)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
         .padding(.horizontal, AppConstants.pagePadding)
     }
 
@@ -251,21 +537,26 @@ struct ProfileView: View {
             HStack(spacing: 12) {
                 ProfileStat(value: String(format: "%.1f", authVM.currentUser?.rating ?? 0),
                             label: "Rating", icon: "star.fill", color: .brandOrange)
-                ProfileStat(value: "\(vm.stats?.totalTripsCompleted ?? 0)",
+                    .staggeredAppear(index: 0)
+                ProfileStat(value: "\(vm.stats?.totalTripsAsDriver ?? 0)",
                             label: "Trips", icon: "car.fill", color: .brand)
+                    .staggeredAppear(index: 1)
                 ProfileStat(value: "\(vm.ratings.count)",
                             label: "Reviews", icon: "bubble.fill", color: .brandGreen)
+                    .staggeredAppear(index: 2)
             }
 
-            // Secondary stats (distance + carbon)
-            if let stats = vm.stats, stats.totalDistanceMiles > 0 {
+            // Secondary stats (backend currently returns ratings/bookings counts, not distance)
+            if let stats = vm.stats {
                 HStack(spacing: 12) {
                     ProfileStat(
-                        value: String(format: "%.0f mi", stats.totalDistanceMiles),
-                        label: "Distance", icon: "road.lanes", color: .brand)
+                        value: "\(stats.totalBookingsAsRider ?? 0)",
+                        label: "Bookings", icon: "ticket.fill", color: .brand)
+                        .staggeredAppear(index: 3)
                     ProfileStat(
-                        value: String(format: "%.1f kg", stats.totalDistanceMiles * 0.21),
-                        label: "CO₂ Saved", icon: "leaf.fill", color: .brandGreen)
+                        value: "\(stats.totalRatings)",
+                        label: "Rated", icon: "person.2.fill", color: .brandGreen)
+                        .staggeredAppear(index: 4)
                 }
             }
         }
@@ -276,8 +567,78 @@ struct ProfileView: View {
 
     private var driverVehicleSection: some View {
         VStack(spacing: 12) {
-            SectionHeader(title: "Vehicle")
+            SectionHeader(title: "Driver Dashboard")
 
+            // Earnings Card
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.brandGreen.opacity(0.12))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "dollarsign.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.brandGreen)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Total Earned")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textSecondary)
+                        Text(String(format: "$%.2f", vm.earnings?.totalEarned ?? 0.0))
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.brandGreen)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("This Month")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textTertiary)
+                        Text(String(format: "$%.2f", vm.earnings?.thisMonthEarned ?? 0.0))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                    }
+                }
+                .padding(AppConstants.cardPadding)
+
+                Divider()
+
+                HStack {
+                    VStack(spacing: 4) {
+                        Text("\(vm.earnings?.tripsCompleted ?? 0)")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.textPrimary)
+                        Text("Completed")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    Divider().frame(height: 30)
+
+                    VStack(spacing: 4) {
+                        Text("\(vm.earnings?.tripsActive ?? 0)")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.brand)
+                        Text("Active")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.vertical, 12)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    )
+            )
+            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+            .padding(.horizontal, AppConstants.pagePadding)
+
+            // Vehicle Info Card
             VStack(spacing: 0) {
                 HStack(spacing: 14) {
                     ZStack {
@@ -311,8 +672,14 @@ struct ProfileView: View {
                 }
                 .padding(AppConstants.cardPadding)
             }
-            .background(Color.cardBackground)
-            .cornerRadius(AppConstants.cardRadius)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.panelGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.brand.opacity(0.08), lineWidth: 1)
+                    )
+            )
             .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
             .padding(.horizontal, AppConstants.pagePadding)
         }
@@ -328,18 +695,23 @@ struct ProfileView: View {
                 QuickActionCard(icon: "clock.arrow.circlepath", label: "Trip History", color: .brand) {
                     showTripHistory = true
                 }
+                .staggeredAppear(index: 0)
+
                 QuickActionCard(icon: "star.fill", label: "My Ratings", color: .brandOrange) {
                     // scroll to ratings section (handled by UI)
                 }
+                .staggeredAppear(index: 1)
 
                 if !authVM.isDriver {
                     QuickActionCard(icon: "car.badge.plus", label: "Become Driver", color: .brandGreen) {
                         showDriverSetup = true
                     }
+                    .staggeredAppear(index: 2)
                 } else {
                     QuickActionCard(icon: "car.fill", label: "Vehicle Setup", color: .brandGreen) {
                         showDriverSetup = true
                     }
+                    .staggeredAppear(index: 2)
                 }
             }
             .padding(.horizontal, AppConstants.pagePadding)
@@ -384,61 +756,35 @@ struct ProfileView: View {
 
             VStack(spacing: 0) {
                 // Push Notifications toggle
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8).fill(Color.brandOrange.opacity(0.12)).frame(width: 32, height: 32)
-                        Image(systemName: "bell.fill").font(.system(size: 16)).foregroundColor(.brandOrange)
-                    }
-                    Text("Push Notifications")
-                        .font(.system(size: 16))
-                        .foregroundColor(.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $notificationsEnabled)
-                        .labelsHidden()
-                        .tint(.brand)
-                }
-                .padding(.horizontal, 16).padding(.vertical, 12)
+                SettingsToggleRow(
+                    icon: "bell.fill",
+                    title: "Push Notifications",
+                    subtitle: nil,
+                    color: .brandOrange,
+                    isOn: $notificationsEnabled
+                )
 
                 Divider().padding(.leading, 52)
 
                 // Email Notifications toggle
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8).fill(Color.brand.opacity(0.12)).frame(width: 32, height: 32)
-                        Image(systemName: "envelope.fill").font(.system(size: 16)).foregroundColor(.brand)
-                    }
-                    Text("Email Notifications")
-                        .font(.system(size: 16))
-                        .foregroundColor(.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $emailNotificationsEnabled)
-                        .labelsHidden()
-                        .tint(.brand)
-                }
-                .padding(.horizontal, 16).padding(.vertical, 12)
+                SettingsToggleRow(
+                    icon: "envelope.fill",
+                    title: "Email Notifications",
+                    subtitle: nil,
+                    color: .brand,
+                    isOn: $emailNotificationsEnabled
+                )
 
                 Divider().padding(.leading, 52)
 
                 // Location Sharing toggle
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8).fill(Color.brandGreen.opacity(0.12)).frame(width: 32, height: 32)
-                        Image(systemName: "location.fill").font(.system(size: 16)).foregroundColor(.brandGreen)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Share Location")
-                            .font(.system(size: 16))
-                            .foregroundColor(.textPrimary)
-                        Text(locationManager.permissionStatusText)
-                            .font(.system(size: 11))
-                            .foregroundColor(.textTertiary)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $locationManager.isTrackingEnabled)
-                        .labelsHidden()
-                        .tint(.brand)
-                }
-                .padding(.horizontal, 16).padding(.vertical, 12)
+                SettingsToggleRow(
+                    icon: "location.fill",
+                    title: "Share Location",
+                    subtitle: locationManager.permissionStatusText,
+                    color: .brandGreen,
+                    isOn: $locationManager.isTrackingEnabled
+                )
 
                 Divider().padding(.leading, 52)
 
@@ -452,9 +798,8 @@ struct ProfileView: View {
                     showAbout = true
                 }
             }
-            .background(Color.cardBackground)
-            .cornerRadius(AppConstants.cardRadius)
-            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+            .padding(4)
+            .elevatedCard(cornerRadius: 18)
             .padding(.horizontal, AppConstants.pagePadding)
         }
     }
@@ -479,9 +824,8 @@ struct ProfileView: View {
 
                 SettingsRow(icon: "doc.text.fill", title: "Terms of Service", color: .textTertiary) {}
             }
-            .background(Color.cardBackground)
-            .cornerRadius(AppConstants.cardRadius)
-            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+            .padding(4)
+            .elevatedCard(cornerRadius: 18)
             .padding(.horizontal, AppConstants.pagePadding)
         }
     }
@@ -500,9 +844,15 @@ struct ProfileView: View {
                     Spacer()
                 }
                 .padding(AppConstants.cardPadding)
-                .background(Color.cardBackground)
-                .cornerRadius(AppConstants.cardRadius)
-                .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color.brandRed.opacity(0.10), lineWidth: 1)
+                        )
+                )
+                .shadow(color: Color.brandRed.opacity(0.08), radius: 8, x: 0, y: 3)
             }
             .padding(.horizontal, AppConstants.pagePadding)
 
@@ -516,8 +866,14 @@ struct ProfileView: View {
                     Spacer()
                 }
                 .padding(AppConstants.cardPadding)
-                .background(Color.cardBackground)
-                .cornerRadius(AppConstants.cardRadius)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                        )
+                )
                 .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
             }
             .padding(.horizontal, AppConstants.pagePadding)
@@ -542,8 +898,22 @@ struct ProfileView: View {
 
     private var memberSinceFormatter: DateFormatter {
         let f = DateFormatter()
+        f.locale = .autoupdatingCurrent
+        f.calendar = .autoupdatingCurrent
+        f.timeZone = .autoupdatingCurrent
         f.dateFormat = "MMMM yyyy"
         return f
+    }
+
+    private func resolvedProfileImageURL(_ raw: String) -> URL? {
+        if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+            return URL(string: raw)
+        }
+        if raw.hasPrefix("/") {
+            // User service serves uploads directly; backend currently returns a relative path.
+            return URL(string: "http://127.0.0.1:3002\(raw)")
+        }
+        return URL(string: raw)
     }
 }
 
@@ -590,9 +960,7 @@ private struct RatingRowView: View {
             }
         }
         .padding(14)
-        .background(Color.cardBackground)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 6, x: 0, y: 2)
+        .elevatedCard(cornerRadius: 18)
     }
 }
 
@@ -601,14 +969,21 @@ private struct RatingRowView: View {
 private struct ProfileStat: View {
     let value: String; let label: String; let icon: String; let color: Color
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 7) {
             Image(systemName: icon).font(.system(size: 18)).foregroundColor(color)
             Text(value).font(.system(size: 18, weight: .bold)).foregroundColor(.textPrimary)
             Text(label).font(.system(size: 11)).foregroundColor(.textSecondary)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 14)
-        .background(Color.cardBackground).cornerRadius(14)
-        .shadow(color: .black.opacity(0.05), radius: 6, x: 0, y: 2)
+        .frame(maxWidth: .infinity).padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
     }
 }
 
@@ -626,9 +1001,16 @@ private struct QuickActionCard: View {
                 Text(label).font(.system(size: 12, weight: .semibold)).foregroundColor(.textPrimary)
                     .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 16)
-            .background(Color.cardBackground).cornerRadius(14)
-            .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
+            .frame(maxWidth: .infinity).padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    )
+            )
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
         }
     }
 }
@@ -641,15 +1023,64 @@ private struct SettingsRow: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.12)).frame(width: 32, height: 32)
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(color.opacity(0.10))
+                        .frame(width: 34, height: 34)
                     Image(systemName: icon).font(.system(size: 16)).foregroundColor(color)
                 }
-                Text(title).font(.system(size: 16)).foregroundColor(.textPrimary)
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.textPrimary)
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 12)).foregroundColor(.textTertiary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.textTertiary)
+                    .frame(width: 24, height: 24)
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String?
+    let color: Color
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(color.opacity(0.10))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(color)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.textTertiary)
+                }
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(.brand)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -693,8 +1124,14 @@ struct DriverSetupView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     LabeledTextField(label: "Vehicle Info",
-                                     placeholder: "e.g. 2022 Honda Civic - White - 7ABC123",
+                                     placeholder: "e.g. 2022 Honda Civic - White",
                                      text: $vm.vehicleInfo, icon: "car")
+
+                    LabeledTextField(label: "License Plate",
+                                     placeholder: "e.g. 7ABC123",
+                                     text: $vm.licensePlate, icon: "number")
+                        .textCase(.uppercase)
+
                     VStack(alignment: .leading, spacing: 12) {
                         Text("SEATS AVAILABLE").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary)
                         HStack {
@@ -760,12 +1197,15 @@ struct TripHistoryView: View {
 
 extension View {
     func successMessage(message: String?) -> some View {
-        self.overlay(alignment: .top) {
+        self.safeAreaInset(edge: .top, spacing: 0) {
             if let msg = message {
-                ToastBanner(message: msg, type: .success)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 60)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                VStack(spacing: 0) {
+                    ToastBanner(message: msg, type: .success)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
         .animation(.spring(), value: message)

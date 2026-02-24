@@ -26,13 +26,37 @@ class TripService {
             recurrence: recurrence
         )
 
-        let trip: Trip = try await network.request(
-            endpoint: "/trips",
-            method: .post,
-            body: request
-        )
-
-        return trip
+        do {
+            let trip: Trip = try await network.request(
+                endpoint: "/trips",
+                method: .post,
+                body: request
+            )
+            return trip
+        } catch let error as NetworkError {
+            // Role is enforced from JWT claims in backend middleware. If the user
+            // just switched roles, refresh the token and retry once.
+            if case .serverError(let apiError) = error,
+               apiError.message.localizedCaseInsensitiveContains("Driver role required") {
+                _ = try? await AuthService.shared.refreshAccessToken()
+                let retriedTrip: Trip = try await network.request(
+                    endpoint: "/trips",
+                    method: .post,
+                    body: request
+                )
+                return retriedTrip
+            }
+            if case .forbidden = error {
+                _ = try? await AuthService.shared.refreshAccessToken()
+                let retriedTrip: Trip = try await network.request(
+                    endpoint: "/trips",
+                    method: .post,
+                    body: request
+                )
+                return retriedTrip
+            }
+            throw error
+        }
     }
 
     // MARK: - Get Trip
@@ -158,10 +182,26 @@ class TripService {
     // MARK: - Get Trip Passengers
 
     func getTripPassengers(tripId: String) async throws -> [BookingWithRider] {
-        let response: [BookingWithRider] = try await network.request(
+        let response: TripBookingsResponse = try await network.request(
             endpoint: "/trips/\(tripId)/bookings",
             method: .get
         )
-        return response
+        return response.bookings
+    }
+
+    // MARK: - Update Trip State
+
+    func updateTripState(tripId: String, status: TripStatus) async throws -> Trip {
+        struct StateUpdate: Encodable {
+            let status: String
+        }
+
+        let trip: Trip = try await network.request(
+            endpoint: "/trips/\(tripId)/state",
+            method: .put,
+            body: StateUpdate(status: status.rawValue),
+            requiresAuth: true
+        )
+        return trip
     }
 }

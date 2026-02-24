@@ -49,36 +49,67 @@ struct EmptyStateView: View {
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
 
+    @State private var appeared = false
+
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 28) {
             Spacer()
 
+            // Icon with layered circles
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(0.08))
-                    .frame(width: 110, height: 110)
-                Image(systemName: icon)
-                    .font(.system(size: 52))
-                    .foregroundColor(.brand.opacity(0.6))
-            }
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.brand.opacity(0.12), Color.brand.opacity(0.03)],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 65
+                        )
+                    )
+                    .frame(width: 130, height: 130)
 
-            VStack(spacing: 10) {
+                Circle()
+                    .fill(Color.brand.opacity(0.08))
+                    .frame(width: 96, height: 96)
+
+                Image(systemName: icon)
+                    .font(.system(size: 44, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [DesignSystem.Colors.sjsuBlue, DesignSystem.Colors.sjsuTeal],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .scaleEffect(appeared ? 1 : 0.7)
+            .opacity(appeared ? 1 : 0)
+
+            VStack(spacing: 12) {
                 Text(title)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.textPrimary)
                 Text(message)
-                    .font(.system(size: 16))
+                    .font(.system(size: 15))
                     .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(4)
                     .padding(.horizontal, 32)
             }
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 12)
 
             if let actionTitle = actionTitle, let action = action {
                 PrimaryButton(title: actionTitle, action: action)
                     .padding(.horizontal, 40)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 10)
             }
 
             Spacer()
+        }
+        .onAppear {
+            withAnimation(DesignSystem.Animation.standard.delay(0.1)) { appeared = true }
         }
     }
 }
@@ -112,24 +143,40 @@ struct ToastBanner: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: type.icon)
-                .foregroundColor(type.color)
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(type.color.opacity(0.14))
+                    .frame(width: 32, height: 32)
+                Image(systemName: type.icon)
+                    .foregroundColor(type.color)
+                    .font(.system(size: 14, weight: .bold))
+            }
+
             Text(message)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.textPrimary)
+                .lineLimit(2)
+
             Spacer()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(type.color.opacity(0.1))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.97), type.color.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(type.color.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(type.color.opacity(0.28), lineWidth: 1)
                 )
         )
+        .shadow(color: type.color.opacity(0.12), radius: 12, x: 0, y: 4)
     }
 }
 

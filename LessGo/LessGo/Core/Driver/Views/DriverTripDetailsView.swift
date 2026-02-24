@@ -19,15 +19,46 @@ struct DriverTripDetailsView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
+                    RouteMapView(
+                        origin: trip.originPoint?.clLocationCoordinate2D,
+                        destination: trip.destinationPoint?.clLocationCoordinate2D,
+                        driver: nil,
+                        showsUserLocation: false
+                    )
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    )
+                    .overlay(alignment: .topLeading) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "map.fill")
+                            Text("Route Preview")
+                        }
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(.ultraThinMaterial)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
+                        .clipShape(Capsule())
+                        .padding(14)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 18)
+
+                    headerStatsStrip
+
                     // Trip Overview Card
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 18) {
                         Text("Trip Details")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.textPrimary)
 
                         // Route
-                        HStack(alignment: .top, spacing: 12) {
+                        HStack(alignment: .top, spacing: 14) {
                             VStack(spacing: 0) {
                                 Circle()
                                     .fill(DesignSystem.Colors.sjsuBlue)
@@ -45,9 +76,11 @@ struct DriverTripDetailsView: View {
                                 Text(trip.origin)
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundColor(.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 Text(trip.destination)
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundColor(.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
                             Spacer()
@@ -61,6 +94,15 @@ struct DriverTripDetailsView: View {
                                     .foregroundColor(.textSecondary)
                             }
                         }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color(hex: "F8FAFC"))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                )
+                        )
 
                         Divider()
 
@@ -83,21 +125,46 @@ struct DriverTripDetailsView: View {
                             )
                         }
                     }
-                    .cardStyle()
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
+                    .padding(18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(Color.white)
+                            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                    )
+                    .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
+                    .padding(.horizontal, 24)
 
                     // Passengers Section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Passengers (\(passengers.count))")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.textPrimary)
-                            .padding(.horizontal, 20)
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("Passengers")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.textPrimary)
+                            Spacer()
+                            Text("\(passengers.count)")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.white)
+                                .overlay(Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                                .clipShape(Capsule())
+                        }
+                        .padding(.horizontal, 24)
 
                         if isLoading {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
-                                .padding(40)
+                                .padding(48)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(Color.white)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                        )
+                                )
+                                .padding(.horizontal, 24)
                         } else if let error = errorMessage {
                             VStack(spacing: 12) {
                                 Image(systemName: "exclamationmark.triangle")
@@ -108,7 +175,16 @@ struct DriverTripDetailsView: View {
                                     .foregroundColor(.textSecondary)
                                     .multilineTextAlignment(.center)
                             }
-                            .padding(40)
+                            .padding(44)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.white)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                        )
+                            )
+                            .padding(.horizontal, 24)
                         } else if passengers.isEmpty {
                             VStack(spacing: 12) {
                                 Image(systemName: "person.crop.circle.badge.questionmark")
@@ -121,19 +197,39 @@ struct DriverTripDetailsView: View {
                                     .font(.system(size: 13))
                                     .foregroundColor(.textTertiary)
                             }
-                            .padding(40)
+                            .padding(44)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.white)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                        )
+                            )
+                            .padding(.horizontal, 24)
                         } else {
-                            ForEach(passengers) { passenger in
-                                PassengerCard(passenger: passenger)
-                                    .padding(.horizontal, 20)
+                            VStack(spacing: 12) {
+                                ForEach(passengers) { passenger in
+                                    PassengerCard(passenger: passenger)
+                                }
                             }
+                            .padding(.horizontal, 24)
                         }
                     }
 
-                    Spacer().frame(height: 40)
+                    Spacer().frame(height: 96)
                 }
             }
-            .background(Color.appBackground.ignoresSafeArea())
+            .background(
+                ZStack {
+                    Color(hex: "F4F6F2").ignoresSafeArea()
+                    Circle()
+                        .fill(Color(hex: "A3E635").opacity(0.10))
+                        .frame(width: 260)
+                        .offset(x: 140, y: 580)
+                        .ignoresSafeArea()
+                }
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -142,21 +238,56 @@ struct DriverTripDetailsView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.textSecondary)
                             .padding(8)
-                            .background(Color.appBackground)
+                            .background(Color.white)
                             .clipShape(Circle())
+                            .overlay(Circle().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
                     }
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text("Trip Passengers")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(DesignSystem.Colors.sjsuBlue)
+                        .foregroundColor(.black.opacity(0.88))
                 }
             }
         }
         .task {
             await loadPassengers()
         }
+    }
+
+    private var headerStatsStrip: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.2.fill")
+                    .foregroundColor(.brand)
+                Text("\(passengers.count) riders")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.white)
+            .overlay(Capsule().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+            .clipShape(Capsule())
+
+            HStack(spacing: 8) {
+                Image(systemName: "dollarsign.circle.fill")
+                    .foregroundColor(Color(hex: "84CC16"))
+                Text(String(format: "$%.2f est.", totalEarnings))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.white)
+            .overlay(Capsule().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+            .clipShape(Capsule())
+
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, -4)
     }
 
     private func loadPassengers() async {

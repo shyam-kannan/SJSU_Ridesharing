@@ -13,7 +13,7 @@ const pool = new Pool({
  */
 export const getUserById = async (userId: string): Promise<SafeUser | null> => {
   const query = `
-    SELECT user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, created_at, updated_at
+    SELECT user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, created_at, updated_at
     FROM users
     WHERE user_id = $1
   `;
@@ -64,7 +64,7 @@ export const updateUserProfile = async (
     UPDATE users
     SET ${fields.join(', ')}
     WHERE user_id = $${paramIndex}
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, created_at, updated_at
   `;
 
   const result = await pool.query(query, values);
@@ -86,7 +86,7 @@ export const setupDriverProfile = async (
   userId: string,
   driverData: DriverSetupRequest
 ): Promise<SafeUser> => {
-  const { vehicle_info, seats_available } = driverData;
+  const { vehicle_info, seats_available, license_plate } = driverData;
 
   const query = `
     UPDATE users
@@ -94,15 +94,17 @@ export const setupDriverProfile = async (
       role = $1,
       vehicle_info = $2,
       seats_available = $3,
+      license_plate = $4,
       updated_at = current_timestamp
-    WHERE user_id = $4
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, created_at, updated_at
+    WHERE user_id = $5
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, created_at, updated_at
   `;
 
   const result = await pool.query(query, [
     UserRole.Driver,
     vehicle_info,
     seats_available,
+    license_plate,
     userId,
   ]);
 
@@ -285,6 +287,165 @@ export const updateNotificationPreferences = async (
   );
 };
 
+/**
+ * Update user's profile picture URL
+ * @param userId User's UUID
+ * @param profilePictureUrl URL/path to profile picture, or null to clear
+ * @returns Updated user profile
+ */
+export const updateProfilePicture = async (
+  userId: string,
+  profilePictureUrl: string | null
+): Promise<SafeUser> => {
+  const query = `
+    UPDATE users
+    SET profile_picture_url = $1, updated_at = current_timestamp
+    WHERE user_id = $2
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, created_at, updated_at
+  `;
+
+  const result = await pool.query(query, [profilePictureUrl, userId]);
+
+  if (result.rows.length === 0) {
+    throw new Error('User not found');
+  }
+
+  return result.rows[0];
+};
+
+/**
+ * Get driver earnings and statistics
+ * @param userId User's UUID
+ * @returns Driver earnings data
+ */
+export const getDriverEarnings = async (userId: string) => {
+  const user = await getUserById(userId);
+
+  if (!user || user.role !== UserRole.Driver) {
+    throw new Error('User is not a driver');
+  }
+
+  const earningsQuery = `SELECT earnings FROM users WHERE user_id = $1`;
+  const earningsResult = await pool.query(earningsQuery, [userId]);
+  const totalEarned = parseFloat(earningsResult.rows[0].earnings || 0);
+
+  const completedTripsQuery = `
+    SELECT COUNT(*) as count FROM trips
+    WHERE driver_id = $1 AND status = 'completed'
+  `;
+  const completedTrips = await pool.query(completedTripsQuery, [userId]);
+
+  const activeTripsQuery = `
+    SELECT COUNT(*) as count FROM trips
+    WHERE driver_id = $1 AND status = 'pending'
+  `;
+  const activeTrips = await pool.query(activeTripsQuery, [userId]);
+
+  const thisMonthQuery = `
+    SELECT COALESCE(SUM(p.amount), 0) as month_total
+    FROM payments p
+    JOIN bookings b ON p.booking_id = b.booking_id
+    JOIN trips t ON b.trip_id = t.trip_id
+    WHERE t.driver_id = $1
+      AND p.status = 'captured'
+      AND DATE_TRUNC('month', p.updated_at) = DATE_TRUNC('month', CURRENT_DATE)
+  `;
+  const thisMonthResult = await pool.query(thisMonthQuery, [userId]);
+
+  return {
+    total_earned: totalEarned,
+    trips_completed: parseInt(completedTrips.rows[0].count),
+    trips_active: parseInt(activeTrips.rows[0].count),
+    this_month_earned: parseFloat(thisMonthResult.rows[0].month_total || 0),
+  };
+};
+
+/**
+ * Create a report about another user
+ * @param reportData Report details
+ * @returns Created report
+ */
+export const createReport = async (reportData: {
+  reporter_id: string;
+  reported_user_id: string;
+  trip_id?: string;
+  category: string;
+  description: string;
+}): Promise<any> => {
+  const query = `
+    INSERT INTO reports (reporter_id, reported_user_id, trip_id, category, description, status)
+    VALUES ($1, $2, $3, $4, $5, 'pending')
+    RETURNING *
+  `;
+
+  const result = await pool.query(query, [
+    reportData.reporter_id,
+    reportData.reported_user_id,
+    reportData.trip_id || null,
+    reportData.category,
+    reportData.description,
+  ]);
+
+  // Send email notification to admin
+  // TODO: Add email service integration
+  // await sendEmail({
+  //   to: 'reports@lessgo.com', // Placeholder
+  //   subject: `New Report: ${reportData.category}`,
+  //   body: `Report from user ${reportData.reporter_id} about ${reportData.reported_user_id}`
+  // });
+
+  console.log(`📧 Report created: ${reportData.category} - Would send email to admin`);
+
+  return result.rows[0];
+};
+
+/**
+ * Get reports submitted by a user
+ * @param userId User's UUID
+ * @returns Array of reports
+ */
+export const getUserReports = async (userId: string): Promise<any[]> => {
+  const query = `
+    SELECT
+      r.*,
+      reporter.name as reporter_name,
+      reported.name as reported_user_name
+    FROM reports r
+    JOIN users reporter ON r.reporter_id = reporter.user_id
+    JOIN users reported ON r.reported_user_id = reported.user_id
+    WHERE r.reporter_id = $1
+    ORDER BY r.created_at DESC LIMIT 50
+  `;
+
+  const result = await pool.query(query, [userId]);
+  return result.rows;
+};
+
+/**
+ * Update user role (Driver ↔ Rider switching)
+ * @param userId User's UUID
+ * @param role New role ("Driver" or "Rider")
+ * @returns Updated safe user object
+ */
+export const updateUserRole = async (userId: string, role: string): Promise<SafeUser> => {
+  const query = `
+    UPDATE users
+    SET role = $1, updated_at = current_timestamp
+    WHERE user_id = $2
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, created_at, updated_at
+  `;
+
+  const result = await pool.query(query, [role, userId]);
+
+  if (result.rows.length === 0) {
+    throw new Error('User not found');
+  }
+
+  console.log(`🔄 User ${userId} role updated to: ${role}`);
+
+  return result.rows[0];
+};
+
 export default {
   getUserById,
   updateUserProfile,
@@ -294,4 +455,9 @@ export default {
   getUserStats,
   saveDeviceToken,
   updateNotificationPreferences,
+  updateProfilePicture,
+  getDriverEarnings,
+  createReport,
+  getUserReports,
+  updateUserRole,
 };

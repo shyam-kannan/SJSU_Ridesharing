@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import path from 'path';
 import userRoutes from './routes/user.routes';
 import { errorHandler, notFoundHandler, requestLogger, corsMiddleware, devCorsMiddleware } from '@lessgo/shared';
 import { config } from './config';
@@ -18,6 +19,9 @@ if (config.env === 'development') {
 
 // Request logging
 app.use(requestLogger);
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

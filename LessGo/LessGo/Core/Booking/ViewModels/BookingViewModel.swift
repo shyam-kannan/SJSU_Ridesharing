@@ -14,7 +14,6 @@ class BookingViewModel: ObservableObject {
     @Published var bookingSuccessMessage = ""
 
     private let bookingService = BookingService.shared
-    private let paymentService = PaymentService.shared
 
     // MARK: - Load Bookings
 
@@ -28,9 +27,9 @@ class BookingViewModel: ObservableObject {
                 bookings = response.bookings
             }
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
 
@@ -46,11 +45,11 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
     }
@@ -58,31 +57,26 @@ class BookingViewModel: ObservableObject {
     // MARK: - Confirm Booking + Create Payment Intent
 
     func confirmAndPay(bookingId: String, amount: Double) async -> Bool {
+        _ = amount // Kept for call-site compatibility; backend computes/creates payment on confirm.
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            // 1. Create payment intent
-            let payment = try await paymentService.createPaymentIntent(
-                bookingId: bookingId,
-                amount: amount
-            )
-            currentPayment = payment
-
-            // 2. Confirm booking
+            // Backend confirm flow creates/returns payment intent and updates booking status.
             let booking = try await bookingService.confirmBooking(id: bookingId)
             currentBooking = booking
+            currentPayment = booking.payment
 
             showSuccess = true
             bookingSuccessMessage = "Your ride is confirmed!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
     }
@@ -102,11 +96,11 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
     }
@@ -122,10 +116,10 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
     }

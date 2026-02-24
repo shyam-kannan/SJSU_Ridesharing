@@ -1,6 +1,17 @@
 import Foundation
 
 extension Date {
+    static var currentRoundedToMinute: Date {
+        Calendar.autoupdatingCurrent.date(bySetting: .second, value: 0, of: Date()) ?? Date()
+    }
+
+    private static func displayFormatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.calendar = .autoupdatingCurrent
+        formatter.timeZone = .autoupdatingCurrent
+        return formatter
+    }
 
     // MARK: - Relative Time
     var relativeString: String {
@@ -17,25 +28,25 @@ extension Date {
 
     // MARK: - Display Formats
     var tripDateString: String {
-        let formatter = DateFormatter()
+        let formatter = Self.displayFormatter()
         formatter.dateFormat = "EEEE, MMM d"
         return formatter.string(from: self)
     }
 
     var tripTimeString: String {
-        let formatter = DateFormatter()
+        let formatter = Self.displayFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: self)
     }
 
     var tripDateTimeString: String {
-        let formatter = DateFormatter()
+        let formatter = Self.displayFormatter()
         formatter.dateFormat = "MMM d 'at' h:mm a"
         return formatter.string(from: self)
     }
 
     var shortDateString: String {
-        let formatter = DateFormatter()
+        let formatter = Self.displayFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: self)
     }
@@ -69,6 +80,9 @@ extension Date {
 
     // MARK: - API Format
     var iso8601: String {
-        ISO8601DateFormatter().string(from: self)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = .autoupdatingCurrent
+        return formatter.string(from: self)
     }
 }

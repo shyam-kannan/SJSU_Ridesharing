@@ -118,13 +118,34 @@ class NetworkManager {
                 if let apiError = try? decoder.decode(APIError.self, from: data) {
                     throw NetworkError.serverError(apiError)
                 }
-                throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
+                // Map HTTP status codes to specific NetworkError cases
+                switch httpResponse.statusCode {
+                case 403:
+                    throw NetworkError.forbidden
+                case 404:
+                    throw NetworkError.notFound
+                case 408:
+                    throw NetworkError.timeout
+                case 429:
+                    throw NetworkError.tooManyRequests
+                default:
+                    throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
+                }
             }
 
             return try decodeResponse(from: data)
 
         } catch let error as NetworkError {
             throw error
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw NetworkError.noConnection
+            case .timedOut:
+                throw NetworkError.timeout
+            default:
+                throw NetworkError.unknown(error)
+            }
         } catch {
             throw NetworkError.unknown(error)
         }
@@ -232,6 +253,9 @@ class NetworkManager {
             if let responseData = apiResponse.data {
                 return responseData
             } else {
+                if T.self == EmptyResponse.self {
+                    return EmptyResponse() as! T
+                }
                 #if DEBUG
                 print("[API] ⚠ Decode succeeded but data field is null. Full response: \(String(data: data, encoding: .utf8) ?? "")")
                 #endif
@@ -265,15 +289,15 @@ class NetworkManager {
         }
 
         let request = RefreshTokenRequest(refreshToken: refreshToken)
-        let response: RefreshTokenResponse = try await self.request(
+        let tokenData: RefreshTokenResponse = try await self.request(
             endpoint: "/auth/refresh",
             method: .post,
             body: request,
             requiresAuth: false
         )
 
-        KeychainManager.shared.saveAccessToken(response.accessToken)
-        return response.accessToken
+        KeychainManager.shared.saveAccessToken(tokenData.accessToken)
+        return tokenData.accessToken
     }
 }
 

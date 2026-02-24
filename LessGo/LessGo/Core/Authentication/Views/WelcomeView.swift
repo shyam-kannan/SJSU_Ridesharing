@@ -9,35 +9,34 @@ struct WelcomeView: View {
     @State private var taglineOpacity: Double = 0
     @State private var patternOpacity: Double = 0
 
+    // Gold pulsing ring animation
+    @State private var glowScale: CGFloat = 1.0
+    @State private var glowOpacity: Double = 0.4
+
     @State private var showLogin  = false
     @State private var showSignUp = false
 
     var body: some View {
         ZStack {
-            // SJSU Gradient background
-            Color.heroGradient
-                .ignoresSafeArea()
+            Color(hex: "F5F7F2").ignoresSafeArea()
 
-            // SJSU Pattern overlay with subtle tower silhouette
             GeometryReader { geo in
                 ZStack {
-                    // Gold accent circles
                     Circle()
-                        .fill(DesignSystem.Colors.sjsuGold.opacity(0.08))
-                        .frame(width: geo.size.width * 1.2)
-                        .offset(x: geo.size.width * 0.3, y: -geo.size.height * 0.1)
+                        .fill(Color(hex: "A3E635").opacity(0.20))
+                        .frame(width: geo.size.width * 1.05)
+                        .offset(x: geo.size.width * 0.45, y: geo.size.height * 0.72)
 
                     Circle()
-                        .fill(Color.white.opacity(0.05))
-                        .frame(width: geo.size.width * 0.9)
-                        .offset(x: -geo.size.width * 0.3, y: geo.size.height * 0.5)
+                        .fill(Color.black.opacity(0.03))
+                        .frame(width: geo.size.width * 1.15)
+                        .offset(x: geo.size.width * 0.55, y: -geo.size.height * 0.22)
 
-                    // SJSU Tower silhouette (subtle)
-                    Image(systemName: "building.2.fill")
-                        .font(.system(size: 200))
-                        .foregroundColor(Color.white.opacity(0.03))
-                        .offset(x: geo.size.width * 0.5, y: geo.size.height * 0.3)
-                        .opacity(patternOpacity)
+                    RoundedRectangle(cornerRadius: 120, style: .continuous)
+                        .fill(Color.brand.opacity(0.05))
+                        .frame(width: geo.size.width * 0.95, height: geo.size.height * 0.42)
+                        .offset(x: geo.size.width * 0.38, y: geo.size.height * 0.30)
+                        .rotationEffect(.degrees(-18))
                 }
             }
             .ignoresSafeArea()
@@ -47,46 +46,52 @@ struct WelcomeView: View {
 
                 // ── Logo + SJSU Branding ──
                 VStack(spacing: 20) {
-                    // Icon with SJSU-themed glassmorphism card
+                    // Icon with ring animation
                     ZStack {
+                        Circle()
+                            .stroke(Color(hex: "A3E635").opacity(glowOpacity), lineWidth: 2)
+                            .frame(width: 120, height: 120)
+                            .scaleEffect(glowScale)
+
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(.ultraThinMaterial)
+                            .fill(Color.white)
                             .frame(width: 100, height: 100)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 28)
-                                    .strokeBorder(DesignSystem.Colors.sjsuGold.opacity(0.4), lineWidth: 2)
+                                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
                             )
-                            .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                            .shadow(color: .black.opacity(0.10), radius: 20, x: 0, y: 10)
 
                         Image(systemName: "car.2.fill")
                             .font(.system(size: 44))
-                            .foregroundColor(.white)
+                            .foregroundColor(.black.opacity(0.85))
                     }
 
                     VStack(spacing: 12) {
                         Text("LessGo")
-                            .font(.system(size: 52, weight: .heavy))
-                            .foregroundColor(.white)
+                            .font(.system(size: 54, weight: .black, design: .rounded))
+                            .foregroundColor(.black.opacity(0.9))
 
-                        // SJSU Tagline
                         Text("Carpooling Made Easy\nfor Spartans")
                             .font(.system(size: 19, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.95))
+                            .foregroundColor(.black.opacity(0.75))
                             .multilineTextAlignment(.center)
                             .lineSpacing(6)
                             .opacity(taglineOpacity)
 
-                        // Subtle SJSU badge
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.system(size: 12))
                             Text("Official SJSU Student Platform")
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundColor(DesignSystem.Colors.sjsuGold)
+                        .foregroundColor(Color(hex: "6B7280"))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
-                        .background(DesignSystem.Colors.sjsuGold.opacity(0.15))
+                        .background(Color.white.opacity(0.85))
+                        .overlay(
+                            Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        )
                         .cornerRadius(12)
                         .opacity(taglineOpacity)
                     }
@@ -96,25 +101,25 @@ struct WelcomeView: View {
 
                 Spacer()
 
-                // ── SJSU Stats Row ──
+                // ── Stats Row ──
                 HStack(spacing: 0) {
                     StatPill(value: "3,200+", label: "Rides", icon: "car.fill")
-                    Divider().frame(height: 36).overlay(DesignSystem.Colors.sjsuGold.opacity(0.3))
+                        .staggeredAppear(index: 0)
+                    Divider().frame(height: 36).overlay(Color.black.opacity(0.08))
                     StatPill(value: "100%", label: "SJSU", icon: "checkmark.shield.fill")
-                    Divider().frame(height: 36).overlay(DesignSystem.Colors.sjsuGold.opacity(0.3))
+                        .staggeredAppear(index: 1)
+                    Divider().frame(height: 36).overlay(Color.black.opacity(0.08))
                     StatPill(value: "4.9★", label: "Rated", icon: "star.fill")
+                        .staggeredAppear(index: 2)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
                 .background(
-                    DesignSystem.Colors.sjsuGold.opacity(0.12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .strokeBorder(DesignSystem.Colors.sjsuGold.opacity(0.3), lineWidth: 1.5)
-                        )
+                    Color.white
+                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
                 )
                 .cornerRadius(20)
-                .shadow(color: DesignSystem.Colors.sjsuGold.opacity(0.1), radius: 12, x: 0, y: 4)
+                .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
                 .padding(.horizontal, 28)
                 .opacity(buttonsOpacity)
 
@@ -122,7 +127,6 @@ struct WelcomeView: View {
 
                 // ── Action Buttons ──
                 VStack(spacing: 14) {
-                    // Get Started button with SJSU Gold
                     Button(action: {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         showSignUp = true
@@ -134,11 +138,11 @@ struct WelcomeView: View {
                                 .font(.system(size: 16, weight: .bold))
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: DesignSystem.Layout.buttonHeight)
-                        .background(DesignSystem.Colors.sjsuGold)
-                        .foregroundColor(.white)
+                        .frame(height: DesignSystem.Layout.buttonHeightLarge)
+                        .background(Color(hex: "A3E635"))
+                        .foregroundColor(.black.opacity(0.88))
                         .cornerRadius(28)
-                        .shadow(color: DesignSystem.Colors.sjsuGold.opacity(0.3), radius: 15, x: 0, y: 8)
+                        .shadow(color: Color(hex: "A3E635").opacity(0.35), radius: 18, x: 0, y: 10)
                     }
 
                     // Login button
@@ -150,20 +154,15 @@ struct WelcomeView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .background(Color.white.opacity(0.08))
+                            .background(Color.black.opacity(0.85))
                             .foregroundColor(.white)
                             .cornerRadius(26)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 26)
-                                    .strokeBorder(Color.white.opacity(0.3), lineWidth: 1.5)
-                            )
                     }
                 }
                 .padding(.horizontal, 28)
                 .offset(y: buttonsOffset)
                 .opacity(buttonsOpacity)
 
-                // Footer with SJSU branding
                 VStack(spacing: 8) {
                     HStack(spacing: 12) {
                         Image(systemName: "shield.checkered")
@@ -175,18 +174,25 @@ struct WelcomeView: View {
                         Text("Safe & Secure")
                             .font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.black.opacity(0.58))
 
-                    Text("🎓 Powered by SJSU Students")
+                    Text("Powered by SJSU Students")
                         .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(.black.opacity(0.42))
                 }
                 .padding(.top, 24)
                 .padding(.bottom, 40)
                 .opacity(buttonsOpacity)
             }
         }
-        .onAppear { animate() }
+        .onAppear {
+            animate()
+            // Start pulsing ring animation
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                glowScale = 1.15
+                glowOpacity = 0.0
+            }
+        }
         .fullScreenCover(isPresented: $showLogin)  { LoginView() }
         .fullScreenCover(isPresented: $showSignUp) { SignUpView() }
     }
@@ -220,13 +226,13 @@ private struct StatPill: View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(DesignSystem.Colors.sjsuGold)
+                .foregroundColor(Color(hex: "84CC16"))
             Text(value)
                 .font(.system(size: 17, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(.black.opacity(0.88))
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
+                .foregroundColor(.black.opacity(0.52))
         }
         .frame(maxWidth: .infinity)
     }

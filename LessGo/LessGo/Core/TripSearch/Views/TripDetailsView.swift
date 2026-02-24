@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import MapKit
+import CoreLocation
 
 struct TripDetailsView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -9,61 +9,70 @@ struct TripDetailsView: View {
 
     let trip: Trip
 
-    @State private var region: MKCoordinateRegion
     @State private var seatsSelected = 1
     @State private var showBookingSheet = false
     @State private var showLoginPrompt = false
     @State private var showVerificationSheet = false
+    @State private var routeInfo: RouteMapInfo?
+    @State private var hasCompletedBookingForThisTrip = false
 
     init(trip: Trip) {
         self.trip = trip
-        let center = trip.originPoint?.clLocationCoordinate2D ?? AppConstants.sjsuCoordinate
-        _region = State(initialValue: MKCoordinateRegion(
-            center: center,
-            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
-        ))
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
+        ZStack(alignment: .top) {
+            ZStack {
+                Color(hex: "F4F6F2").ignoresSafeArea()
+                Circle()
+                    .fill(Color(hex: "A3E635").opacity(0.10))
+                    .frame(width: 260)
+                    .offset(x: 150, y: 540)
+                    .ignoresSafeArea()
+            }
 
-                // ── Hero Map ──
-                heroMap
-                    .frame(height: 220)
-                    .clipped()
-
+            ScrollView {
                 VStack(spacing: 0) {
-                    // ── Route Card ──
-                    routeCard
-                        .padding(.horizontal, AppConstants.pagePadding)
-                        .padding(.top, -28) // overlap with map
+                    heroMap
+                        .frame(height: 310)
+                        .clipped()
 
-                    // ── Driver Card ──
-                    driverCard
-                        .padding(.horizontal, AppConstants.pagePadding)
-                        .padding(.top, AppConstants.itemSpacing)
+                    VStack(spacing: 14) {
+                        Capsule()
+                            .fill(Color.black.opacity(0.12))
+                            .frame(width: 44, height: 5)
+                            .padding(.top, 10)
 
-                    // ── Trip Info Grid ──
-                    infoGrid
-                        .padding(.horizontal, AppConstants.pagePadding)
-                        .padding(.top, AppConstants.itemSpacing)
+                        routeCard
+                        driverCard
+                        infoGrid
+                        seatsSelector
 
-                    // ── Seats Selector ──
-                    seatsSelector
-                        .padding(.horizontal, AppConstants.pagePadding)
-                        .padding(.top, AppConstants.itemSpacing)
-
-                    Spacer().frame(height: 120)
+                        Spacer().frame(height: 120)
+                    }
+                    .padding(.horizontal, AppConstants.pagePadding)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(Color.white.opacity(0.98))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            )
+                    )
+                    .offset(y: -36)
+                    .padding(.bottom, -36)
                 }
             }
+            .ignoresSafeArea(edges: .top)
         }
-        .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottom) { bookButton }
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle("")
         .sheet(isPresented: $showBookingSheet) {
-            BookingConfirmationView(trip: trip, seats: seatsSelected)
+            BookingConfirmationView(trip: trip, seats: seatsSelected) {
+                hasCompletedBookingForThisTrip = true
+                dismiss()
+            }
                 .environmentObject(authVM)
                 .environmentObject(bookingVM)
         }
@@ -83,33 +92,63 @@ struct TripDetailsView: View {
 
     private var heroMap: some View {
         ZStack {
-            Map(coordinateRegion: $region,
-                annotationItems: mapAnnotations) { item in
-                MapAnnotation(coordinate: item.coordinate) {
-                    VStack(spacing: 0) {
-                        ZStack {
-                            Circle()
-                                .fill(item.isDestination ? Color.brandRed : Color.brand)
-                                .frame(width: 36, height: 36)
-                            Image(systemName: item.isDestination ? "mappin" : "car.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        Triangle()
-                            .fill(item.isDestination ? Color.brandRed : Color.brand)
-                            .frame(width: 12, height: 8)
-                    }
+            RouteMapView(
+                origin: trip.originPoint?.clLocationCoordinate2D,
+                destination: trip.destinationPoint?.clLocationCoordinate2D,
+                driver: nil,
+                showsUserLocation: false,
+                onRouteUpdated: { info in
+                    routeInfo = info
                 }
-            }
+            )
 
-            // Gradient overlay at bottom
             LinearGradient(
-                colors: [.clear, Color.appBackground],
+                colors: [Color.black.opacity(0.62), Color.black.opacity(0.22), .clear],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 80)
+            .frame(height: 120)
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            LinearGradient(
+                colors: [.clear, Color(hex: "F4F6F2")],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 120)
             .frame(maxHeight: .infinity, alignment: .bottom)
+
+            VStack {
+                HStack {
+                    HStack(spacing: 8) {
+                        Image(systemName: "map.fill")
+                        Text("Ride Preview")
+                    }
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.12))
+                    .overlay(
+                        Capsule().strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+                    )
+                    .clipShape(Capsule())
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Label(routeDistanceText, systemImage: "arrow.left.and.right")
+                        Label(estimatedDriveTimeText, systemImage: "clock")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.black.opacity(0.28))
+                    .clipShape(Capsule())
+                }
+                .padding(.top, 58)
+                .padding(.horizontal, AppConstants.pagePadding)
+                Spacer()
+            }
         }
     }
 
@@ -117,11 +156,29 @@ struct TripDetailsView: View {
 
     private var routeCard: some View {
         VStack(spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Trip Route")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(.textPrimary)
+                    Text("Pickup to dropoff")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                routeMetricChip(icon: "point.topleft.down.curvedto.point.bottomright.up", text: routeDistanceText, color: .brand)
+                routeMetricChip(icon: "clock", text: estimatedDriveTimeText, color: Color(hex: "84CC16"))
+                Spacer()
+            }
+
             HStack(alignment: .top, spacing: 14) {
                 // Timeline dots
                 VStack(spacing: 0) {
-                    Circle().fill(Color.brand).frame(width: 12, height: 12)
-                    Rectangle().fill(Color.gray.opacity(0.3)).frame(width: 2, height: 40)
+                    Circle().fill(Color.brand).frame(width: 14, height: 14)
+                    Rectangle().fill(Color.gray.opacity(0.3)).frame(width: 2, height: 42)
                     Image(systemName: "mappin.circle.fill").font(.system(size: 16)).foregroundColor(.brandRed)
                 }
                 .padding(.top, 2)
@@ -140,10 +197,39 @@ struct TripDetailsView: View {
                 Spacer()
             }
         }
-        .padding(AppConstants.cardPadding)
-        .background(Color.cardBackground)
-        .cornerRadius(AppConstants.cardRadius)
-        .shadow(color: .black.opacity(0.1), radius: 14, x: 0, y: 6)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                )
+                .overlay(alignment: .top) {
+                    LinearGradient(
+                        colors: [Color.brand.opacity(0.08), .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 42)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                }
+        )
+        .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 6)
+    }
+
+    private func routeMetricChip(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.1))
+        .cornerRadius(999)
     }
 
     // MARK: - Driver Card
@@ -152,41 +238,76 @@ struct TripDetailsView: View {
         HStack(spacing: 14) {
             // Avatar
             ZStack {
-                Circle().fill(Color.brand.opacity(0.12)).frame(width: 56, height: 56)
-                Text(trip.driver?.name.prefix(1).uppercased() ?? "?")
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [DesignSystem.Colors.sjsuBlue.opacity(0.18), DesignSystem.Colors.sjsuBlue.opacity(0.06)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [DesignSystem.Colors.sjsuBlue.opacity(0.5), DesignSystem.Colors.sjsuTeal.opacity(0.3)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
+                            )
+                    )
+                Text(trip.driver?.name.prefix(1).uppercased() ?? "D")
                     .font(.system(size: 22, weight: .bold)).foregroundColor(.brand)
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(trip.driver?.name ?? "Driver")
-                    .font(.system(size: 16, weight: .bold)).foregroundColor(.textPrimary)
+                Text("Driver")
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
 
                 HStack(spacing: 6) {
                     StarRatingView(rating: trip.driver?.rating ?? 0, size: 13)
                     Text(String(format: "%.1f", trip.driver?.rating ?? 0))
-                        .font(.system(size: 13, weight: .semibold)).foregroundColor(.textSecondary)
+                        .font(.system(size: 13, weight: .semibold)).foregroundColor(.white.opacity(0.78))
                 }
 
-                if let vehicle = trip.driver?.vehicleInfo {
-                    HStack(spacing: 5) {
-                        Image(systemName: "car.fill").font(.system(size: 11)).foregroundColor(.textTertiary)
-                        Text(vehicle).font(.system(size: 12)).foregroundColor(.textTertiary).lineLimit(1)
-                    }
+                HStack(spacing: 5) {
+                    Image(systemName: "car.fill").font(.system(size: 11)).foregroundColor(.white.opacity(0.56))
+                    Text("Details revealed after payment").font(.system(size: 12)).foregroundColor(.white.opacity(0.56))
                 }
             }
 
             Spacer()
 
-            // Verified badge
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(hex: "17191E"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .overlay(alignment: .topTrailing) {
             if trip.driver?.sjsuIdStatus == .verified {
-                VStack(spacing: 4) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 22)).foregroundColor(.brandGreen)
-                    Text("Verified").font(.system(size: 10, weight: .semibold)).foregroundColor(.brandGreen)
-                }
+                Label("Verified", systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.brandGreen)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.brandGreen.opacity(0.15), Color.brandGreen.opacity(0.08)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(999)
+                    .padding(12)
             }
         }
-        .cardStyle()
     }
 
     // MARK: - Info Grid
@@ -202,7 +323,12 @@ struct TripDetailsView: View {
                 InfoCell(icon: "1.circle.fill", label: "Trip Type", value: "One-time", color: .textTertiary)
             }
         }
-        .cardStyle()
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+        )
     }
 
     // MARK: - Seats Selector
@@ -228,7 +354,7 @@ struct TripDetailsView: View {
                         }
                     }) {
                         Image(systemName: "minus.circle.fill")
-                            .font(.system(size: 28))
+                            .font(.system(size: 32))
                             .foregroundColor(seatsSelected > 1 ? .brand : .gray.opacity(0.3))
                     }
 
@@ -244,20 +370,24 @@ struct TripDetailsView: View {
                         }
                     }) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 28))
+                            .font(.system(size: 32))
                             .foregroundColor(seatsSelected < trip.seatsAvailable ? .brand : .gray.opacity(0.3))
                     }
                 }
             }
         }
-        .cardStyle()
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+        )
     }
 
     // MARK: - Book Button
 
     private var bookButton: some View {
         VStack(spacing: 0) {
-            Divider()
             VStack(spacing: 12) {
 
                 // Verification required banner (tappable)
@@ -287,9 +417,11 @@ struct TripDetailsView: View {
                 }
 
                 PrimaryButton(
-                    title: "Book This Ride",
+                    title: hasCompletedBookingForThisTrip ? "Booked" : "Book This Ride",
                     icon: "checkmark.circle.fill",
-                    isEnabled: authVM.currentUser?.sjsuIdStatus == .verified && trip.status == .active
+                    isEnabled: !hasCompletedBookingForThisTrip &&
+                        authVM.currentUser?.sjsuIdStatus == .verified &&
+                        trip.status == .pending
                 ) {
                     guard authVM.isAuthenticated else { showLoginPrompt = true; return }
                     showBookingSheet = true
@@ -297,22 +429,54 @@ struct TripDetailsView: View {
             }
             .padding(.horizontal, AppConstants.pagePadding)
             .padding(.vertical, 16)
-            .background(Color.cardBackground)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.white.opacity(0.95))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+            )
+            .overlay(alignment: .top) { Divider().opacity(0.3) }
+
+            // HomeView uses a floating custom tab bar overlay, so reserve space
+            // when TripDetails is pushed from the rider tab stack.
+            Color.clear
+                .frame(height: 86)
         }
     }
 
     // MARK: - Helpers
 
-    private var mapAnnotations: [MapPin] {
-        var pins: [MapPin] = []
-        if let origin = trip.originPoint {
-            pins.append(MapPin(id: "origin", coordinate: origin.clLocationCoordinate2D, isDestination: false))
+    private var routeDistanceText: String {
+        if let info = routeInfo {
+            let miles = info.distanceMeters / 1609.344
+            return String(format: "%.1f mi", miles)
         }
-        if let dest = trip.destinationPoint {
-            pins.append(MapPin(id: "dest", coordinate: dest.clLocationCoordinate2D, isDestination: true))
-        }
-        return pins
+        guard let origin = trip.originPoint, let dest = trip.destinationPoint else { return "Distance unavailable" }
+        let a = CLLocation(latitude: origin.lat, longitude: origin.lng)
+        let b = CLLocation(latitude: dest.lat, longitude: dest.lng)
+        let miles = a.distance(from: b) / 1609.344
+        return String(format: "%.1f mi", miles)
     }
+
+    private var estimatedDriveTimeText: String {
+        let mins: Int
+        if let info = routeInfo {
+            mins = max(1, Int(info.expectedTravelTime / 60.0))
+        } else {
+            guard let origin = trip.originPoint, let dest = trip.destinationPoint else { return "ETA unavailable" }
+            let a = CLLocation(latitude: origin.lat, longitude: origin.lng)
+            let b = CLLocation(latitude: dest.lat, longitude: dest.lng)
+            let miles = a.distance(from: b) / 1609.344
+            mins = max(5, Int((miles / 28.0) * 60.0))
+        }
+        if mins >= 60 {
+            return "\(mins / 60)h \(mins % 60)m"
+        }
+        return "\(mins) min"
+    }
+
 }
 
 // MARK: - Info Cell
@@ -341,25 +505,4 @@ struct InfoCell: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-}
-
-// MARK: - Triangle Shape
-
-struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { p in
-            p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
-            p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            p.closeSubpath()
-        }
-    }
-}
-
-// MARK: - Map Pin Model
-
-struct MapPin: Identifiable {
-    let id: String
-    let coordinate: CLLocationCoordinate2D
-    let isDestination: Bool
 }

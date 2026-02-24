@@ -43,9 +43,45 @@ struct Coordinate: Codable {
 }
 
 enum TripStatus: String, Codable {
-    case active
-    case completed
-    case cancelled
+    case pending        // Trip created, waiting for driver to start
+    case enRoute = "en_route"       // Driver heading to pickup location
+    case arrived        // Driver at pickup location
+    case inProgress = "in_progress" // Rider in car, heading to destination
+    case completed      // Trip finished
+    case cancelled      // Trip cancelled
+
+    var displayName: String {
+        switch self {
+        case .pending: return "Pending"
+        case .enRoute: return "En Route to Pickup"
+        case .arrived: return "Arrived at Pickup"
+        case .inProgress: return "Trip in Progress"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .pending: return "clock.fill"
+        case .enRoute: return "car.fill"
+        case .arrived: return "location.fill"
+        case .inProgress: return "arrow.triangle.turn.up.right.circle.fill"
+        case .completed: return "checkmark.circle.fill"
+        case .cancelled: return "xmark.circle.fill"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .pending: return "brandGold"
+        case .enRoute: return "brand"
+        case .arrived: return "brandGreen"
+        case .inProgress: return "brand"
+        case .completed: return "brandGreen"
+        case .cancelled: return "brandRed"
+        }
+    }
 }
 
 // MARK: - Trip Request/Response Models

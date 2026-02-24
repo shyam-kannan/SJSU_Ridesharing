@@ -8,6 +8,63 @@ const pool = new Pool({
 });
 
 /**
+ * Check if a driver has overlapping trips
+ * @param driverId Driver's UUID
+ * @param originPoint Origin coordinates
+ * @param destinationPoint Destination coordinates
+ * @param departureTime Trip departure time
+ * @throws Error if overlap detected
+ */
+const checkTripOverlap = async (
+  driverId: string,
+  originPoint: GeoPoint,
+  destinationPoint: GeoPoint,
+  departureTime: Date
+): Promise<void> => {
+  // Calculate distance using Haversine formula
+  const R = 3959; // Earth radius in miles
+  const lat1 = (originPoint.lat * Math.PI) / 180;
+  const lat2 = (destinationPoint.lat * Math.PI) / 180;
+  const deltaLat = ((destinationPoint.lat - originPoint.lat) * Math.PI) / 180;
+  const deltaLng = ((destinationPoint.lng - originPoint.lng) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distanceMiles = R * c;
+
+  // Estimate duration: 2.5 min/mile (conservative estimate for Bay Area traffic)
+  const estimatedDurationMinutes = Math.ceil(distanceMiles * 2.5);
+
+  // Query for overlapping pending trips
+  const overlapQuery = `
+    SELECT trip_id, origin, destination, departure_time
+    FROM trips
+    WHERE driver_id = $1
+      AND status = 'pending'
+      AND (
+        (departure_time BETWEEN $2 AND ($2 + INTERVAL '${estimatedDurationMinutes} minutes'))
+        OR
+        ($2 BETWEEN departure_time AND (departure_time + INTERVAL '2 hours'))
+      )
+  `;
+
+  const result = await pool.query(overlapQuery, [driverId, departureTime]);
+
+  if (result.rows.length > 0) {
+    const existingTrip = result.rows[0];
+    const existingTime = new Date(existingTrip.departure_time).toLocaleString('en-US', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+    throw new Error(
+      `You already have a trip scheduled at ${existingTime}. Please choose a different time.`
+    );
+  }
+};
+
+/**
  * Create a new trip
  * @param driverId Driver's UUID
  * @param tripData Trip creation data
@@ -21,6 +78,9 @@ export const createTrip = async (
 
   // Geocode origin and destination
   const { originPoint, destinationPoint } = await geocodeTripLocations(origin, destination);
+
+  // Check for overlapping trips
+  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time));
 
   const query = `
     INSERT INTO trips (
@@ -48,7 +108,7 @@ export const createTrip = async (
     departure_time,
     seats_available,
     recurrence || null,
-    TripStatus.Active,
+    TripStatus.Pending,
   ];
 
   const result = await pool.query(query, values);
@@ -195,7 +255,7 @@ export const searchTripsNearby = async (
     paramIndex++;
   } else {
     query += ` AND t.status = $${paramIndex}`;
-    values.push(TripStatus.Active);
+    values.push(TripStatus.Pending);
     paramIndex++;
   }
 
@@ -453,11 +513,202 @@ export const cancelTrip = async (tripId: string, driverId: string): Promise<Trip
   };
 };
 
+/**
+ * Update trip state (for real-time ride tracking)
+ * @param tripId Trip UUID
+ * @param newStatus New trip status
+ * @returns Updated trip
+ */
+export const updateTripState = async (tripId: string, newStatus: TripStatus): Promise<any> => {
+  // Determine which timestamp to update based on state
+  let timestampField = '';
+
+  switch (newStatus) {
+    case TripStatus.EnRoute:
+      timestampField = 'started_at = current_timestamp,';
+      break;
+    case TripStatus.Arrived:
+      timestampField = 'arrived_at = current_timestamp,';
+      break;
+    case TripStatus.InProgress:
+      timestampField = 'pickup_completed_at = current_timestamp,';
+      break;
+    case TripStatus.Completed:
+      timestampField = 'completed_at = current_timestamp,';
+      break;
+  }
+
+  const query = `
+    UPDATE trips
+    SET status = $1,
+        ${timestampField}
+        updated_at = current_timestamp
+    WHERE trip_id = $2
+    RETURNING trip_id, driver_id, origin, destination,
+      ST_X(origin_point::geometry) as origin_lng,
+      ST_Y(origin_point::geometry) as origin_lat,
+      ST_X(destination_point::geometry) as destination_lng,
+      ST_Y(destination_point::geometry) as destination_lat,
+      departure_time, seats_available, recurrence, status,
+      started_at, arrived_at, pickup_completed_at, completed_at,
+      created_at, updated_at
+  `;
+
+  const result = await pool.query(query, [newStatus, tripId]);
+  const updatedTrip = result.rows[0];
+
+  return {
+    ...updatedTrip,
+    origin_point: { lat: updatedTrip.origin_lat, lng: updatedTrip.origin_lng },
+    destination_point: { lat: updatedTrip.destination_lat, lng: updatedTrip.destination_lng },
+  };
+};
+
+/**
+ * Update driver location for active trip
+ * @param tripId Trip UUID
+ * @param driverId Driver UUID
+ * @param locationData Location data
+ */
+export const updateTripLocation = async (
+  tripId: string,
+  driverId: string,
+  locationData: {
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    speed?: number;
+    accuracy?: number;
+  }
+): Promise<void> => {
+  const query = `
+    INSERT INTO trip_locations (trip_id, driver_id, location, heading, speed, accuracy)
+    VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7)
+  `;
+
+  await pool.query(query, [
+    tripId,
+    driverId,
+    locationData.longitude,
+    locationData.latitude,
+    locationData.heading || null,
+    locationData.speed || null,
+    locationData.accuracy || null,
+  ]);
+
+  console.log(`📍 Location updated for trip ${tripId}: (${locationData.latitude}, ${locationData.longitude})`);
+};
+
+/**
+ * Get latest driver location for trip
+ * @param tripId Trip UUID
+ * @returns Latest location data
+ */
+export const getTripLocation = async (tripId: string): Promise<any> => {
+  const query = `
+    SELECT
+      location_id,
+      trip_id,
+      driver_id,
+      ST_Y(location::geometry) as latitude,
+      ST_X(location::geometry) as longitude,
+      heading,
+      speed,
+      accuracy,
+      created_at
+    FROM trip_locations
+    WHERE trip_id = $1
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  const result = await pool.query(query, [tripId]);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+};
+
+/**
+ * Send a message in trip chat
+ * @param tripId Trip UUID
+ * @param senderId Sender UUID
+ * @param messageText Message content
+ * @returns Created message
+ */
+export const sendMessage = async (
+  tripId: string,
+  senderId: string,
+  messageText: string
+): Promise<any> => {
+  const query = `
+    INSERT INTO messages (trip_id, sender_id, message_text)
+    VALUES ($1, $2, $3)
+    RETURNING message_id, trip_id, sender_id, message_text, created_at, read_at
+  `;
+
+  const result = await pool.query(query, [tripId, senderId, messageText]);
+  return result.rows[0];
+};
+
+/**
+ * Get messages for a trip
+ * @param tripId Trip UUID
+ * @param limit Maximum number of messages to return
+ * @returns Array of messages
+ */
+export const getTripMessages = async (tripId: string, limit: number = 100): Promise<any[]> => {
+  const query = `
+    SELECT
+      m.message_id,
+      m.trip_id,
+      m.sender_id,
+      m.message_text,
+      m.created_at,
+      m.read_at,
+      u.name as sender_name,
+      u.role as sender_role
+    FROM messages m
+    JOIN users u ON m.sender_id = u.user_id
+    WHERE m.trip_id = $1
+    ORDER BY m.created_at ASC
+    LIMIT $2
+  `;
+
+  const result = await pool.query(query, [tripId, limit]);
+  return result.rows;
+};
+
+/**
+ * Mark messages as read
+ * @param tripId Trip UUID
+ * @param userId User ID (marks all messages NOT sent by this user as read)
+ */
+export const markMessagesAsRead = async (tripId: string, userId: string): Promise<void> => {
+  const query = `
+    UPDATE messages
+    SET read_at = current_timestamp
+    WHERE trip_id = $1
+      AND sender_id != $2
+      AND read_at IS NULL
+  `;
+
+  await pool.query(query, [tripId, userId]);
+};
+
 export default {
+  updateTripLocation,
+  getTripLocation,
   createTrip,
   getTripById,
   searchTripsNearby,
   listTrips,
   updateTrip,
   cancelTrip,
+  updateTripState,
+  sendMessage,
+  getTripMessages,
+  markMessagesAsRead,
 };

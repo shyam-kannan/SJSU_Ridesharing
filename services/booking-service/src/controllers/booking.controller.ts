@@ -14,6 +14,21 @@ async function fireEmail(path: string, body: object): Promise<void> {
   }
 }
 
+// Fire-and-forget in-app notification (never throws)
+async function fireInAppNotification(body: {
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  data?: object;
+}): Promise<void> {
+  try {
+    await axios.post(`${config.notificationServiceUrl}/notifications/send`, body);
+  } catch {
+    console.log(`[NOTIFICATION] In-app notification failed (non-critical) for user ${body.user_id}`);
+  }
+}
+
 export const createBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -109,7 +124,31 @@ export const confirmBooking = async (req: AuthRequest, res: Response): Promise<v
           departureTime: depTime,
           seatsBooked: booking.seats_booked,
         });
+
+        fireInAppNotification({
+          user_id: booking.trip.driver.user_id,
+          type: 'booking_confirmed',
+          title: 'New Booking Confirmed',
+          message: `${booking.rider.name} booked ${booking.seats_booked} seat(s) on your trip`,
+          data: {
+            trip_id: booking.trip.trip_id,
+            booking_id: booking.booking_id,
+            rider_name: booking.rider.name,
+            seats_booked: booking.seats_booked,
+          },
+        });
       }
+
+      fireInAppNotification({
+        user_id: booking.rider.user_id,
+        type: 'booking_confirmed',
+        title: 'Ride Confirmed',
+        message: `Your ride from ${booking.trip.origin} to ${booking.trip.destination} is confirmed`,
+        data: {
+          trip_id: booking.trip.trip_id,
+          booking_id: booking.booking_id,
+        },
+      });
     }
   } catch (error) {
     console.error('Confirm booking error:', error);
@@ -147,6 +186,24 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
         refundAmount,
         bookingId: booking.booking_id,
       });
+
+      fireInAppNotification({
+        user_id: booking.rider.user_id,
+        type: 'booking_cancelled',
+        title: 'Booking Cancelled',
+        message: `Your booking for ${booking.trip.destination} was cancelled`,
+        data: { trip_id: booking.trip.trip_id, booking_id: booking.booking_id },
+      });
+
+      if (booking.trip.driver) {
+        fireInAppNotification({
+          user_id: booking.trip.driver.user_id,
+          type: 'booking_cancelled',
+          title: 'Passenger Cancelled',
+          message: `${booking.rider.name} cancelled their booking`,
+          data: { trip_id: booking.trip.trip_id, booking_id: booking.booking_id, rider_name: booking.rider.name },
+        });
+      }
     }
   } catch (error) {
     console.error('Cancel booking error:', error);

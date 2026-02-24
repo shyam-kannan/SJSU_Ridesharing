@@ -15,7 +15,7 @@ class CreateTripViewModel: ObservableObject {
     @Published var userLocation = ""  // The one location user enters
     @Published var origin = ""
     @Published var destination = ""
-    @Published var departureDate = Date().addingTimeInterval(3600)
+    @Published var departureDate = Date.currentRoundedToMinute
     @Published var seatsAvailable = 2
     @Published var isRecurring = false
     @Published var recurrenceDays: Set<Int> = []  // 1=Mon ... 7=Sun
@@ -40,7 +40,7 @@ class CreateTripViewModel: ObservableObject {
 
     var isStep0Valid: Bool { true }  // Direction is always valid
     var isStep1Valid: Bool { !userLocation.isEmpty && userLocation.count >= 3 }
-    var isStep2Valid: Bool { departureDate > Date() }
+    var isStep2Valid: Bool { departureDate >= Date().addingTimeInterval(-60) }
     var isStep3Valid: Bool { seatsAvailable >= 1 }
 
     var canProceed: Bool {
@@ -119,10 +119,10 @@ class CreateTripViewModel: ObservableObject {
             withAnimation { isSuccess = true }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
 
@@ -133,7 +133,7 @@ class CreateTripViewModel: ObservableObject {
         userLocation = ""
         origin = ""
         destination = ""
-        departureDate = Date().addingTimeInterval(3600)
+        departureDate = Date.currentRoundedToMinute
         seatsAvailable = 2
         isRecurring = false
         recurrenceDays = []

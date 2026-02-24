@@ -59,16 +59,20 @@ struct CustomTextField: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
             .background(
-                RoundedRectangle(cornerRadius: AppConstants.inputRadius)
-                    .fill(Color.appBackground)
+                RoundedRectangle(cornerRadius: AppConstants.inputRadius, style: .continuous)
+                    .fill(Color.panelGradient)
                     .overlay(
-                        RoundedRectangle(cornerRadius: AppConstants.inputRadius)
+                        RoundedRectangle(cornerRadius: AppConstants.inputRadius, style: .continuous)
                             .strokeBorder(
                                 errorMessage != nil ? Color.brandRed.opacity(0.7) :
-                                    fieldFocused ? Color.brand.opacity(0.6) : Color.clear,
-                                lineWidth: 1.5
+                                    fieldFocused ? Color.brand.opacity(0.65) : Color.brand.opacity(0.08),
+                                lineWidth: fieldFocused || errorMessage != nil ? 1.5 : 1
                             )
                     )
+                    .shadow(color: fieldFocused ? Color.brand.opacity(0.12) : .black.opacity(0.04),
+                            radius: fieldFocused ? 14 : 8,
+                            x: 0,
+                            y: fieldFocused ? 6 : 3)
             )
             .animation(.easeInOut(duration: 0.2), value: fieldFocused)
 
@@ -93,17 +97,20 @@ struct SearchTextField: View {
     let placeholder: String
     @Binding var text: String
     var onSubmit: (() -> Void)? = nil
+    /// When true, uses glassmorphism + elevated shadow — for floating over maps
+    var isFloating: Bool = false
 
     @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.textTertiary)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(isFocused ? .brand : .textTertiary)
+                .animation(.easeInOut(duration: 0.18), value: isFocused)
 
             TextField(placeholder, text: $text)
-                .font(.system(size: 16))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(.textPrimary)
                 .autocapitalization(.none)
                 .focused($isFocused)
@@ -111,19 +118,36 @@ struct SearchTextField: View {
                 .onSubmit { onSubmit?() }
 
             if !text.isEmpty {
-                Button(action: { text = "" }) {
+                Button(action: { text = ""; UIImpactFeedbackGenerator(style: .light).impactOccurred() }) {
                     Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17))
                         .foregroundColor(.textTertiary)
                 }
+                .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.appBackground)
-                .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+            Group {
+                if isFloating {
+                    AnyView(
+                        Capsule(style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.14), radius: 20, x: 0, y: 8)
+                    )
+                } else {
+                    AnyView(
+                        Capsule(style: .continuous)
+                            .fill(Color.panelGradient)
+                            .overlay(Capsule().strokeBorder(Color.brand.opacity(0.09), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
+                    )
+                }
+            }
         )
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: text.isEmpty)
     }
 }
 

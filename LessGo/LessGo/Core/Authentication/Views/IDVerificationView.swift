@@ -431,7 +431,7 @@ struct IDVerificationView: View {
                 withAnimation { uploadSuccess = true }
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } catch {
-                errorMessage = "Upload failed: \(error.localizedDescription)"
+                errorMessage = (error as? NetworkError)?.userMessage ?? "Upload failed. Please try again."
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
             isUploading = false

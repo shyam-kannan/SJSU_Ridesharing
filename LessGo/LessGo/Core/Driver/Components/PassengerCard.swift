@@ -2,25 +2,25 @@ import SwiftUI
 
 struct PassengerCard: View {
     let passenger: BookingWithRider
+    private var hasActions: Bool { (passenger.riderPhone?.isEmpty == false) || passenger.pickupLocation != nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Top Row: Avatar, Name, Rating
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
                 // Circular avatar with SJSU Blue border
                 ZStack {
                     Circle()
                         .fill(DesignSystem.Colors.sjsuBlue.opacity(0.1))
-                        .frame(width: 50, height: 50)
+                        .frame(width: 56, height: 56)
 
                     if let pictureUrl = passenger.riderPicture, !pictureUrl.isEmpty {
                         // TODO: AsyncImage for profile picture
                         Text(passenger.riderName.prefix(1).uppercased())
-                            .font(.system(size: 20, weight: .bold))
+                            .font(.system(size: 22, weight: .bold))
                             .foregroundColor(DesignSystem.Colors.sjsuBlue)
                     } else {
                         Text(passenger.riderName.prefix(1).uppercased())
-                            .font(.system(size: 20, weight: .bold))
+                            .font(.system(size: 22, weight: .bold))
                             .foregroundColor(DesignSystem.Colors.sjsuBlue)
                     }
                 }
@@ -31,8 +31,9 @@ struct PassengerCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(passenger.riderName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.textPrimary)
+                        .lineLimit(1)
 
                     StarRatingView(rating: passenger.riderRating, size: 12)
                 }
@@ -47,39 +48,55 @@ struct PassengerCard: View {
                         .font(.system(size: 13, weight: .bold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .background(DesignSystem.Colors.sjsuGold)
-                .cornerRadius(8)
+                .clipShape(Capsule())
             }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: "F8FAFC"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+            )
 
             // Pickup Location Badge (if shared)
             if let pickup = passenger.pickupLocation {
-                HStack(spacing: 6) {
+                HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "mappin.circle.fill")
                         .foregroundColor(DesignSystem.Colors.sjsuBlue)
                         .font(.system(size: 14))
+                        .padding(.top, 1)
 
                     if let address = pickup.address {
                         Text(address)
                             .font(.system(size: 13))
                             .foregroundColor(.textSecondary)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("Lat: \(pickup.lat, specifier: "%.4f"), Lng: \(pickup.lng, specifier: "%.4f")")
                             .font(.system(size: 13))
                             .foregroundColor(.textSecondary)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(DesignSystem.Colors.sjsuBlue.opacity(0.08))
-                .cornerRadius(10)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(DesignSystem.Colors.sjsuBlue.opacity(0.15), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
             // Action Buttons
-            HStack(spacing: 10) {
+            if hasActions {
+                HStack(spacing: 10) {
                 // Call Button
                 if let phone = passenger.riderPhone, !phone.isEmpty {
                     Button(action: {
@@ -95,9 +112,9 @@ struct PassengerCard: View {
                         }
                         .foregroundColor(DesignSystem.Colors.sjsuBlue)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 12)
                         .background(DesignSystem.Colors.sjsuBlue.opacity(0.1))
-                        .cornerRadius(10)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                 }
 
@@ -117,16 +134,23 @@ struct PassengerCard: View {
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 12)
                         .background(DesignSystem.Colors.sjsuBlue)
-                        .cornerRadius(10)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                 }
             }
+            }
         }
-        .padding(16)
-        .background(Color.cardBackground)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
     }
 }

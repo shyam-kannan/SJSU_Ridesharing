@@ -116,10 +116,10 @@ struct ChangePasswordView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             showSuccess = true
         } catch let error as NetworkError {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }

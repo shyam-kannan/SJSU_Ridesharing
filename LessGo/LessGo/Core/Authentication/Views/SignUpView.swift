@@ -28,18 +28,9 @@ struct SignUpView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-
-                    // ── Header ──
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Create account")
-                            .font(.system(size: 32, weight: .bold))
-                            .foregroundColor(.textPrimary)
-                        Text("Join thousands of SJSU commuters")
-                            .font(.system(size: 16))
-                            .foregroundColor(.textSecondary)
-                    }
-                    .padding(.top, 40)
-                    .padding(.horizontal, AppConstants.pagePadding)
+                    signupHeroHeader
+                        .padding(.top, 14)
+                        .padding(.horizontal, AppConstants.pagePadding)
 
                     // ── Role Selector ──
                     VStack(alignment: .leading, spacing: 10) {
@@ -57,8 +48,20 @@ struct SignUpView: View {
                             }
                         }
                     }
-                    .padding(.top, 32)
+                    .padding(.top, 18)
                     .padding(.horizontal, AppConstants.pagePadding)
+                    .padding(.bottom, 4)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(Color.white.opacity(0.88))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, AppConstants.pagePadding)
+                    .padding(.top, 14)
 
                     // ── Form Fields ──
                     VStack(spacing: 16) {
@@ -121,6 +124,17 @@ struct SignUpView: View {
                     }
                     .padding(.top, 24)
                     .padding(.horizontal, AppConstants.pagePadding)
+                    .padding(.bottom, 18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .fill(Color.white.opacity(0.97))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, AppConstants.pagePadding)
+                    .padding(.top, 14)
                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: password.isEmpty)
 
                     // ── Error Banner ──
@@ -151,7 +165,21 @@ struct SignUpView: View {
                     .padding(.bottom, 32)
                 }
             }
-            .background(Color.cardBackground.ignoresSafeArea())
+            .background(
+                ZStack {
+                    Color(hex: "F5F7F2").ignoresSafeArea()
+                    Circle()
+                        .fill(Color(hex: "A3E635").opacity(0.12))
+                        .frame(width: 280)
+                        .offset(x: 140, y: 520)
+                        .ignoresSafeArea()
+                    Circle()
+                        .fill(Color.black.opacity(0.03))
+                        .frame(width: 340)
+                        .offset(x: -140, y: 60)
+                        .ignoresSafeArea()
+                }
+            )
             .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -216,6 +244,60 @@ struct SignUpView: View {
             }
         }
     }
+
+    private var signupHeroHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Create account")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundColor(.black.opacity(0.9))
+                Spacer()
+                HStack(spacing: 6) {
+                    Image(systemName: "graduationcap.fill")
+                    Text("SJSU")
+                }
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.black.opacity(0.8))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(hex: "A3E635"))
+                .clipShape(Capsule())
+            }
+
+            Text("Join verified campus riders and drivers with one account.")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.textSecondary)
+
+            HStack(spacing: 8) {
+                signupChip("Rider", icon: "person.fill")
+                signupChip("Driver", icon: "car.fill")
+                signupChip("Live Chat", icon: "message.fill")
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(hex: "17191E"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
+    private func signupChip(_ title: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(.white.opacity(0.8))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.07))
+        .clipShape(Capsule())
+    }
 }
 
 // MARK: - Role Pill
@@ -236,13 +318,14 @@ private struct RolePill: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(isSelected ? Color.brand : Color.appBackground)
-            .foregroundColor(isSelected ? .white : .textSecondary)
-            .cornerRadius(14)
+            .background(isSelected ? Color(hex: "A3E635") : Color.white)
+            .foregroundColor(isSelected ? .black.opacity(0.9) : .textSecondary)
+            .cornerRadius(18)
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(isSelected ? Color.clear : Color.gray.opacity(0.2), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(isSelected ? Color.clear : Color.black.opacity(0.06), lineWidth: 1)
             )
+            .shadow(color: isSelected ? Color(hex: "A3E635").opacity(0.25) : .black.opacity(0.04), radius: 8, x: 0, y: 4)
         }
     }
 }

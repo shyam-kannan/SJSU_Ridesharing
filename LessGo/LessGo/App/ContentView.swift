@@ -38,40 +38,84 @@ struct ContentView: View {
 // MARK: - Splash Screen
 
 struct SplashScreen: View {
-    @State private var scale: CGFloat = 0.7
+    @State private var scale: CGFloat = 0.65
     @State private var opacity: Double = 0
+    @State private var taglineOpacity: Double = 0
+    @State private var ringScale: CGFloat = 0.8
+    @State private var ringOpacity: Double = 0.7
 
     var body: some View {
         ZStack {
             Color.heroGradient.ignoresSafeArea()
 
-            VStack(spacing: 16) {
+            // Subtle background circles for depth
+            Circle()
+                .fill(DesignSystem.Colors.sjsuGold.opacity(0.08))
+                .frame(width: 380)
+                .offset(x: 120, y: -180)
+                .ignoresSafeArea()
+
+            Circle()
+                .fill(Color.white.opacity(0.04))
+                .frame(width: 280)
+                .offset(x: -130, y: 200)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 28)
+                    // Pulsing gold ring
+                    Circle()
+                        .stroke(DesignSystem.Colors.sjsuGold.opacity(ringOpacity), lineWidth: 2)
+                        .frame(width: 128, height: 128)
+                        .scaleEffect(ringScale)
+
+                    // Logo card
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
                         .fill(.ultraThinMaterial)
-                        .frame(width: 100, height: 100)
+                        .frame(width: 104, height: 104)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 28)
-                                .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [DesignSystem.Colors.sjsuGold.opacity(0.6), Color.white.opacity(0.2)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1.5
+                                )
                         )
-                        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                        .shadow(color: .black.opacity(0.25), radius: 24, x: 0, y: 12)
 
                     Image(systemName: "car.2.fill")
-                        .font(.system(size: 44))
+                        .font(.system(size: 46))
                         .foregroundColor(.white)
                 }
 
-                Text("LessGo")
-                    .font(.system(size: 42, weight: .heavy))
-                    .foregroundColor(.white)
+                VStack(spacing: 8) {
+                    Text("LessGo")
+                        .font(.system(size: 46, weight: .black, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("SJSU Ridesharing")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.75))
+                        .opacity(taglineOpacity)
+                }
             }
             .scaleEffect(scale)
             .opacity(opacity)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+            withAnimation(DesignSystem.Animation.heroEntrance) {
                 scale = 1
                 opacity = 1
+            }
+            withAnimation(.easeInOut(duration: 0.5).delay(0.35)) {
+                taglineOpacity = 1
+            }
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true).delay(0.4)) {
+                ringScale = 1.18
+                ringOpacity = 0.0
             }
         }
     }

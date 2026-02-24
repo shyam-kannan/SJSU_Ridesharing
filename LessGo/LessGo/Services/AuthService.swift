@@ -39,6 +39,11 @@ class AuthService {
             KeychainManager.shared.saveAccessToken(response.accessToken)
             KeychainManager.shared.saveRefreshToken(response.refreshToken)
             KeychainManager.shared.saveUserId(response.user.id)
+            SavedAccountManager.shared.saveSession(
+                user: response.user,
+                accessToken: response.accessToken,
+                refreshToken: response.refreshToken
+            )
 
             #if DEBUG
             print("[AuthService] register() success – userId: \(response.user.id)")
@@ -67,18 +72,28 @@ class AuthService {
         KeychainManager.shared.saveAccessToken(response.accessToken)
         KeychainManager.shared.saveRefreshToken(response.refreshToken)
         KeychainManager.shared.saveUserId(response.user.id)
+        SavedAccountManager.shared.saveSession(
+            user: response.user,
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken
+        )
 
         return response
     }
 
-    func logout() async throws {
-        let _: EmptyResponse = try await network.request(
-            endpoint: "/auth/logout",
-            method: .post
-        )
+    /// Local sign-out used by the multi-account UX.
+    /// We intentionally do not revoke the backend refresh token by default,
+    /// otherwise "saved accounts" become unusable after sign out.
+    func logout(revokeRemoteSession: Bool = false) async throws {
+        if revokeRemoteSession {
+            let _: EmptyResponse = try await network.request(
+                endpoint: "/auth/logout",
+                method: .post
+            )
+        }
 
-        // Clear all stored credentials
-        KeychainManager.shared.clearAll()
+        // Clear only the active session so saved accounts remain available.
+        KeychainManager.shared.clearActiveSession()
     }
 
     func getCurrentUser() async throws -> User {
@@ -95,6 +110,37 @@ class AuthService {
             method: .get
         )
         return response.user
+    }
+
+    /// Refresh the access token using the stored refresh token
+    func refreshAccessToken() async throws -> String {
+        guard let refreshToken = KeychainManager.shared.getRefreshToken() else {
+            throw NetworkError.unauthorized
+        }
+
+        struct RefreshRequest: Encodable {
+            let refreshToken: String
+        }
+
+        struct RefreshResponse: Codable {
+            let accessToken: String
+        }
+
+        let response: RefreshResponse = try await network.request(
+            endpoint: "/auth/refresh",
+            method: .post,
+            body: RefreshRequest(refreshToken: refreshToken),
+            requiresAuth: false
+        )
+
+        // Save the new access token
+        KeychainManager.shared.saveAccessToken(response.accessToken)
+        if let userId = KeychainManager.shared.getUserId() {
+            KeychainManager.shared.saveAccessToken(response.accessToken, for: userId)
+            SavedAccountManager.shared.markUsed(userId)
+        }
+
+        return response.accessToken
     }
 
     // MARK: - SJSU ID Verification
@@ -156,5 +202,3 @@ struct TokenVerificationResponse: Codable {
     let valid: Bool
     let user: User
 }
-
-struct EmptyResponse: Codable {}

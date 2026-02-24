@@ -12,6 +12,7 @@ struct Booking: Codable, Identifiable {
     let updatedAt: Date
     let trip: Trip?
     let rider: User?
+    let pickupLocation: PickupLocation?
     let quote: Quote?
     let payment: Payment?
 
@@ -23,7 +24,9 @@ struct Booking: Codable, Identifiable {
         case status
         case createdAt = "created_at"
         case updatedAt = "updated_at"
-        case trip, rider, quote, payment
+        case trip, rider
+        case pickupLocation = "pickup_location"
+        case quote, payment
     }
 }
 
@@ -147,10 +150,41 @@ struct BookingWithRider: Codable, Identifiable {
         case pickupLocation = "pickup_location"
         case createdAt = "created_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        tripId = try container.decode(String.self, forKey: .tripId)
+        riderId = try container.decode(String.self, forKey: .riderId)
+        riderName = try container.decode(String.self, forKey: .riderName)
+        riderEmail = try container.decodeIfPresent(String.self, forKey: .riderEmail)
+        riderPhone = try container.decodeIfPresent(String.self, forKey: .riderPhone)
+        riderPicture = try container.decodeIfPresent(String.self, forKey: .riderPicture)
+        seatsBooked = try container.decode(Int.self, forKey: .seatsBooked)
+        status = try container.decode(BookingStatus.self, forKey: .status)
+        pickupLocation = try container.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+
+        // Backend sends rating as String ("0.00") or occasionally as Double
+        if let ratingDouble = try? container.decode(Double.self, forKey: .riderRating) {
+            riderRating = ratingDouble
+        } else if let ratingString = try? container.decode(String.self, forKey: .riderRating),
+                  let parsed = Double(ratingString) {
+            riderRating = parsed
+        } else {
+            riderRating = 0.0
+        }
+    }
 }
 
 struct PickupLocation: Codable {
     let lat: Double
     let lng: Double
     let address: String?
+}
+
+// Response wrapper for trip bookings endpoint
+struct TripBookingsResponse: Codable {
+    let bookings: [BookingWithRider]
+    let total: Int
 }

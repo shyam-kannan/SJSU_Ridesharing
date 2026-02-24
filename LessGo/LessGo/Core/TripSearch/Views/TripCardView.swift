@@ -1,142 +1,167 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Main Trip Card (List View)
 
 struct TripCardView: View {
     let trip: Trip
-    @State private var isPressed = false
+    var index: Int = 0
+
+    private var driverName: String { "Driver details after booking" }
+    private var driverRating: Double { trip.driver?.rating ?? 0 }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ── Top: Driver + Price ──
-            HStack(alignment: .top, spacing: 12) {
-                // Driver Avatar
-                ZStack {
-                    Circle()
-                        .fill(Color.brand.opacity(0.12))
-                        .frame(width: 48, height: 48)
-                    Text(trip.driver?.name.prefix(1).uppercased() ?? "?")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.brand)
-                }
+        HStack(alignment: .top, spacing: 12) {
+            fareColumn
 
-                // Driver Info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(trip.driver?.name ?? "Driver")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.textPrimary)
-                    HStack(spacing: 4) {
-                        StarRatingView(rating: trip.driver?.rating ?? 0, size: 11)
-                        Text(String(format: "%.1f", trip.driver?.rating ?? 0))
-                            .font(.system(size: 12))
-                            .foregroundColor(.textSecondary)
-                    }
-                    if let vehicle = trip.driver?.vehicleInfo {
-                        Text(vehicle)
-                            .font(.system(size: 12))
-                            .foregroundColor(.textTertiary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer()
-
-                // Departure time badge
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(trip.departureTime.tripTimeString)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.textPrimary)
-                    Text(trip.departureTime.countdownString)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.brandGreen)
-                }
-            }
-
-            // ── Route Row ──
-            HStack(alignment: .center, spacing: 0) {
-                // Dot line
-                VStack(spacing: 0) {
-                    Circle().fill(Color.brand).frame(width: 8, height: 8)
-                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 1.5, height: 28)
-                    Image(systemName: "mappin.circle.fill").font(.system(size: 12)).foregroundColor(.brandRed)
-                }
-                .frame(width: 24)
-                .padding(.leading, 12)
-
-                // Labels
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(trip.origin)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .lineLimit(1)
-                    Text(trip.destination)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .lineLimit(1)
-                }
-                .padding(.leading, 12)
-
-                Spacer()
-            }
-            .padding(.top, 14)
-
-            // ── Footer: Seats + Date ──
-            HStack(spacing: 10) {
-                // Seat chips
-                HStack(spacing: 5) {
-                    ForEach(0..<min(trip.seatsAvailable, 4), id: \.self) { _ in
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(.brandGreen)
-                    }
-                    if trip.seatsAvailable > 4 {
-                        Text("+\(trip.seatsAvailable - 4)")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.brandGreen)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.brandGreen.opacity(0.1))
-                .cornerRadius(10)
-
-                Text("\(trip.seatsAvailable) seat\(trip.seatsAvailable == 1 ? "" : "s") left")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.textSecondary)
-
-                Spacer()
-
-                // Date
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar").font(.system(size: 11))
-                    Text(trip.departureTime.tripDateString)
-                        .font(.system(size: 12))
-                }
-                .foregroundColor(.textTertiary)
-            }
-            .padding(.top, 14)
-
-            // Recurrence badge
-            if let recurrence = trip.recurrence, !recurrence.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "repeat").font(.system(size: 11))
-                    Text("Repeats \(recurrence)").font(.system(size: 12, weight: .medium))
-                }
-                .foregroundColor(.brand)
-                .padding(.top, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                driverHeader
+                routeSummary
+                footerRow
             }
         }
-        .padding(AppConstants.cardPadding)
-        .background(Color.cardBackground)
-        .cornerRadius(AppConstants.cardRadius)
-        .shadow(color: .black.opacity(isPressed ? 0.04 : 0.08), radius: isPressed ? 4 : 12, x: 0, y: isPressed ? 2 : 4)
-        .scaleEffect(isPressed ? 0.98 : 1)
-        .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isPressed)
-        .onLongPressGesture(minimumDuration: 100, maximumDistance: 50,
-            pressing: { pressing in isPressed = pressing },
-            perform: {}
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                )
         )
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 4)
+        .staggeredAppear(index: index)
+    }
+
+    private var fareColumn: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("$8.50")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundColor(.brandGreen)
+            Text("per seat")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.textSecondary)
+        }
+        .frame(width: 84, alignment: .leading)
+    }
+
+    private var driverHeader: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color.brand.opacity(0.12))
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.brand)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(driverName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    StarRatingView(rating: driverRating, size: 8)
+                    Text(String(format: "%.1f", driverRating))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.textSecondary)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(trip.departureTime.tripTimeString)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
+                Text(trip.departureTime.tripDateString)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .frame(width: 96, alignment: .trailing)
+        }
+    }
+
+    private var routeSummary: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.brand)
+                    .frame(width: 6, height: 6)
+                Text(trip.origin)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.brandRed)
+                Text(trip.destination)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var footerRow: some View {
+        HStack(spacing: 8) {
+            Text(trip.departureTime.countdownString)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.brandGreen)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text("•")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.textTertiary)
+
+            Text("\(trip.seatsAvailable) seats")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Spacer()
+
+            HStack(spacing: 5) {
+                Text("View")
+                Image(systemName: "arrow.right")
+            }
+            .font(.system(size: 11, weight: .bold))
+            .lineLimit(1)
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color.brandGreen)
+            .clipShape(Capsule())
+            .frame(minWidth: 76)
+        }
+        .frame(minHeight: 28)
+    }
+
+    private func pill(icon: String, text: String, color: Color, background: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(background)
+        .cornerRadius(999)
     }
 }
 
@@ -146,65 +171,196 @@ struct CompactTripCard: View {
     let trip: Trip
     var onCancel: (() -> Void)? = nil
 
+    @State private var passengers: [BookingWithRider] = []
+    @State private var isLoadingPassengers = false
+
+    private var totalSeatsBooked: Int {
+        passengers.reduce(0) { $0 + $1.seatsBooked }
+    }
+
+    private var passengerNames: String {
+        if passengers.isEmpty {
+            return "No passengers yet"
+        } else if passengers.count <= 2 {
+            return passengers.map { $0.riderName }.joined(separator: ", ")
+        } else {
+            let first2 = passengers.prefix(2).map { $0.riderName }.joined(separator: ", ")
+            return "\(first2), +\(passengers.count - 2) more"
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 14) {
-            // Color indicator
-            RoundedRectangle(cornerRadius: 3)
-                .fill(trip.status == .active ? Color.brandGreen : Color.gray.opacity(0.4))
-                .frame(width: 4)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(trip.status == .pending ? Color.brandGreen : Color.gray.opacity(0.5))
+                        .frame(width: 8, height: 8)
+                    Text(trip.status.rawValue.capitalized)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(trip.status == .pending ? .brandGreen : .textSecondary)
+                }
+                Spacer()
+                compactPill(icon: "clock", text: trip.departureTime.tripTimeString)
+                compactPill(icon: "calendar", text: trip.departureTime.tripDateString)
+            }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(trip.destination)
-                        .font(.system(size: 15, weight: .semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.brand).frame(width: 7, height: 7)
+                    Text(trip.origin)
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.textPrimary)
-                    Spacer()
-                    Text(trip.departureTime.tripTimeString)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.brand)
+                        .lineLimit(1)
                 }
-
-                HStack {
-                    Image(systemName: "mappin").font(.system(size: 11)).foregroundColor(.textTertiary)
-                    Text("From: \(trip.origin)").font(.system(size: 13)).foregroundColor(.textSecondary).lineLimit(1)
-                    Spacer()
-                    Text(trip.departureTime.tripDateString).font(.system(size: 12)).foregroundColor(.textTertiary)
+                HStack(spacing: 8) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.brandRed)
+                    Text(trip.destination)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                        .lineLimit(1)
                 }
+            }
+            .padding(10)
+            .background(Color(hex: "F8FAFC"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+            )
+            .cornerRadius(12)
 
-                HStack(spacing: 12) {
+            // Passenger count badge with SJSU Blue background
+            if !passengers.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white)
+                    Text("\(totalSeatsBooked)/\(trip.seatsAvailable) seats filled")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(DesignSystem.Colors.sjsuBlue)
+                .cornerRadius(8)
+            }
+
+            // Passenger avatars in overlapping circles
+            if !passengers.isEmpty {
+                HStack(spacing: -8) {
+                    ForEach(passengers.prefix(3)) { passenger in
+                        ZStack {
+                            Circle()
+                                .fill(DesignSystem.Colors.sjsuBlue.opacity(0.1))
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(Color.cardBackground, lineWidth: 2)
+                                )
+
+                            Text(passenger.riderName.prefix(1).uppercased())
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(DesignSystem.Colors.sjsuBlue)
+                        }
+                    }
+
+                    if passengers.count > 3 {
+                        ZStack {
+                            Circle()
+                                .fill(DesignSystem.Colors.sjsuGold)
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(Color.cardBackground, lineWidth: 2)
+                                )
+
+                            Text("+\(passengers.count - 3)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+
+                    Text(passengerNames)
+                        .font(.system(size: 11))
+                        .foregroundColor(.textSecondary)
+                        .lineLimit(1)
+                        .padding(.leading, 12)
+                }
+            }
+
+            HStack(spacing: 12) {
+                if let recurrence = trip.recurrence {
                     HStack(spacing: 4) {
-                        Image(systemName: "person.2.fill").font(.system(size: 11))
-                        Text("\(trip.seatsAvailable) seats").font(.system(size: 12))
+                        Image(systemName: "repeat").font(.system(size: 11))
+                        Text(recurrence).font(.system(size: 12))
                     }
-                    .foregroundColor(.textSecondary)
+                    .foregroundColor(.brand)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.brand.opacity(0.08))
+                    .cornerRadius(8)
+                }
 
-                    if let recurrence = trip.recurrence {
-                        HStack(spacing: 4) {
-                            Image(systemName: "repeat").font(.system(size: 11))
-                            Text(recurrence).font(.system(size: 12))
-                        }
-                        .foregroundColor(.brand)
-                    }
+                Spacer()
 
-                    Spacer()
-
-                    if let cancel = onCancel {
-                        Button(action: cancel) {
-                            Text("Cancel")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.brandRed)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Color.brandRed.opacity(0.1))
-                                .cornerRadius(8)
-                        }
+                if let cancel = onCancel {
+                    Button(action: cancel) {
+                        Text("Cancel")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.brandRed)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Color.brandRed.opacity(0.1))
+                            .cornerRadius(8)
                     }
                 }
             }
         }
-        .padding(AppConstants.cardPadding)
-        .background(Color.cardBackground)
-        .cornerRadius(AppConstants.cardRadius)
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+        .padding(14)
+        .background(Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+        )
+        .cornerRadius(18)
+        .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
+        .task(id: trip.id) { await loadPassengers(force: true) }
+        .onAppear { Task { await loadPassengers(force: true) } }
+        .onChange(of: trip.seatsAvailable) { _ in
+            Task { await loadPassengers(force: true) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task { await loadPassengers(force: true) }
+        }
+    }
+
+    private func compactPill(icon: String, text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+            Text(text).font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundColor(.textSecondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color(hex: "F8FAFC"))
+        .cornerRadius(999)
+    }
+
+    private func loadPassengers(force: Bool = false) async {
+        if !force { guard !isLoadingPassengers else { return } }
+        if isLoadingPassengers { return }
+        isLoadingPassengers = true
+
+        do {
+            passengers = try await TripService.shared.getTripPassengers(tripId: trip.id)
+        } catch {
+            // Silently fail - card will show no passengers
+            print("Failed to load passengers for trip \(trip.id): \(error)")
+        }
+
+        isLoadingPassengers = false
     }
 }
