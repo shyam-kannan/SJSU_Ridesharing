@@ -20,7 +20,8 @@
     "dev:payment": "cd services/payment-service && npm run dev",
     "dev:notification": "cd services/notification-service && npm run dev",
     "dev:cost": "cd services/cost-calculation-service && npm run dev",
-    "dev:gateway": "cd services/api-gateway && npm run dev"
+    "dev:gateway": "cd services/api-gateway && npm run dev",
+    "dev:all": "concurrently --names \"Gateway,Auth,User,Trip,Booking,Payment,Notify,Cost\" --prefix-colors \"cyan,magenta,green,yellow,blue,red,gray,white\" \"npm run dev:gateway\" \"npm run dev:auth\" \"npm run dev:user\" \"npm run dev:trip\" \"npm run dev:booking\" \"npm run dev:payment\" \"npm run dev:notification\" \"npm run dev:cost\""
   },
   "keywords": [
     "carpooling",
@@ -39,6 +40,7 @@
     "pg": "^8.11.3"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "dotenv-cli": "^7.4.4"
   }
 }

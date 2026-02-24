@@ -380,7 +380,27 @@ npm run seed
 
 ---
 
-### 3. Start Backend Services (Mac)
+### 3. Start Backend Services
+
+#### **Option A: Automated Startup (Recommended) ⚡**
+
+Choose one of these automated methods to start all 8 services at once:
+
+**Method 1: Single Terminal with Concurrently** (All services in one window with color-coded output)
+```bash
+npm run dev:all
+```
+
+**Method 2: Shell Script** (Opens each service in a separate Terminal tab)
+```bash
+./start-services.sh
+```
+
+**Method 3: VS Code Task** (Press `Cmd+Shift+B` or `Cmd+Shift+P` → "Run Task" → "Start All Backend Services")
+
+---
+
+#### **Option B: Manual Startup** (Original Method)
 
 Open **8 separate Terminal tabs** (Cmd+T) and run one command per tab from the project root:
 
