@@ -23,7 +23,7 @@ This project uses a microservices architecture with the following services:
 - **Database**: PostgreSQL with PostGIS
 - **Cache**: Redis
 - **Message Queue**: Kafka (optional)
-- **API Gateway**: To be implemented
+- **API Gateway**: Node.js/Express service
 - **Authentication**: JWT
 
 ## Getting Started
@@ -31,7 +31,7 @@ This project uses a microservices architecture with the following services:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node.js 18+ or Python 3.10+
+- Node.js 22+ and Python 3.10+
 - Git
 
 ### Setup
@@ -52,16 +52,23 @@ cp .env.example .env
 4. Start the infrastructure services:
 ```bash
 # Start PostgreSQL and Redis
-docker-compose up -d
+docker compose up -d
 
 # Start with Kafka (optional)
-docker-compose --profile kafka up -d
+docker compose --profile kafka up -d
 ```
 
 5. Set up the database:
 ```bash
-# Database migrations will be added later
+# Apply migrations
+npm run migrate:up
+
+# Optional: seed demo data on a fresh/empty DB only
+# Warning: this seed clears existing app data in key tables first
+npm run seed
 ```
+
+If your Supabase database has already been seeded once, skip `npm run seed`.
 
 ## Project Structure
 

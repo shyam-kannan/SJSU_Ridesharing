@@ -120,10 +120,14 @@ You should see output like:
 > ...
 ```
 
-Load test data:
+Load test data (**optional**, fresh/empty DB only):
 ```
 npm run seed
 ```
+
+> **Important:** `npm run seed` clears existing app data in core tables before inserting demo users/trips. Use this only for local/dev/test environments or a dedicated non-production Supabase project.
+
+If your Supabase database was already seeded once, skip this step.
 
 The seed creates **50 users** (25 drivers, 25 riders, all verified) and **108 trips** — 54 trips TO SJSU and 54 trips FROM SJSU, covering 10 Bay Area hubs from SF Caltrain (66 km) to Santa Clara (8 km).
 
@@ -206,7 +210,7 @@ Try the gateway routing:
 curl http://localhost:3000/api/trips
 ```
 
-This should return a list of seeded trips.
+This should return trips. If you skipped seeding, it may return an empty list until you create trips.
 
 ---
 
@@ -254,11 +258,12 @@ The tables already exist. This is fine if you've run migrations before. To start
 ```
 npm run migrate:down
 npm run migrate:up
+# Optional (fresh demo data only)
 npm run seed
 ```
 
 ### Seed fails with "duplicate key"
-The seed data already exists. To re-seed, drop and recreate:
+Seed data already exists (common on an already-seeded Supabase DB). To re-seed in a dev/test DB, drop and recreate:
 ```
 npm run migrate:down
 npm run migrate:up
@@ -299,7 +304,7 @@ lessgo-backend/
 - The `@lessgo/shared` package contains types, middleware, and utilities used by all services
 
 **Test data credentials:**
-- Seeded users: `user1@sjsu.edu` through `user50@sjsu.edu`
+- If seed has been run: users `user1@sjsu.edu` through `user50@sjsu.edu`
 - Password for all: `Password123`
 - 25 drivers, 25 riders, all SJSU-verified
 - 108 trips covering 10 Bay Area hubs: SF (66 km), Oakland (58 km), Fremont (24 km), Palo Alto (28 km), and more
@@ -316,7 +321,7 @@ lessgo-backend/
 | Stop Docker | `docker compose down` |
 | Run migrations | `npm run migrate:up` |
 | Undo migrations | `npm run migrate:down` |
-| Seed database | `npm run seed` |
+| Seed database (optional, dev/test only) | `npm run seed` |
 | Run all tests (Windows) | `.\tests\run-all-tests.ps1 -All` |
 | Run all tests (Mac) | `./tests/run-all-tests.sh --all` |
 | Test iOS features | `./tests/test-ios-features.sh` |
@@ -374,7 +379,8 @@ docker compose ps
 # Create all tables
 npm run migrate:up
 
-# Load test data (50 users, 100 trips, bookings, ratings)
+# Optional: load demo data on a fresh/empty DB only
+# Warning: seed clears existing app data in key tables first
 npm run seed
 ```
 
@@ -493,7 +499,7 @@ Expected: **16/16 passed** (change password, device tokens, notification prefere
 
 ## Test User Credentials
 
-After running `npm run seed`, the database contains:
+If `npm run seed` has been run, the database contains:
 
 **50 users:**
 - Emails: `user1@sjsu.edu` through `user50@sjsu.edu`
@@ -586,12 +592,12 @@ Clean the build folder (**Product → Clean Build Folder**, or Cmd+Shift+K), the
 ```bash
 docker compose up -d        # ensure Docker is running
 npm run migrate:up          # re-run migrations if needed
-npm run seed                # re-seed test data
+npm run seed                # optional: re-seed test data in dev/test DB only
 ```
 
 **Migration fails with "relation already exists"**
 ```bash
 npm run migrate:down
 npm run migrate:up
-npm run seed
+npm run seed                # optional: only if you need demo data
 ```
