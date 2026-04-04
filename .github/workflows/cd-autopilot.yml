@@ -1,0 +1,79 @@
+name: CD - Build and Push Images
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
+  IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-gateway
+            dockerfile: services/api-gateway/Dockerfile
+          - service: auth-service
+            dockerfile: services/auth-service/Dockerfile
+          - service: user-service
+            dockerfile: services/user-service/Dockerfile
+          - service: trip-service
+            dockerfile: services/trip-service/Dockerfile
+          - service: booking-service
+            dockerfile: services/booking-service/Dockerfile
+          - service: payment-service
+            dockerfile: services/payment-service/Dockerfile
+          - service: notification-service
+            dockerfile: services/notification-service/Dockerfile
+          - service: cost-calculation-service
+            dockerfile: services/cost-calculation-service/Dockerfile
+          - service: grouping-service
+            dockerfile: services/grouping-service/Dockerfile
+          - service: routing-service
+            dockerfile: services/routing-service/Dockerfile
+          - service: safety-service
+            dockerfile: services/safety-service/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate image repository configuration
+        run: |
+          if [ -z "${IMAGE_REGISTRY}" ] || [ -z "${IMAGE_REPOSITORY}" ]; then
+            echo "IMAGE_REGISTRY and IMAGE_REPOSITORY must be set as GitHub repository variables."
+            exit 1
+          fi
+
+      - name: Login to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ secrets.IMAGE_REGISTRY_USERNAME }}
+          password: ${{ secrets.IMAGE_REGISTRY_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.service }}:latest

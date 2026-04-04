@@ -58,5 +58,8 @@ docker-compose.override.yml
 *.db
 *.sqlite
 
+# Kubernetes secrets
+k8s-manifests/secrets.yaml
+
 # OS
 Thumbs.db

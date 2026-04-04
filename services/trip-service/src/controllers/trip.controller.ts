@@ -393,7 +393,7 @@ export const updateTripState = async (req: AuthRequest, res: Response): Promise<
 
       if (statusTitleMap[status]) {
         await Promise.all(
-          riderIds.map((userId) =>
+          riderIds.map((userId: string) =>
             fireInAppNotification({
               user_id: userId,
               type: 'trip_status',

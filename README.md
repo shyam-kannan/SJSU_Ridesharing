@@ -112,6 +112,46 @@ npm run test:integration
 npm run test:load
 ```
 
+## CI/CD Image Publishing and Deployment
+
+The workflow [`.github/workflows/cd-autopilot.yml`](.github/workflows/cd-autopilot.yml) now:
+
+1. Builds all service images (API gateway + 10 microservices)
+2. Pushes images to your dedicated container image repository
+3. Deploys the SHA-tagged images to GKE Autopilot
+
+Configure these GitHub repository variables:
+
+- `IMAGE_REGISTRY` (example: `ghcr.io`)
+- `IMAGE_REPOSITORY` (example: `your-org/lessgo-images`)
+- `GCP_PROJECT_ID`
+- `GKE_CLUSTER`
+- `GKE_LOCATION`
+
+Configure these GitHub repository secrets:
+
+- `IMAGE_REGISTRY_USERNAME`
+- `IMAGE_REGISTRY_TOKEN`
+- `GCP_WIF_PROVIDER`
+- `GCP_DEPLOYER_SA`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `GOOGLE_MAPS_API_KEY`
+- `STRIPE_SECRET_KEY`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `FROM_EMAIL`
+
+Image naming format:
+
+- `${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}/api-gateway:${GITHUB_SHA}`
+- `${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}/auth-service:${GITHUB_SHA}`
+- ...and so on for each service.
+
+If your image repository is private, create a Kubernetes image pull secret in your cluster namespace and attach it to the service accounts used by your deployments.
+
 ## Contributing
 
 1. Create a feature branch
