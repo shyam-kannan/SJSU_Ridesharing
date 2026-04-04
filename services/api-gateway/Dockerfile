@@ -6,7 +6,7 @@ COPY package*.json ./
 COPY tsconfig.base.json ./
 COPY shared/package*.json ./shared/
 COPY services/api-gateway/package*.json ./services/api-gateway/
-RUN npm ci
+RUN npm install
 
 COPY shared ./shared
 COPY services/api-gateway ./services/api-gateway
@@ -21,7 +21,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY shared/package*.json ./shared/
 COPY services/api-gateway/package*.json ./services/api-gateway/
-RUN npm ci --omit=dev --workspace @lessgo/shared --workspace api-gateway --include-workspace-root=false
+RUN npm install --omit=dev --workspace @lessgo/shared --workspace api-gateway --include-workspace-root=false
 
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/services/api-gateway/dist ./services/api-gateway/dist

@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY tsconfig.base.json ./
 COPY shared/package*.json ./shared/
 COPY services/auth-service/package*.json ./services/auth-service/
-RUN npm ci
+RUN npm install
 
 COPY shared ./shared
 COPY services/auth-service ./services/auth-service
@@ -24,7 +24,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY shared/package*.json ./shared/
 COPY services/auth-service/package*.json ./services/auth-service/
-RUN npm ci --omit=dev --workspace @lessgo/shared --workspace auth-service --include-workspace-root=false
+RUN npm install --omit=dev --workspace @lessgo/shared --workspace auth-service --include-workspace-root=false
 
 # Copy only built artifacts
 COPY --from=builder /app/shared/dist ./shared/dist

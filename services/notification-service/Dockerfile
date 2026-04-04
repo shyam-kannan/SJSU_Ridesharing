@@ -6,7 +6,7 @@ COPY package*.json ./
 COPY tsconfig.base.json ./
 COPY shared/package*.json ./shared/
 COPY services/notification-service/package*.json ./services/notification-service/
-RUN npm ci
+RUN npm install
 
 COPY shared ./shared
 COPY services/notification-service ./services/notification-service
@@ -21,7 +21,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY shared/package*.json ./shared/
 COPY services/notification-service/package*.json ./services/notification-service/
-RUN npm ci --omit=dev --workspace @lessgo/shared --workspace notification-service --include-workspace-root=false
+RUN npm install --omit=dev --workspace @lessgo/shared --workspace notification-service --include-workspace-root=false
 
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/services/notification-service/dist ./services/notification-service/dist

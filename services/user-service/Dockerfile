@@ -6,7 +6,7 @@ COPY package*.json ./
 COPY tsconfig.base.json ./
 COPY shared/package*.json ./shared/
 COPY services/user-service/package*.json ./services/user-service/
-RUN npm ci
+RUN npm install
 
 COPY shared ./shared
 COPY services/user-service ./services/user-service
@@ -21,7 +21,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY shared/package*.json ./shared/
 COPY services/user-service/package*.json ./services/user-service/
-RUN npm ci --omit=dev --workspace @lessgo/shared --workspace user-service --include-workspace-root=false
+RUN npm install --omit=dev --workspace @lessgo/shared --workspace user-service --include-workspace-root=false
 
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/services/user-service/dist ./services/user-service/dist
