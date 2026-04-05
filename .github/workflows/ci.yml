@@ -1,6 +1,7 @@
-name: CI - Build and Push Images
+name: CI - Unit Tests
 
 on:
+  pull_request:
   push:
     branches-ignore:
       - main
@@ -8,71 +9,63 @@ on:
 
 permissions:
   contents: read
-  packages: write
-
-env:
-  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
-  IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
 
 jobs:
-  build-and-push:
+  test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - service: api-gateway
-            dockerfile: services/api-gateway/Dockerfile
-          - service: auth-service
-            dockerfile: services/auth-service/Dockerfile
-          - service: user-service
-            dockerfile: services/user-service/Dockerfile
-          - service: trip-service
-            dockerfile: services/trip-service/Dockerfile
-          - service: booking-service
-            dockerfile: services/booking-service/Dockerfile
-          - service: payment-service
-            dockerfile: services/payment-service/Dockerfile
-          - service: notification-service
-            dockerfile: services/notification-service/Dockerfile
-          - service: cost-calculation-service
-            dockerfile: services/cost-calculation-service/Dockerfile
-          - service: grouping-service
-            dockerfile: services/grouping-service/Dockerfile
-          - service: routing-service
-            dockerfile: services/routing-service/Dockerfile
-          - service: safety-service
-            dockerfile: services/safety-service/Dockerfile
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate image repository configuration
-        run: |
-          if [ -z "${IMAGE_REGISTRY}" ] || [ -z "${IMAGE_REPOSITORY}" ]; then
-            echo "IMAGE_REGISTRY and IMAGE_REPOSITORY must be set as GitHub repository variables."
-            exit 1
-          fi
-
-      - name: Login to container registry
-        uses: docker/login-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          registry: ${{ env.IMAGE_REGISTRY }}
-          username: ${{ secrets.IMAGE_REGISTRY_USERNAME }}
-          password: ${{ secrets.IMAGE_REGISTRY_TOKEN }}
+          node-version: 20
+          cache: npm
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Install dependencies
+        run: npm install
 
-      - name: Build and push ${{ matrix.service }} image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: |
-            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.service }}:${{ github.ref_name }}-${{ github.sha }}
+      - name: Run unit tests
+        run: npm run test:unit
+
+#  smoke-tests:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: read
+#      id-token: write
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#
+#      - name: Authenticate to Google Cloud
+#        uses: google-github-actions/auth@v2
+#        with:
+#          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+#          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+#
+#      - name: Setup gcloud
+#        uses: google-github-actions/setup-gcloud@v2
+#
+#      - name: Get GKE credentials
+#        run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$GCP_PROJECT_ID"
+#
+#      - name: Port-forward services for smoke tests
+#        run: |
+#          kubectl -n lessgo port-forward svc/api-gateway 3000:3000 >/tmp/api-gateway.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/auth-service 3001:3001 >/tmp/auth-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/user-service 3002:3002 >/tmp/user-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/trip-service 3003:3003 >/tmp/trip-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/booking-service 3004:3004 >/tmp/booking-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/payment-service 3005:3005 >/tmp/payment-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/notification-service 3006:3006 >/tmp/notification-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/cost-calculation-service 3009:3009 >/tmp/cost-service.log 2>&1 &
+#          sleep 15
+#
+#      - name: Run smoke tests
+#        run: bash tests/run-all-tests.sh --all
+#
+#      - name: Stop port-forwards
+#        if: always()
+#        run: pkill -f "kubectl -n lessgo port-forward" || true

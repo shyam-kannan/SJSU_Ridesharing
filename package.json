@@ -13,6 +13,8 @@
     "migrate:down": "node-pg-migrate down -m shared/database/migrations --database-url-var DATABASE_URL",
     "migrate:status": "node-pg-migrate list -m shared/database/migrations --database-url-var DATABASE_URL",
     "seed": "node shared/database/seeds/seed.js",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test": "npm run test:unit",
     "dev:auth": "cd services/auth-service && npm run dev",
     "dev:user": "cd services/user-service && npm run dev",
     "dev:trip": "cd services/trip-service && npm run dev",
@@ -41,6 +43,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
-    "dotenv-cli": "^7.4.4"
+    "dotenv-cli": "^7.4.4",
+    "vitest": "^2.1.8"
   }
 }
