@@ -20,7 +20,7 @@ spec:
       enableServiceLinks: false
       containers:
       - name: api-gateway
-        image: gcr.io/lessgo-490819/api-gateway:latest
+        image: gcr.io/lessgo-490819/api-gateway:${GITHUB_SHA}
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
