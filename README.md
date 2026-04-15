@@ -117,21 +117,17 @@ npm run test:load
 The workflow [`.github/workflows/cd-autopilot.yml`](.github/workflows/cd-autopilot.yml) now:
 
 1. Builds all service images (API gateway + 10 microservices)
-2. Pushes images to your dedicated container image repository
-3. Deploys the SHA-tagged images to GKE Autopilot
+2. Pushes images to Google Artifact Registry
+3. Tags each image with both the commit SHA and `latest`
 
 Configure these GitHub repository variables:
 
-- `IMAGE_REGISTRY` (example: `ghcr.io`)
-- `IMAGE_REPOSITORY` (example: `your-org/lessgo-images`)
 - `GCP_PROJECT_ID`
-- `GKE_CLUSTER`
-- `GKE_LOCATION`
+- `AR_REPO_NAME`
+- `AR_LOCATION`
 
 Configure these GitHub repository secrets:
 
-- `IMAGE_REGISTRY_USERNAME`
-- `IMAGE_REGISTRY_TOKEN`
 - `GCP_WIF_PROVIDER`
 - `GCP_DEPLOYER_SA`
 - `DATABASE_URL`
@@ -146,11 +142,11 @@ Configure these GitHub repository secrets:
 
 Image naming format:
 
-- `${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}/api-gateway:${GITHUB_SHA}`
-- `${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}/auth-service:${GITHUB_SHA}`
+- `${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/api-gateway:${GITHUB_SHA}`
+- `${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/auth-service:${GITHUB_SHA}`
 - ...and so on for each service.
 
-If your image repository is private, create a Kubernetes image pull secret in your cluster namespace and attach it to the service accounts used by your deployments.
+If you later deploy these images to Kubernetes, create an image pull secret in the target namespace if the repository is private.
 
 ## Contributing
 
