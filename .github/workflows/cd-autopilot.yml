@@ -49,6 +49,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Debug GitHub OIDC context
+        run: |
+          echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+          echo "GITHUB_ACTOR=${GITHUB_ACTOR}"
+          echo "GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+
       - name: Validate Artifact Registry configuration
         run: |
           if [ -z "${PROJECT_ID}" ] || [ -z "${AR_REPO_NAME}" ] || [ -z "${AR_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
@@ -60,21 +69,36 @@ jobs:
           GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
 
       - name: Authenticate to Google Cloud
+        id: auth
+        continue-on-error: true
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
+      - name: Report auth failure details
+        if: steps.auth.outcome != 'success'
+        run: |
+          echo "Google authentication failed before any build step ran."
+          echo "Check the Workload Identity Provider attribute condition and repo/ref binding."
+          echo "Expected repository: ${GITHUB_REPOSITORY}"
+          echo "Expected ref: ${GITHUB_REF}"
+          exit 1
+
       - name: Set up Google Cloud SDK
+        if: steps.auth.outcome == 'success'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
+        if: steps.auth.outcome == 'success'
         run: gcloud auth configure-docker "${{ env.AR_LOCATION }}-docker.pkg.dev" --quiet
 
       - name: Setup Docker Buildx
+        if: steps.auth.outcome == 'success'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.service }} image
+        if: steps.auth.outcome == 'success'
         uses: docker/build-push-action@v6
         with:
           context: .
