@@ -54,6 +54,7 @@ export interface User {
   rating: number;
   vehicle_info?: string;
   seats_available?: number;
+  mpg?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -72,6 +73,7 @@ export interface SafeUser {
   seats_available?: number;
   license_plate?: string;
   earnings?: number;
+  mpg?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -263,6 +265,7 @@ export interface DriverSetupRequest {
   vehicle_info: string;
   seats_available: number;
   license_plate: string;
+  mpg?: number;
 }
 
 // ========== API RESPONSE TYPES ==========
@@ -370,4 +373,33 @@ export interface TripMatchingResponse {
     distance_to_destination: number;
     available_seats: number;
   }>;
+}
+
+/**
+ * Per-rider settlement result
+ */
+export interface RiderSettlement {
+  rider_id: string;
+  rider_name: string;
+  amount_paid: number;
+  status: string;
+  detour_miles: number;
+  breakdown: string;
+}
+
+/**
+ * Full trip settlement result (returned by cost-calculation-service)
+ */
+export interface TripSettlement {
+  trip_id: string;
+  total_cost: number;
+  driver_earnings: number;
+  rider_count: number;
+  cost_per_rider: number;
+  breakdown: {
+    base_price: number;
+    distance_miles: number;
+    price_per_mile: number;
+  };
+  riders: RiderSettlement[];
 }

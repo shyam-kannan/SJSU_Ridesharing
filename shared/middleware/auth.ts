@@ -86,6 +86,10 @@ export const authenticateToken = (
 /**
  * Middleware to verify user has verified SJSU ID
  * Must be used after authenticateToken
+ *
+ * DEV BYPASS: In non-production environments, accounts whose email starts with
+ * "sim-" or "devtools-" skip this check so simulation/devtools flows work
+ * without real SJSU credentials.
  */
 export const requireVerifiedStudent = (
   req: AuthRequest,
@@ -97,6 +101,17 @@ export const requireVerifiedStudent = (
       status: 'error',
       message: 'Authentication required',
     });
+    return;
+  }
+
+  // Dev-only bypass for simulation accounts (sim-* and devtools-* prefixes).
+  // Never active in production.
+  const isDevSimAccount =
+    process.env.NODE_ENV !== 'production' &&
+    (req.user.email.startsWith('sim-') || req.user.email.startsWith('devtools-'));
+
+  if (isDevSimAccount) {
+    next();
     return;
   }
 

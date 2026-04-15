@@ -2,6 +2,13 @@ import SwiftUI
 import UIKit
 import Combine
 
+enum BookingErrorKind {
+    case noConnection
+    case authRequired
+    case serverDown
+    case other
+}
+
 @MainActor
 class BookingViewModel: ObservableObject {
     @Published var bookings: [Booking] = []
@@ -10,6 +17,7 @@ class BookingViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isCreating = false
     @Published var errorMessage: String?
+    @Published var errorKind: BookingErrorKind? = nil
     @Published var showSuccess = false
     @Published var bookingSuccessMessage = ""
 
@@ -20,6 +28,7 @@ class BookingViewModel: ObservableObject {
     func loadBookings(asDriver: Bool = false) async {
         isLoading = true
         errorMessage = nil
+        errorKind = nil
         defer { isLoading = false }
         do {
             let response = try await bookingService.listBookings(asDriver: asDriver)
@@ -27,9 +36,22 @@ class BookingViewModel: ObservableObject {
                 bookings = response.bookings
             }
         } catch let error as NetworkError {
+            print("[TripsView] Bookings fetch failed: \(error)")
             errorMessage = error.userMessage
+            errorKind = errorKindFor(error)
         } catch {
-            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
+            print("[TripsView] Bookings fetch failed (unknown): \(error)")
+            errorMessage = "Something went wrong. Please try again."
+            errorKind = .other
+        }
+    }
+
+    private func errorKindFor(_ error: NetworkError) -> BookingErrorKind {
+        switch error {
+        case .noConnection: return .noConnection
+        case .unauthorized, .forbidden: return .authRequired
+        case .serverError, .unknown: return .serverDown
+        default: return .other
         }
     }
 

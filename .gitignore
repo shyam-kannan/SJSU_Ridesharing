@@ -60,3 +60,7 @@ docker-compose.override.yml
 
 # OS
 Thumbs.db
+
+# Embedding service data and trained models
+services/embedding-service/data/
+services/embedding-service/models/

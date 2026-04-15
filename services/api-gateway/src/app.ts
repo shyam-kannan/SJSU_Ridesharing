@@ -35,6 +35,7 @@ const SERVICES = {
   grouping: process.env.GROUPING_SERVICE_URL || 'http://127.0.0.1:8001',
   routing: process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8002',
   cost: process.env.COST_SERVICE_URL || 'http://127.0.0.1:3009',
+  embedding: process.env.EMBEDDING_SERVICE_URL || 'http://127.0.0.1:3010',
 };
 
 // Rate Limiting (relaxed in development, strict in production)
@@ -63,7 +64,7 @@ app.use((req, res, next) => {
 const jwtMiddleware = (req: Request, res: Response, next: Function) => {
   // NOTE: mounted at app.use('/api', ...) so req.path is WITHOUT the /api prefix.
   // A request to /api/auth/register arrives here as /auth/register.
-  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh'];
+  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh', '/vehicles'];
 
   console.log(`[JWT] path="${req.path}" | isPublic=${publicPaths.some(p => req.path.startsWith(p))}`);
 
@@ -133,6 +134,12 @@ app.use('/api/users', createProxyMiddleware({
   ...proxyOptions,
 }));
 
+app.use('/api/vehicles', createProxyMiddleware({
+  target: SERVICES.user,
+  pathRewrite: { '^/api/vehicles': '/vehicles' },
+  ...proxyOptions,
+}));
+
 app.use('/api/trips', createProxyMiddleware({
   target: SERVICES.trip,
   pathRewrite: { '^/api/trips': '/trips' },
@@ -172,6 +179,12 @@ app.use('/api/route', createProxyMiddleware({
 app.use('/api/cost', createProxyMiddleware({
   target: SERVICES.cost,
   pathRewrite: { '^/api/cost': '/cost' },
+  ...proxyOptions,
+}));
+
+app.use('/api/embedding', createProxyMiddleware({
+  target: SERVICES.embedding,
+  pathRewrite: { '^/api/embedding': '' },
   ...proxyOptions,
 }));
 

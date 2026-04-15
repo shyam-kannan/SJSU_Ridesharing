@@ -17,10 +17,69 @@ class ProfileViewModel: ObservableObject {
     @Published var editName = ""
     @Published var editEmail = ""
 
-    // Driver setup
+    // Driver setup — raw fields (used as fallback / submission values)
     @Published var vehicleInfo = ""
     @Published var seatsAvailable = 3
     @Published var licensePlate = ""
+    @Published var mpg: Double = 25.0
+
+    // ── Vehicle picker state ──────────────────────────────────────────────────
+    @Published var pickerYear: Int = Calendar.current.component(.year, from: Date())
+    @Published var pickerMake: String = ""
+    @Published var pickerModel: String = ""
+    @Published var pickerTrimId: String = ""
+
+    // Lookup results
+    @Published var availableMakes: [String] = []
+    @Published var availableModels: [String] = []
+    @Published var vehicleSpecs: VehicleSpecs? = nil
+
+    // Loading flags
+    @Published var isLoadingMakes = false
+    @Published var isLoadingModels = false
+    @Published var isLoadingSpecs = false
+    @Published var vehicleLookupFailed = false
+
+    // Driver can override auto-populated seats/mpg
+    @Published var seatsOverride: Int? = nil
+    @Published var mpgOverride: Double? = nil
+
+    // Vehicle photo
+    @Published var vehiclePhotoURL: String? = nil
+    @Published var isLoadingPhoto = false
+
+    // ── Computed helpers ──────────────────────────────────────────────────────
+
+    var selectedTrim: VehicleTrim? {
+        vehicleSpecs?.trims.first { $0.id == pickerTrimId }
+    }
+
+    var effectiveMpg: Double {
+        if let override = mpgOverride { return override }
+        if let trim = selectedTrim, let combined = trim.combinedMpg { return Double(combined) }
+        if let specs = vehicleSpecs, let def = specs.defaultMpg { return Double(def) }
+        return mpg
+    }
+
+    var effectiveSeats: Int {
+        if let override = seatsOverride { return override }
+        return vehicleSpecs?.seatingCapacity ?? seatsAvailable
+    }
+
+    var formattedVehicleInfo: String {
+        guard !pickerMake.isEmpty, !pickerModel.isEmpty else { return vehicleInfo }
+        let trimName = selectedTrim?.trimName
+        // Use String(pickerYear) to avoid locale-formatted "2,024" on some devices
+        return [String(pickerYear), pickerMake, pickerModel, trimName]
+            .compactMap { $0 }
+            .joined(separator: " ")
+    }
+
+    var vehiclePickerIsActive: Bool {
+        !pickerMake.isEmpty && !pickerModel.isEmpty
+    }
+
+    private let vehicleService = VehicleService.shared
 
     private let userService = UserService.shared
     private let tripService = TripService.shared
@@ -76,12 +135,19 @@ class ProfileViewModel: ObservableObject {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
+
+        // Use picker values if a vehicle was selected; fall back to raw fields
+        let finalVehicleInfo = vehiclePickerIsActive ? formattedVehicleInfo : vehicleInfo
+        let finalSeats = vehiclePickerIsActive ? effectiveSeats : seatsAvailable
+        let finalMpg = vehiclePickerIsActive ? effectiveMpg : mpg
+
         do {
             let updated = try await userService.setupDriverProfile(
                 id: userId,
-                vehicleInfo: vehicleInfo,
-                seatsAvailable: seatsAvailable,
-                licensePlate: licensePlate
+                vehicleInfo: finalVehicleInfo,
+                seatsAvailable: finalSeats,
+                licensePlate: licensePlate,
+                mpg: finalMpg
             )
             user = updated
             successMessage = "Driver profile saved!"
@@ -93,13 +159,108 @@ class ProfileViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Vehicle Picker Lookups
+
+    func loadMakes() async {
+        guard availableMakes.isEmpty else { return }
+        isLoadingMakes = true
+        vehicleLookupFailed = false
+        defer { isLoadingMakes = false }
+        do {
+            availableMakes = try await vehicleService.fetchMakes()
+        } catch {
+            vehicleLookupFailed = true
+            errorMessage = (error as? VehicleError)?.errorDescription ?? "Vehicle lookup unavailable. Please enter details manually."
+        }
+    }
+
+    func loadModels(make: String, year: Int) async {
+        isLoadingModels = true
+        defer { isLoadingModels = false }
+        do {
+            availableModels = try await vehicleService.fetchModels(make: make, year: year)
+        } catch {
+            availableModels = []
+            vehicleLookupFailed = true
+        }
+    }
+
+    func loadSpecs(make: String, model: String, year: Int) async {
+        isLoadingSpecs = true
+        vehicleSpecs = nil
+        defer { isLoadingSpecs = false }
+        do {
+            let specs = try await vehicleService.fetchSpecs(make: make, model: model, year: year)
+            vehicleSpecs = specs
+            // Auto-select single trim
+            if specs.trims.count == 1 {
+                pickerTrimId = specs.trims[0].id
+            }
+            // Apply seating if not overridden
+            if seatsOverride == nil {
+                seatsAvailable = specs.seatingCapacity
+            }
+            // Kick off photo load concurrently (non-blocking)
+            Task { await loadPhoto(make: make, model: model, year: year) }
+        } catch {
+            vehicleLookupFailed = true
+        }
+    }
+
+    func loadPhoto(make: String, model: String, year: Int) async {
+        isLoadingPhoto = true
+        vehiclePhotoURL = nil
+        defer { isLoadingPhoto = false }
+        vehiclePhotoURL = try? await vehicleService.fetchPhoto(make: make, model: model, year: year)
+    }
+
+    func clearPickerMake() {
+        pickerMake = ""
+        pickerModel = ""
+        pickerTrimId = ""
+        availableModels = []
+        vehicleSpecs = nil
+        vehiclePhotoURL = nil
+        seatsOverride = nil
+        mpgOverride = nil
+    }
+
+    func clearPickerModel() {
+        pickerModel = ""
+        pickerTrimId = ""
+        vehicleSpecs = nil
+        vehiclePhotoURL = nil
+        seatsOverride = nil
+        mpgOverride = nil
+    }
+
+    /// Try to pre-populate the picker from an existing vehicle_info string.
+    /// Expected format: "{year} {make} {model} {optional trim...}"
+    func parseExistingVehicleInfo(_ info: String) {
+        guard !info.isEmpty else { return }
+        let parts = info.split(separator: " ", maxSplits: 3).map(String.init)
+        guard parts.count >= 3,
+              let year = Int(parts[0]),
+              year >= 2000,
+              year <= Calendar.current.component(.year, from: Date()) + 1
+        else { return }
+
+        pickerYear = year
+        pickerMake = parts[1]
+        pickerModel = parts[2]
+        // Trim is optional — if present it will be matched after specs load
+        if parts.count == 4 { pickerTrimId = parts[3] }
+    }
+
     // MARK: - Load Driver Trips
 
     func loadDriverTrips(driverId: String) async {
         isLoading = true
         defer { isLoading = false }
         do {
-            let response = try await tripService.listTrips(driverId: driverId, status: .pending)
+            // Load all trips for this driver (no status filter) so the driver home
+            // screen can compute active trips, today's completions, etc. locally.
+            let response = try await tripService.listTrips(driverId: driverId, limit: 50)
             driverTrips = response.trips
         } catch {}
     }

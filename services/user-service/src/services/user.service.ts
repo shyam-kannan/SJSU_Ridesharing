@@ -13,7 +13,7 @@ const pool = new Pool({
  */
 export const getUserById = async (userId: string): Promise<SafeUser | null> => {
   const query = `
-    SELECT user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, created_at, updated_at
+    SELECT user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, profile_picture_url, created_at, updated_at
     FROM users
     WHERE user_id = $1
   `;
@@ -64,7 +64,7 @@ export const updateUserProfile = async (
     UPDATE users
     SET ${fields.join(', ')}
     WHERE user_id = $${paramIndex}
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, profile_picture_url, created_at, updated_at
   `;
 
   const result = await pool.query(query, values);
@@ -86,7 +86,7 @@ export const setupDriverProfile = async (
   userId: string,
   driverData: DriverSetupRequest
 ): Promise<SafeUser> => {
-  const { vehicle_info, seats_available, license_plate } = driverData;
+  const { vehicle_info, seats_available, license_plate, mpg } = driverData;
 
   const query = `
     UPDATE users
@@ -95,9 +95,10 @@ export const setupDriverProfile = async (
       vehicle_info = $2,
       seats_available = $3,
       license_plate = $4,
+      mpg = $5,
       updated_at = current_timestamp
-    WHERE user_id = $5
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, created_at, updated_at
+    WHERE user_id = $6
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, created_at, updated_at
   `;
 
   const result = await pool.query(query, [
@@ -105,6 +106,7 @@ export const setupDriverProfile = async (
     vehicle_info,
     seats_available,
     license_plate,
+    mpg ?? 25.0,
     userId,
   ]);
 
@@ -301,7 +303,7 @@ export const updateProfilePicture = async (
     UPDATE users
     SET profile_picture_url = $1, updated_at = current_timestamp
     WHERE user_id = $2
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, profile_picture_url, created_at, updated_at
   `;
 
   const result = await pool.query(query, [profilePictureUrl, userId]);
@@ -432,7 +434,7 @@ export const updateUserRole = async (userId: string, role: string): Promise<Safe
     UPDATE users
     SET role = $1, updated_at = current_timestamp
     WHERE user_id = $2
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, created_at, updated_at
   `;
 
   const result = await pool.query(query, [role, userId]);

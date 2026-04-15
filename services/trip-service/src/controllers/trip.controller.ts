@@ -365,6 +365,21 @@ export const updateTripState = async (req: AuthRequest, res: Response): Promise<
 
     console.log(`🚗 Trip ${id} state updated to: ${status}`);
 
+    // Settlement calculation — only on completion, non-critical
+    let settlement = null;
+    if (status === 'completed') {
+      try {
+        console.log(`💰 Calculating settlement for completed trip ${id}...`);
+        const settlementResponse = await axios.get(
+          `${config.costServiceUrl}/cost/settle/${id}`
+        );
+        settlement = settlementResponse.data.data;
+        console.log(`💰 Settlement calculated: $${settlement?.driver_earnings?.toFixed(2)} for ${settlement?.rider_count} rider(s)`);
+      } catch (settleErr) {
+        console.error('Failed to calculate trip settlement (non-critical):', settleErr);
+      }
+    }
+
     // Notify riders on major trip state changes
     try {
       const bookingsResponse = await axios.get(
@@ -399,7 +414,11 @@ export const updateTripState = async (req: AuthRequest, res: Response): Promise<
               type: 'trip_status',
               title: statusTitleMap[status],
               message: statusMessageMap[status] || `Trip status updated to ${status}`,
-              data: { trip_id: id, status },
+              data: {
+                trip_id: id,
+                status,
+                settlement: status === 'completed' ? settlement : undefined,
+              },
             })
           )
         );
@@ -408,7 +427,7 @@ export const updateTripState = async (req: AuthRequest, res: Response): Promise<
       console.error('Trip state notification error (non-critical):', notifyErr);
     }
 
-    successResponse(res, updatedTrip, 'Trip state updated successfully');
+    successResponse(res, { trip: updatedTrip, settlement }, 'Trip state updated successfully');
   } catch (error) {
     console.error('Update trip state error:', error);
     if (error instanceof Error) {
