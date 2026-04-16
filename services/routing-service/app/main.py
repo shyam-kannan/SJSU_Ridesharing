@@ -6,6 +6,7 @@ import redis
 import json
 import hashlib
 import os
+from typing import Optional, Union
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -50,7 +51,7 @@ class RouteResponse(BaseModel):
     distance_meters: int
     distance_miles: float
     duration_seconds: int
-    polyline: str | None = None
+    polyline: Optional[str] = None
 
 
 def get_cache_key(origin: str, destination: str) -> str:
@@ -90,32 +91,50 @@ async def calculate_route(request: RouteRequest):
         except Exception as e:
             print(f"⚠️  Redis get error: {e}")
 
-    # Call Google Maps Distance Matrix API
+    # Call Google Maps Directions API
     try:
-        result = gmaps.distance_matrix(
-            origins=[request.origin],
-            destinations=[request.destination],
+        # Clean inputs
+        origin = request.origin.strip()
+        destination = request.destination.strip()
+
+        # Check for very close points (epsilon check)
+        # If they look like coordinates, we can do a quick check
+        is_coord = False
+        try:
+            o_lat, o_lng = map(float, origin.split(','))
+            d_lat, d_lng = map(float, destination.split(','))
+            is_coord = True
+            # Rough distance check (~11 meters per 0.0001 degree)
+            if abs(o_lat - d_lat) < 0.0001 and abs(o_lng - d_lng) < 0.0001:
+                print(f"📍 Origin and destination are very close, returning zero route")
+                return RouteResponse(
+                    distance_meters=0,
+                    distance_miles=0.0,
+                    duration_seconds=0,
+                    polyline=""
+                )
+        except:
+            pass
+
+        result = gmaps.directions(
+            origin=origin,
+            destination=destination,
             mode="driving",
             units="metric",
         )
 
-        if result["status"] != "OK":
-            raise HTTPException(status_code=400, detail=f"Google Maps API error: {result['status']}")
+        if not result:
+            raise HTTPException(status_code=400, detail="Route not found")
 
-        element = result["rows"][0]["elements"][0]
+        route = result[0]
+        leg = route["legs"][0]
 
-        if element["status"] != "OK":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Route not found: {element.get('status', 'UNKNOWN')}"
-            )
-
-        distance_meters = element["distance"]["value"]
+        distance_meters = leg["distance"]["value"]
         distance_miles = distance_meters * 0.000621371  # Convert to miles
-        duration_seconds = element["duration"]["value"]
+        duration_seconds = leg["duration"]["value"]
 
-        # Get polyline (optional - requires Directions API for more detail)
-        polyline = None
+        # Get polyline from Directions API (follows road)
+        polyline = route.get("overview_polyline", {}).get("points")
 
         response_data = {
             "distance_meters": distance_meters,
@@ -132,7 +151,7 @@ async def calculate_route(request: RouteRequest):
                     CACHE_TTL,
                     json.dumps(response_data)
                 )
-                print(f"✅ Cached route: {request.origin} → {request.destination}")
+                print(f"✅ Cached route: {origin} → {destination}")
             except Exception as e:
                 print(f"⚠️  Redis set error: {e}")
 
@@ -140,6 +159,8 @@ async def calculate_route(request: RouteRequest):
 
     except googlemaps.exceptions.ApiError as e:
         raise HTTPException(status_code=502, detail=f"Google Maps API error: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Route calculation error: {e}")
         raise HTTPException(status_code=500, detail="Failed to calculate route")
