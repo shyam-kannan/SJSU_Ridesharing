@@ -37,8 +37,6 @@ spec:
         envFrom:
         - configMapRef:
             name: lessgo-config
-        - secretRef:
-            name: lessgo-secrets
         resources:
           requests:
             memory: "64Mi"

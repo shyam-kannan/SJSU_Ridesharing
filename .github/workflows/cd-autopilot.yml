@@ -155,43 +155,20 @@ jobs:
         if: steps.auth.outcome == 'success'
         run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$PROJECT_ID"
 
-      - name: Pin deployments to the new image tag
+      - name: Apply Kubernetes manifests
         if: steps.auth.outcome == 'success'
         run: |
           set -euo pipefail
-
-          services=(
-            api-gateway
-            auth-service
-            user-service
-            trip-service
-            booking-service
-            payment-service
-            notification-service
-            cost-calculation-service
-            grouping-service
-            routing-service
-            safety-service
-          )
-
-          for service in "${services[@]}"; do
-            image="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/${service}:${GITHUB_SHA}"
-            echo "Updating ${service} to ${image}"
-            kubectl -n lessgo set image deployment/${service} ${service}=${image}
-          done
-
-      - name: Wait for rollouts
-        if: steps.auth.outcome == 'success'
-        run: |
-          set -euo pipefail
-          kubectl -n lessgo rollout status deployment/api-gateway --timeout=5m
-          kubectl -n lessgo rollout status deployment/auth-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/user-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/trip-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/booking-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/payment-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/notification-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/cost-calculation-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/grouping-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/routing-service --timeout=5m
-          kubectl -n lessgo rollout status deployment/safety-service --timeout=5m
+          kubectl apply -f k8s-manifests/namespace.yaml
+          kubectl apply -f k8s-manifests/configmap.yaml
+          kubectl apply -f k8s-manifests/api-gateway.yaml
+          kubectl apply -f k8s-manifests/auth-service.yaml
+          kubectl apply -f k8s-manifests/user-service.yaml
+          kubectl apply -f k8s-manifests/trip-service.yaml
+          kubectl apply -f k8s-manifests/booking-service.yaml
+          kubectl apply -f k8s-manifests/payment-service.yaml
+          kubectl apply -f k8s-manifests/notification-service.yaml
+          kubectl apply -f k8s-manifests/cost-calculation-service.yaml
+          kubectl apply -f k8s-manifests/grouping-service.yaml
+          kubectl apply -f k8s-manifests/routing-service.yaml
+          kubectl apply -f k8s-manifests/safety-service.yaml
