@@ -19,7 +19,7 @@ struct AnchorRouteMapView: UIViewRepresentable {
     let driver: CLLocationCoordinate2D?
     // Ordered anchor points from Algorithm 3 (may be empty for simple trips)
     var anchorPoints: [AnchorPoint] = []
-    var showsUserLocation: Bool = false
+    var showsUserLocation: Bool = true
     // Mined frequent routes (He et al. 2014) rendered as dashed navy polylines
     var frequentRoutes: [FrequentRouteSegment] = []
 

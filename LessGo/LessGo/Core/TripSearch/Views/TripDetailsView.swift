@@ -97,7 +97,7 @@ struct TripDetailsView: View {
                 origin: trip.originPoint?.clLocationCoordinate2D,
                 destination: trip.destinationPoint?.clLocationCoordinate2D,
                 driver: nil,
-                showsUserLocation: false,
+                showsUserLocation: true,
                 onRouteUpdated: { info in
                     routeInfo = info
                 }
