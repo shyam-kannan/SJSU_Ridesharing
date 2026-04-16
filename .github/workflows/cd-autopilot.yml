@@ -144,6 +144,12 @@ jobs:
       - name: Set up Google Cloud SDK
         if: steps.auth.outcome == 'success'
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: Enable GKE auth plugin for kubectl
+        if: steps.auth.outcome == 'success'
+        run: echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
 
       - name: Get GKE credentials
         if: steps.auth.outcome == 'success'

@@ -23,6 +23,7 @@ describe('service config modules', () => {
 
   it('auth-service config loads defaults and upload paths', async () => {
     process.env.DATABASE_URL = 'postgres://auth-db';
+    process.env.JWT_SECRET = 'unit-test-jwt-secret';
     process.env.UPLOAD_DIR = '/tmp/uploads';
     process.env.AUTH_SERVICE_PORT = '4010';
 
