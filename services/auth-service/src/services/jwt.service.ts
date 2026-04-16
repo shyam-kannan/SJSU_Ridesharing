@@ -56,8 +56,13 @@ export const generateRefreshToken = (userId: string): string => {
  */
 export const verifyToken = (token: string): JWTPayload => {
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
-    return decoded;
+    const decoded = jwt.verify(token, config.jwtSecret);
+
+    if (typeof decoded === 'string') {
+      throw new Error('Invalid JWT payload format');
+    }
+
+    return decoded as JWTPayload;
   } catch (error) {
     throw error;
   }

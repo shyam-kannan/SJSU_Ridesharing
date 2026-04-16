@@ -3,17 +3,25 @@ import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
 
+const requireSecret = (key: string): string => {
+  const value = getSecretValue(key);
+  if (!value) {
+    throw new Error(`${key} environment variable is required`);
+  }
+  return value;
+};
+
 export const config = {
   port: process.env.AUTH_SERVICE_PORT || 3001,
   env: process.env.NODE_ENV || 'development',
 
   // Database
-  databaseUrl: getSecretValue('DATABASE_URL'),
+  databaseUrl: requireSecret('DATABASE_URL'),
 
   // JWT
-  jwtSecret: getSecretValue('JWT_SECRET', 'default-secret-change-in-production'),
-  jwtAccessExpiry: getSecretValue('JWT_ACCESS_EXPIRY', '15m'),
-  jwtRefreshExpiry: getSecretValue('JWT_REFRESH_EXPIRY', '7d'),
+  jwtSecret: requireSecret('JWT_SECRET'),
+  jwtAccessExpiry: getSecretValue('JWT_ACCESS_EXPIRY') ?? '15m',
+  jwtRefreshExpiry: getSecretValue('JWT_REFRESH_EXPIRY') ?? '7d',
 
   // Bcrypt
   bcryptSaltRounds: 10,
@@ -29,10 +37,4 @@ export const config = {
 };
 
 // Validate required config
-if (!config.databaseUrl) {
-  throw new Error('DATABASE_URL environment variable is required');
-}
-
-if (config.env === 'production' && config.jwtSecret === 'default-secret-change-in-production') {
-  throw new Error('JWT_SECRET must be set in production');
-}
+// Required secrets are validated by requireSecret during config construction.
