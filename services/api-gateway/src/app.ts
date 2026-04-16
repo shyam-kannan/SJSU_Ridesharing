@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
 
@@ -85,7 +86,7 @@ const jwtMiddleware = (req: Request, res: Response, next: Function) => {
   }
 
   try {
-    const jwtSecret = process.env.JWT_SECRET || 'default-secret';
+    const jwtSecret = getSecretValue('JWT_SECRET') ?? 'default-secret';
     jwt.verify(token, jwtSecret);
     next();
   } catch (error) {

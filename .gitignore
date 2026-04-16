@@ -51,6 +51,9 @@ htmlcov/
 logs/
 *.log
 
+# Test coverage artifacts
+coverage/
+
 # Docker
 docker-compose.override.yml
 
@@ -59,7 +62,7 @@ docker-compose.override.yml
 *.sqlite
 
 # Kubernetes secrets
-k8s-manifests/secrets.yaml
+k8s-manifests/lessgo-secrets.yaml
 
 # OS
 Thumbs.db

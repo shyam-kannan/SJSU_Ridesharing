@@ -6,11 +6,23 @@
 //
 
 import Testing
+import CoreLocation
+@testable import LessGo
 
 struct LessGoTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @Test func apiConfigBaseURLIsSetToAValidURLString() {
+        #expect(!APIConfig.baseURL.isEmpty)
+        #expect(APIConfig.baseURL.hasPrefix("http"))
+        #expect(URL(string: APIConfig.baseURL) != nil)
+    }
+
+    @Test func appConstantsAreWithinExpectedProductBounds() {
+        #expect(AppConstants.defaultSearchRadiusMeters == 8000)
+        #expect(AppConstants.maxSeats == 8)
+        #expect(AppConstants.minPasswordLength == 8)
+        #expect(AppConstants.sjsuCoordinate.latitude > 37.0)
+        #expect(AppConstants.sjsuCoordinate.longitude < -121.0)
     }
 
 }

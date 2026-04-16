@@ -7,9 +7,9 @@ class NetworkManager {
 
     private init() {}
 
-    // For development (simulator): 127.0.0.1
-    // For production: will be updated later
-    private let baseURL = "http://127.0.0.1:3000/api"
+    // Reads the API base URL from configuration so the app can target
+    // localhost in development and GKE in production/testing.
+    private let baseURL = APIConfig.baseURL
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()

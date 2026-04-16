@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
 
@@ -7,16 +8,16 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
 
   // Database
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: getSecretValue('DATABASE_URL'),
 
   // JWT
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+  jwtSecret: getSecretValue('JWT_SECRET', 'default-secret-change-in-production'),
 
   // Service URLs
   tripServiceUrl: process.env.TRIP_SERVICE_URL || 'http://127.0.0.1:3003',
-  paymentServiceUrl: process.env.PAYMENT_SERVICE_URL || 'http://localhost:3005',
-  costServiceUrl: process.env.COST_SERVICE_URL || 'http://localhost:3009',
-  notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3006',
+  paymentServiceUrl: process.env.PAYMENT_SERVICE_URL || 'http://127.0.0.1:3005',
+  costServiceUrl: process.env.COST_SERVICE_URL || 'http://127.0.0.1:3009',
+  notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:3006',
 };
 
 if (!config.databaseUrl) {

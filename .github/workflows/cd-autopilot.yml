@@ -14,6 +14,8 @@ env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   AR_REPO_NAME: ${{ vars.AR_REPO_NAME }}
   AR_LOCATION: ${{ vars.AR_LOCATION }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
 
 jobs:
   build-and-push:
@@ -110,3 +112,80 @@ jobs:
           tags: |
             ${{ env.AR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO_NAME }}/${{ matrix.service }}:${{ github.sha }}
             ${{ env.AR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO_NAME }}/${{ matrix.service }}:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate GKE configuration
+        run: |
+          if [ -z "${PROJECT_ID}" ] || [ -z "${GKE_CLUSTER}" ] || [ -z "${GKE_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
+            echo "Missing required GitHub variables or secrets for GKE deployment."
+            exit 1
+          fi
+        env:
+          GCP_DEPLOYER_SA: ${{ secrets.GCP_DEPLOYER_SA }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Set up Google Cloud SDK
+        if: steps.auth.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        if: steps.auth.outcome == 'success'
+        run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$PROJECT_ID"
+
+      - name: Pin deployments to the new image tag
+        if: steps.auth.outcome == 'success'
+        run: |
+          set -euo pipefail
+
+          services=(
+            api-gateway
+            auth-service
+            user-service
+            trip-service
+            booking-service
+            payment-service
+            notification-service
+            cost-calculation-service
+            grouping-service
+            routing-service
+            safety-service
+          )
+
+          for service in "${services[@]}"; do
+            image="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/${service}:${GITHUB_SHA}"
+            echo "Updating ${service} to ${image}"
+            kubectl -n lessgo set image deployment/${service} ${service}=${image}
+          done
+
+      - name: Wait for rollouts
+        if: steps.auth.outcome == 'success'
+        run: |
+          set -euo pipefail
+          kubectl -n lessgo rollout status deployment/api-gateway --timeout=5m
+          kubectl -n lessgo rollout status deployment/auth-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/user-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/trip-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/booking-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/payment-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/notification-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/cost-calculation-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/grouping-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/routing-service --timeout=5m
+          kubectl -n lessgo rollout status deployment/safety-service --timeout=5m

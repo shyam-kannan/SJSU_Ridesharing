@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
 
@@ -7,12 +8,12 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
 
   // Database
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: getSecretValue('DATABASE_URL'),
 
   // JWT
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
-  jwtAccessExpiry: process.env.JWT_ACCESS_EXPIRY || '15m',
-  jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+  jwtSecret: getSecretValue('JWT_SECRET', 'default-secret-change-in-production'),
+  jwtAccessExpiry: getSecretValue('JWT_ACCESS_EXPIRY', '15m'),
+  jwtRefreshExpiry: getSecretValue('JWT_REFRESH_EXPIRY', '7d'),
 
   // Bcrypt
   bcryptSaltRounds: 10,
@@ -23,8 +24,8 @@ export const config = {
   maxFileSize: 5 * 1024 * 1024, // 5MB
 
   // AWS S3 (optional)
-  awsS3Bucket: process.env.AWS_S3_BUCKET,
-  awsRegion: process.env.AWS_REGION,
+  awsS3Bucket: getSecretValue('AWS_S3_BUCKET'),
+  awsRegion: getSecretValue('AWS_REGION'),
 };
 
 // Validate required config

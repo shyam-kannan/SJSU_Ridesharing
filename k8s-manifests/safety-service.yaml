@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: safety-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: safety-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,10 +25,11 @@ spec:
         app: safety-service
         tier: backend
     spec:
+      serviceAccountName: safety-service-ksa
       enableServiceLinks: false
       containers:
       - name: safety-service
-        image: gcr.io/lessgo-490819/safety-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/safety-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000

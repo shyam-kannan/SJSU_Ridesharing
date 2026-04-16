@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auth-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: auth-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,10 +25,11 @@ spec:
         app: auth-service
         tier: backend
     spec:
+      serviceAccountName: auth-service-ksa
       enableServiceLinks: false
       containers:
       - name: auth-service
-        image: gcr.io/lessgo-490819/auth-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/auth-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3001
@@ -50,6 +59,8 @@ spec:
             port: 3001
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

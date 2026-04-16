@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: trip-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: trip-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,10 +25,11 @@ spec:
         app: trip-service
         tier: backend
     spec:
+      serviceAccountName: trip-service-ksa
       enableServiceLinks: false
       containers:
       - name: trip-service
-        image: gcr.io/lessgo-490819/trip-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/trip-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3003
@@ -49,6 +58,8 @@ spec:
             port: 3003
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

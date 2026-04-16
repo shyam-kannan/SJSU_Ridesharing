@@ -148,6 +148,28 @@ Image naming format:
 
 If you later deploy these images to Kubernetes, create an image pull secret in the target namespace if the repository is private.
 
+## GKE Deployment
+
+The manifests in [k8s-manifests/](k8s-manifests/) now point to the Artifact Registry images and keep service-to-service traffic on Kubernetes DNS names such as `http://auth-service:3001`.
+
+Recommended rollout order:
+
+1. Create the namespace, config map, and secret resources.
+2. Apply the service deployments.
+3. Expose `api-gateway` through a `LoadBalancer` service and use the assigned external IP directly.
+
+Example:
+
+```bash
+kubectl apply -f k8s-manifests/namespace.yaml
+kubectl apply -f k8s-manifests/configmap.yaml
+# Apply your secret manifest here if you keep one outside the repo
+kubectl apply -f k8s-manifests/
+kubectl -n lessgo get svc api-gateway -o wide
+```
+
+For the iOS app, set `LESSGO_API_BASE_URL` to the public API gateway URL, for example `http://<EXTERNAL-IP>/api`. The app reads that override from `APIConfig` and falls back to `http://127.0.0.1:3000/api` in the simulator.
+
 ## Contributing
 
 1. Create a feature branch

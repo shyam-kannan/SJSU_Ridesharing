@@ -26,6 +26,9 @@ db
 .env.*
 !.env.example
 
+# Kubernetes secrets
+k8s-manifests/lessgo-secrets.yaml
+
 uploads
 **/uploads
 

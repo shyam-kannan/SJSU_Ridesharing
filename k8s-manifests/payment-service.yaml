@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payment-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: payment-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,10 +25,11 @@ spec:
         app: payment-service
         tier: backend
     spec:
+      serviceAccountName: payment-service-ksa
       enableServiceLinks: false
       containers:
       - name: payment-service
-        image: gcr.io/lessgo-490819/payment-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/payment-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3005
@@ -49,6 +58,8 @@ spec:
             port: 3005
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

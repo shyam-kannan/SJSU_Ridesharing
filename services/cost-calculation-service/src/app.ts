@@ -9,7 +9,7 @@ app.use(cors());
 // Configuration
 const BASE_PRICE = 5.0;
 const PRICE_PER_MILE = 0.5;
-const ROUTING_SERVICE_URL = process.env.ROUTING_SERVICE_URL || 'http://localhost:8002';
+const ROUTING_SERVICE_URL = process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8002';
 
 // Health check
 app.get('/health', (_req, res) => {

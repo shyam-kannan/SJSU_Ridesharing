@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: routing-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: routing-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,10 +25,11 @@ spec:
         app: routing-service
         tier: backend
     spec:
+      serviceAccountName: routing-service-ksa
       enableServiceLinks: false
       containers:
       - name: routing-service
-        image: gcr.io/lessgo-490819/routing-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/routing-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000

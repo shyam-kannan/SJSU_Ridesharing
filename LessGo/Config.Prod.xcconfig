@@ -1,0 +1,5 @@
+// Production environment configuration
+#include "Config.xcconfig"
+
+// Replace with your GKE production IP or domain
+API_BASE_URL = http://136.109.119.177:80/api

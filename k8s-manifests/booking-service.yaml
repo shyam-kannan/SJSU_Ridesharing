@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: booking-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: booking-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,10 +25,11 @@ spec:
         app: booking-service
         tier: backend
     spec:
+      serviceAccountName: booking-service-ksa
       enableServiceLinks: false
       containers:
       - name: booking-service
-        image: gcr.io/lessgo-490819/booking-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/booking-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3004
@@ -49,6 +58,8 @@ spec:
             port: 3004
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
