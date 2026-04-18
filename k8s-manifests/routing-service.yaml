@@ -34,11 +34,13 @@ spec:
         ports:
         - containerPort: 8000
           name: http
+        volumeMounts:
+        - name: secrets-store
+          mountPath: /mnt/secrets-store
+          readOnly: true
         envFrom:
         - configMapRef:
             name: lessgo-config
-        - secretRef:
-            name: lessgo-secrets
         resources:
           requests:
             memory: "64Mi"
@@ -58,6 +60,13 @@ spec:
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5
+      volumes:
+      - name: secrets-store
+        csi:
+          driver: secrets-store-gke.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: lessgo-secrets-provider
 ---
 apiVersion: v1
 kind: Service

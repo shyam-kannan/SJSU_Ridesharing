@@ -34,11 +34,13 @@ spec:
         ports:
         - containerPort: 3002
           name: http
+        volumeMounts:
+        - name: secrets-store
+          mountPath: /mnt/secrets-store
+          readOnly: true
         envFrom:
         - configMapRef:
             name: lessgo-config
-        - secretRef:
-            name: lessgo-secrets
         resources:
           requests:
             memory: "64Mi"
@@ -60,6 +62,13 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
+      volumes:
+      - name: secrets-store
+        csi:
+          driver: secrets-store-gke.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: lessgo-secrets-provider
 ---
 apiVersion: v1
 kind: Service

@@ -161,6 +161,7 @@ jobs:
           set -euo pipefail
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
+          kubectl apply -f k8s-manifests/secretproviderclass.yaml
           kubectl apply -f k8s-manifests/api-gateway.yaml
           kubectl apply -f k8s-manifests/auth-service.yaml
           kubectl apply -f k8s-manifests/user-service.yaml
