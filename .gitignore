@@ -66,3 +66,5 @@ k8s-manifests/lessgo-secrets.yaml
 
 # OS
 Thumbs.db
+.vercel
+.env*.local

@@ -19,9 +19,13 @@ enum APIConfig {
 
         // Priority 3: Safe fallback differs by build configuration.
         #if DEBUG
+        #if targetEnvironment(simulator)
         return "http://127.0.0.1:3000/api"
         #else
-        return "http://136.109.119.177:80/api"
+        return "https://lessgo-zeta.vercel.app/api"
+        #endif
+        #else
+        return "https://lessgo-zeta.vercel.app/api"
         #endif
     }
 }
