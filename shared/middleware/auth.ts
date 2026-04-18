@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getSecretValue } from '../utils/secrets';
 
 /**
  * Extended Express Request interface with user data from JWT
@@ -34,7 +35,7 @@ export const authenticateToken = (
   }
 
   try {
-    const jwtSecret = process.env.JWT_SECRET;
+    const jwtSecret = getSecretValue('JWT_SECRET');
     if (!jwtSecret) {
       throw new Error('JWT_SECRET not configured');
     }

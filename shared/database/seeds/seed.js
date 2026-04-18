@@ -1,10 +1,27 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const { faker } = require('@faker-js/faker');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
+function getEnvOrMountedSecret(key) {
+  if (process.env[key]) {
+    return process.env[key];
+  }
+
+  const mountPath = process.env.SECRET_MOUNT_PATH || '/mnt/secrets-store';
+  const secretPath = path.join(mountPath, key);
+
+  if (fs.existsSync(secretPath)) {
+    return fs.readFileSync(secretPath, 'utf8').trim();
+  }
+
+  return undefined;
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: getEnvOrMountedSecret('DATABASE_URL'),
 });
 
 // SJSU Campus coordinates (correct)
