@@ -417,6 +417,9 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_APP_API_BASE_URL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSExceptionAllowsInsecureHTTPLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSIncludesSubdomains = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to scan your SJSU ID for verification.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to show nearby rides.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo library access to upload your SJSU ID for verification.";
@@ -465,6 +468,9 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_APP_API_BASE_URL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSExceptionAllowsInsecureHTTPLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSIncludesSubdomains = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to scan your SJSU ID for verification.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to show nearby rides.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo library access to upload your SJSU ID for verification.";
