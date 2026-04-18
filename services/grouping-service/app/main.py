@@ -5,7 +5,7 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 from typing import List
-from secret_loader import load_mounted_secrets
+from app.secret_loader import load_mounted_secrets
 
 load_dotenv()
 load_mounted_secrets()
