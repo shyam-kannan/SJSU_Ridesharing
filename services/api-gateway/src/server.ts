@@ -1,6 +1,6 @@
 import app from './app';
 
-const PORT = process.env.API_GATEWAY_PORT || 3000;
+const PORT = Number(process.env.API_GATEWAY_PORT) || 3000;
 const BIND_HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 
