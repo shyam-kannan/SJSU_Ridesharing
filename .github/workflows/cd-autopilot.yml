@@ -99,6 +99,24 @@ jobs:
         if: steps.auth.outcome == 'success'
         uses: docker/setup-buildx-action@v3
 
+      - name: Debug user-service source snapshot
+        if: steps.auth.outcome == 'success' && matrix.service == 'user-service'
+        run: |
+          set -euo pipefail
+          echo "Building service: ${{ matrix.service }}"
+          echo "Commit SHA: ${GITHUB_SHA}"
+          echo "Checked out HEAD: $(git rev-parse HEAD)"
+          echo "User-service route files:"
+          find services/user-service/src/routes -maxdepth 1 -type f -name "*.ts" | sort
+          echo "Looking for unexpected vehicle.routes.ts"
+          if [ -f services/user-service/src/routes/vehicle.routes.ts ]; then
+            echo "Found services/user-service/src/routes/vehicle.routes.ts"
+          else
+            echo "vehicle.routes.ts not present"
+          fi
+          echo "User-service package dependencies excerpt:"
+          grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
+
       - name: Build and push ${{ matrix.service }} image
         if: steps.auth.outcome == 'success'
         uses: docker/build-push-action@v6
@@ -107,6 +125,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64
+          no-cache: ${{ matrix.service == 'user-service' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
