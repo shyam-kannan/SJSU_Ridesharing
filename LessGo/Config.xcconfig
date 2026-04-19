@@ -1,0 +1,5 @@
+// Common configuration shared by all environments
+// This file is included by environment-specific xcconfig files
+
+// Default values (override in environment-specific files)
+API_BASE_URL = http://127.0.0.1:3000/api

@@ -1,18 +1,27 @@
 import dotenv from 'dotenv';
+import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
+
+const requireSecret = (key: string): string => {
+  const value = getSecretValue(key);
+  if (!value) {
+    throw new Error(`${key} environment variable is required`);
+  }
+  return value;
+};
 
 export const config = {
   port: process.env.AUTH_SERVICE_PORT || 3001,
   env: process.env.NODE_ENV || 'development',
 
   // Database
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: requireSecret('DATABASE_URL'),
 
   // JWT
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
-  jwtAccessExpiry: process.env.JWT_ACCESS_EXPIRY || '15m',
-  jwtRefreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+  jwtSecret: requireSecret('JWT_SECRET'),
+  jwtAccessExpiry: getSecretValue('JWT_ACCESS_EXPIRY') ?? '15m',
+  jwtRefreshExpiry: getSecretValue('JWT_REFRESH_EXPIRY') ?? '7d',
 
   // Bcrypt
   bcryptSaltRounds: 10,
@@ -23,15 +32,9 @@ export const config = {
   maxFileSize: 5 * 1024 * 1024, // 5MB
 
   // AWS S3 (optional)
-  awsS3Bucket: process.env.AWS_S3_BUCKET,
-  awsRegion: process.env.AWS_REGION,
+  awsS3Bucket: getSecretValue('AWS_S3_BUCKET'),
+  awsRegion: getSecretValue('AWS_REGION'),
 };
 
 // Validate required config
-if (!config.databaseUrl) {
-  throw new Error('DATABASE_URL environment variable is required');
-}
-
-if (config.env === 'production' && config.jwtSecret === 'default-secret-change-in-production') {
-  throw new Error('JWT_SECRET must be set in production');
-}
+// Required secrets are validated by requireSecret during config construction.

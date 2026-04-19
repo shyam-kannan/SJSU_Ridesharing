@@ -73,6 +73,7 @@ export interface SafeUser {
   seats_available?: number;
   license_plate?: string;
   earnings?: number;
+  profile_picture_url?: string | null;
   mpg?: number;
   created_at: Date;
   updated_at: Date;
@@ -128,7 +129,7 @@ export interface Booking {
  * Booking with related entities
  */
 export interface BookingWithDetails extends Booking {
-  trip: Trip;
+  trip: TripWithDriver;
   rider: SafeUser;
   quote?: Quote;
   payment?: Payment;

@@ -18,6 +18,36 @@ struct Trip: Codable, Identifiable {
     let updatedAt: Date
     let driver: User?
 
+    init(
+        id: String,
+        driverId: String,
+        origin: String,
+        destination: String,
+        originPoint: Coordinate?,
+        destinationPoint: Coordinate?,
+        departureTime: Date,
+        seatsAvailable: Int,
+        recurrence: String?,
+        status: TripStatus,
+        createdAt: Date,
+        updatedAt: Date,
+        driver: User?
+    ) {
+        self.id = id
+        self.driverId = driverId
+        self.origin = origin
+        self.destination = destination
+        self.originPoint = originPoint
+        self.destinationPoint = destinationPoint
+        self.departureTime = departureTime
+        self.seatsAvailable = seatsAvailable
+        self.recurrence = recurrence
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.driver = driver
+    }
+
     enum CodingKeys: String, CodingKey {
         case id = "trip_id"
         case driverId = "driver_id"
@@ -30,6 +60,40 @@ struct Trip: Codable, Identifiable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case driver
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        driverId = try container.decode(String.self, forKey: .driverId)
+        origin = try container.decode(String.self, forKey: .origin)
+        destination = try container.decode(String.self, forKey: .destination)
+        originPoint = try container.decodeIfPresent(Coordinate.self, forKey: .originPoint)
+        destinationPoint = try container.decodeIfPresent(Coordinate.self, forKey: .destinationPoint)
+        departureTime = try container.decode(Date.self, forKey: .departureTime)
+        seatsAvailable = try container.decode(Int.self, forKey: .seatsAvailable)
+        recurrence = try container.decodeIfPresent(String.self, forKey: .recurrence)
+        status = try Self.decodeStatus(from: container)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        driver = try container.decodeIfPresent(User.self, forKey: .driver)
+    }
+
+    private static func decodeStatus(from container: KeyedDecodingContainer<CodingKeys>) throws -> TripStatus {
+        let rawValue = try container.decode(String.self, forKey: .status)
+        if let status = TripStatus(rawValue: rawValue) {
+            return status
+        }
+
+        if rawValue.lowercased() == "active" {
+            return .pending
+        }
+
+        throw DecodingError.dataCorruptedError(
+            forKey: .status,
+            in: container,
+            debugDescription: "Unknown trip status: \(rawValue)"
+        )
     }
 }
 

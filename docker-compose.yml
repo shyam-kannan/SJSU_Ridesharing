@@ -1,21 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL with PostGIS extension for geospatial data
-  postgres:
-    image: postgis/postgis:15-3.3
-    container_name: lessgo-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: lessgo_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - lessgo-network
-
   # Redis for caching and session management
   redis:
     image: redis:7-alpine
@@ -80,7 +65,6 @@ services:
       - lessgo-network
 
 volumes:
-  postgres_data:
   redis_data:
 
 networks:

@@ -1,21 +1,22 @@
 import nodemailer from 'nodemailer';
+import { getSecretValue } from '@lessgo/shared';
 
 // MARK: - Transporter
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
+  host: getSecretValue('SMTP_HOST', 'smtp.gmail.com'),
+  port: parseInt(getSecretValue('SMTP_PORT', '587') || '587'),
   secure: false,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: getSecretValue('SMTP_USER'),
+    pass: getSecretValue('SMTP_PASS'),
   },
 });
 
-const FROM = process.env.FROM_EMAIL || 'LessGo <noreply@lessgo.app>';
+const FROM = getSecretValue('FROM_EMAIL', 'LessGo <noreply@lessgo.app>');
 
 function isEmailConfigured(): boolean {
-  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  return !!(getSecretValue('SMTP_USER') && getSecretValue('SMTP_PASS'));
 }
 
 // MARK: - HTML Template helpers

@@ -915,8 +915,14 @@ struct ProfileView: View {
             return URL(string: raw)
         }
         if raw.hasPrefix("/") {
-            // User service serves uploads directly; backend currently returns a relative path.
-            return URL(string: "http://127.0.0.1:3002\(raw)")
+            // Resolve relative media paths against the configured API host.
+            // API base usually includes /api, so trim that segment before appending /uploads/... paths.
+            guard var components = URLComponents(string: APIConfig.baseURL) else {
+                return URL(string: raw)
+            }
+            components.path = components.path.replacingOccurrences(of: "/api", with: "", options: [.anchored])
+            let gatewayRoot = components.string?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+            return URL(string: "\(gatewayRoot)\(raw)")
         }
         return URL(string: raw)
     }

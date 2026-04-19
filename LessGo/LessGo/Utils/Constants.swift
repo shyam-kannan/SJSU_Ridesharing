@@ -3,11 +3,31 @@ import CoreLocation
 
 // MARK: - API Configuration
 enum APIConfig {
-    // For iOS Simulator → 127.0.0.1
-    static let baseURL = "http://127.0.0.1:3000/api"
+    /// Read API base URL from build settings (via Info.plist)
+    /// Configured per-environment using .xcconfig files (Config.Dev/Staging/Prod.xcconfig)
+    /// Falls back to environment variable or hardcoded default
+    static var baseURL: String {
+        // Priority 1: Read from Info.plist (set via xcconfig build settings)
+        if let bundleURL = Bundle.main.infoDictionary?["API_BASE_URL"] as? String, !bundleURL.isEmpty {
+            return bundleURL
+        }
+        
+        // Priority 2: Read from environment variable (for Xcode Scheme overrides)
+        if let override = ProcessInfo.processInfo.environment["LESSGO_API_BASE_URL"], !override.isEmpty {
+            return override
+        }
 
-    // For physical device → replace with your machine's local IP:
-    // static let baseURL = "http://192.168.1.X:3000/api"
+        // Priority 3: Safe fallback differs by build configuration.
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        return "http://127.0.0.1:3000/api"
+        #else
+        return "https://lessgo-zeta.vercel.app/api"
+        #endif
+        #else
+        return "https://lessgo-zeta.vercel.app/api"
+        #endif
+    }
 }
 
 // MARK: - Stripe Configuration

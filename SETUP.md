@@ -54,6 +54,16 @@ npm run build
 cd ..
 ```
 
+Optional one-shot database bootstrap:
+```bash
+npm run bootstrap:db
+
+# Fresh database only: migrations + seed demo data
+npm run bootstrap:db -- --fresh
+```
+
+> The bootstrap script targets your hosted Supabase database. Redis is still started separately.
+
 ---
 
 ## 3. Verify .env File
@@ -90,7 +100,7 @@ FROM_EMAIL=LessGo <noreply@lessgo.app>
 
 ## 4. Start Infrastructure
 
-Start PostgreSQL (with PostGIS) and Redis in Docker:
+Start Redis in Docker:
 ```
 docker compose up -d
 ```
@@ -100,30 +110,26 @@ Verify both containers are running:
 docker compose ps
 ```
 
-You should see two containers with status `running`:
-- `lessgo-postgres` (port 5432)
+You should see the Redis container with status `running`:
 - `lessgo-redis` (port 6379)
+
+> PostgreSQL is hosted on Supabase now, so there is no local Postgres container to start.
 
 ---
 
 ## 5. Database Setup
 
-Create all database tables:
+Run migrations and optionally seed fresh demo data through the bootstrap script:
 ```
-npm run migrate:up
-```
-
-You should see output like:
-```
-> Migrating files: 20260214000001_enable_postgis
-> Migrating files: 20260214000002_create_users_table
-> ...
+npm run bootstrap:db
 ```
 
-Load test data:
+For a brand-new Supabase database:
 ```
-npm run seed
+npm run bootstrap:db -- --fresh
 ```
+
+The fresh-data mode runs migrations first and then loads the demo dataset. The seed clears existing app data in core tables before inserting demo users/trips, so use it only when you want a clean database.
 
 The seed creates **50 users** (25 drivers, 25 riders, all verified) and **108 trips** — 54 trips TO SJSU and 54 trips FROM SJSU, covering 10 Bay Area hubs from SF Caltrain (66 km) to Santa Clara (8 km).
 
@@ -206,7 +212,7 @@ Try the gateway routing:
 curl http://localhost:3000/api/trips
 ```
 
-This should return a list of seeded trips.
+This should return trips. If you skipped seeding, it may return an empty list until you create trips.
 
 ---
 
@@ -250,19 +256,16 @@ docker compose up -d
 ```
 
 ### Migration fails with "relation already exists"
-The tables already exist. This is fine if you've run migrations before. To start fresh:
+The tables already exist. This is fine if you've run migrations before. To refresh the schema on a clean database:
 ```
-npm run migrate:down
-npm run migrate:up
-npm run seed
+npm run bootstrap:db
+npm run bootstrap:db -- --fresh
 ```
 
 ### Seed fails with "duplicate key"
-The seed data already exists. To re-seed, drop and recreate:
+Seed data already exists (common on an already-seeded Supabase DB). To re-seed in a dev/test DB, run the fresh bootstrap only on a clean database:
 ```
-npm run migrate:down
-npm run migrate:up
-npm run seed
+npm run bootstrap:db -- --fresh
 ```
 
 ### PowerShell says "cannot be loaded because running scripts is disabled"
@@ -299,7 +302,7 @@ lessgo-backend/
 - The `@lessgo/shared` package contains types, middleware, and utilities used by all services
 
 **Test data credentials:**
-- Seeded users: `user1@sjsu.edu` through `user50@sjsu.edu`
+- If seed has been run: users `user1@sjsu.edu` through `user50@sjsu.edu`
 - Password for all: `Password123`
 - 25 drivers, 25 riders, all SJSU-verified
 - 108 trips covering 10 Bay Area hubs: SF (66 km), Oakland (58 km), Fremont (24 km), Palo Alto (28 km), and more
@@ -312,11 +315,10 @@ lessgo-backend/
 |--------|---------|
 | Install everything | `npm install` |
 | Build shared package | `cd shared && npm run build` |
-| Start Docker | `docker compose up -d` |
+| Start Redis | `docker compose up -d` |
 | Stop Docker | `docker compose down` |
-| Run migrations | `npm run migrate:up` |
-| Undo migrations | `npm run migrate:down` |
-| Seed database | `npm run seed` |
+| Run database bootstrap | `npm run bootstrap:db` |
+| Fresh bootstrap with seed | `npm run bootstrap:db -- --fresh` |
 | Run all tests (Windows) | `.\tests\run-all-tests.ps1 -All` |
 | Run all tests (Mac) | `./tests/run-all-tests.sh --all` |
 | Test iOS features | `./tests/test-ios-features.sh` |
@@ -360,23 +362,25 @@ npm run build
 cd ..
 ```
 
-**Start infrastructure (PostgreSQL + Redis):**
+**Start infrastructure (Redis only):**
 ```bash
 docker compose up -d
 
 # Verify both containers are running
 docker compose ps
-# Should show: lessgo-postgres (5432) and lessgo-redis (6379) — both "running"
+# Should show: lessgo-redis (6379) — running
 ```
 
 **Set up the database:**
 ```bash
-# Create all tables
-npm run migrate:up
+# Migrations only
+npm run bootstrap:db
 
-# Load test data (50 users, 100 trips, bookings, ratings)
-npm run seed
+# Fresh database only: migrations + seed demo data
+npm run bootstrap:db -- --fresh
 ```
+
+> Use the fresh mode only when you want to load demo data into a clean Supabase database.
 
 ---
 
@@ -493,7 +497,7 @@ Expected: **16/16 passed** (change password, device tokens, notification prefere
 
 ## Test User Credentials
 
-After running `npm run seed`, the database contains:
+If `npm run bootstrap:db -- --fresh` has been run, the database contains:
 
 **50 users:**
 - Emails: `user1@sjsu.edu` through `user50@sjsu.edu`
@@ -584,14 +588,13 @@ Clean the build folder (**Product → Clean Build Folder**, or Cmd+Shift+K), the
 
 **Backend tests fail**
 ```bash
-docker compose up -d        # ensure Docker is running
-npm run migrate:up          # re-run migrations if needed
-npm run seed                # re-seed test data
+docker compose up -d        # ensure Redis is running
+npm run bootstrap:db        # re-run migrations if needed
+npm run bootstrap:db -- --fresh  # optional: re-seed test data in dev/test DB only
 ```
 
 **Migration fails with "relation already exists"**
 ```bash
-npm run migrate:down
-npm run migrate:up
-npm run seed
+npm run bootstrap:db
+npm run bootstrap:db -- --fresh   # only if you need demo data on a clean DB
 ```

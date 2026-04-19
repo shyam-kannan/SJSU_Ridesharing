@@ -7,8 +7,10 @@ import json
 import hashlib
 import os
 from dotenv import load_dotenv
+from app.secret_loader import load_mounted_secrets
 
 load_dotenv()
+load_mounted_secrets()
 
 app = FastAPI(title="Routing Service", version="1.0.0")
 
@@ -29,7 +31,9 @@ else:
     gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
 
 # Initialize Redis client
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+in_kubernetes = os.getenv("KUBERNETES_SERVICE_HOST") is not None
+default_redis_url = "redis://redis:6379" if in_kubernetes else "redis://127.0.0.1:6379"
+REDIS_URL = os.getenv("REDIS_URL", default_redis_url)
 CACHE_TTL = int(os.getenv("ROUTE_CACHE_TTL", "3600"))  # 1 hour default
 
 try:
