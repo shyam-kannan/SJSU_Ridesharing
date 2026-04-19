@@ -26,37 +26,26 @@ jobs:
         include:
           - service: api-gateway
             dockerfile: services/api-gateway/Dockerfile
-            changed_key: api_gateway
           - service: auth-service
             dockerfile: services/auth-service/Dockerfile
-            changed_key: auth_service
           - service: user-service
             dockerfile: services/user-service/Dockerfile
-            changed_key: user_service
           - service: trip-service
             dockerfile: services/trip-service/Dockerfile
-            changed_key: trip_service
           - service: booking-service
             dockerfile: services/booking-service/Dockerfile
-            changed_key: booking_service
           - service: payment-service
             dockerfile: services/payment-service/Dockerfile
-            changed_key: payment_service
           - service: notification-service
             dockerfile: services/notification-service/Dockerfile
-            changed_key: notification_service
           - service: cost-calculation-service
             dockerfile: services/cost-calculation-service/Dockerfile
-            changed_key: cost_calculation_service
           - service: grouping-service
             dockerfile: services/grouping-service/Dockerfile
-            changed_key: grouping_service
           - service: routing-service
             dockerfile: services/routing-service/Dockerfile
-            changed_key: routing_service
           - service: safety-service
             dockerfile: services/safety-service/Dockerfile
-            changed_key: safety_service
 
     steps:
       - name: Checkout Repository
@@ -68,26 +57,13 @@ jobs:
         id: changed
         run: |
           set -euo pipefail
-
-          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
-
           if [ "${{ github.event_name }}" != "push" ]; then
-            # For workflow_dispatch, rebuild all services
-            for svc in $services; do
-              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
-            done
+            echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-
-          for svc in $services; do
-            if echo "$CHANGED_FILES" | grep -q "^services/$svc/"; then
-              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
-            else
-              echo "${svc//-/_}=false" >> $GITHUB_OUTPUT
-            fi
-          done
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
       - name: Debug GitHub OIDC context
         run: |
@@ -156,7 +132,7 @@ jobs:
           grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
 
       - name: Build and push ${{ matrix.service }} image
-        if: steps.auth.outcome == 'success' && steps.changed.outputs[matrix.changed_key] == 'true'
+        if: steps.auth.outcome == 'success' && (github.event_name != 'push' || contains(steps.changed.outputs.changed_files, format('services/{0}/', matrix.service)))
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -186,26 +162,13 @@ jobs:
         id: changed
         run: |
           set -euo pipefail
-
-          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
-
           if [ "${{ github.event_name }}" != "push" ]; then
-            # For workflow_dispatch, deploy all services
-            for svc in $services; do
-              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
-            done
+            echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-
-          for svc in $services; do
-            if echo "$CHANGED_FILES" | grep -q "^services/$svc/"; then
-              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
-            else
-              echo "${svc//-/_}=false" >> $GITHUB_OUTPUT
-            fi
-          done
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
       - name: Validate GKE configuration
         run: |
@@ -243,19 +206,16 @@ jobs:
         if: steps.auth.outcome == 'success'
         env:
           COMMIT_SHA: ${{ github.sha }}
+          CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
-          if [ "${{ steps.changed.outputs.api_gateway }}" == "true" ]; then envsubst < k8s-manifests/api-gateway.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.auth_service }}" == "true" ]; then envsubst < k8s-manifests/auth-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.user_service }}" == "true" ]; then envsubst < k8s-manifests/user-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.trip_service }}" == "true" ]; then envsubst < k8s-manifests/trip-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.booking_service }}" == "true" ]; then envsubst < k8s-manifests/booking-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.payment_service }}" == "true" ]; then envsubst < k8s-manifests/payment-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.notification_service }}" == "true" ]; then envsubst < k8s-manifests/notification-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.cost_calculation_service }}" == "true" ]; then envsubst < k8s-manifests/cost-calculation-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.grouping_service }}" == "true" ]; then envsubst < k8s-manifests/grouping-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.routing_service }}" == "true" ]; then envsubst < k8s-manifests/routing-service.yaml | kubectl apply -f -; fi
-          if [ "${{ steps.changed.outputs.safety_service }}" == "true" ]; then envsubst < k8s-manifests/safety-service.yaml | kubectl apply -f -; fi
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+          for svc in $services; do
+            if [ "$EVENT_NAME" != "push" ] || echo "$CHANGED_FILES" | tr '|' '\n' | grep -q "^services/$svc/"; then
+              envsubst < "k8s-manifests/$svc.yaml" | kubectl apply -f -
+            fi
+          done
