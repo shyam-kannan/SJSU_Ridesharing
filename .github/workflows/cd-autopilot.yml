@@ -68,12 +68,11 @@ jobs:
         id: changed
         run: |
           set -euo pipefail
-          
-          # Check each service
+
           services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
 
           if [ "${{ github.event_name }}" != "push" ]; then
-            # For workflow_dispatch, rebuild everything
+            # For workflow_dispatch, rebuild all services
             for svc in $services; do
               echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
             done
@@ -81,7 +80,7 @@ jobs:
           fi
 
           CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-          
+
           for svc in $services; do
             if echo "$CHANGED_FILES" | grep -q "^services/$svc/"; then
               echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
@@ -180,6 +179,33 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changed
+        run: |
+          set -euo pipefail
+
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+
+          if [ "${{ github.event_name }}" != "push" ]; then
+            # For workflow_dispatch, deploy all services
+            for svc in $services; do
+              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
+            done
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+
+          for svc in $services; do
+            if echo "$CHANGED_FILES" | grep -q "^services/$svc/"; then
+              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
+            else
+              echo "${svc//-/_}=false" >> $GITHUB_OUTPUT
+            fi
+          done
 
       - name: Validate GKE configuration
         run: |
@@ -222,14 +248,14 @@ jobs:
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
-          envsubst < k8s-manifests/api-gateway.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/auth-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/user-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/trip-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/booking-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/payment-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/notification-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/cost-calculation-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/grouping-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/routing-service.yaml | kubectl apply -f -
-          envsubst < k8s-manifests/safety-service.yaml | kubectl apply -f -
+          if [ "${{ steps.changed.outputs.api_gateway }}" == "true" ]; then envsubst < k8s-manifests/api-gateway.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.auth_service }}" == "true" ]; then envsubst < k8s-manifests/auth-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.user_service }}" == "true" ]; then envsubst < k8s-manifests/user-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.trip_service }}" == "true" ]; then envsubst < k8s-manifests/trip-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.booking_service }}" == "true" ]; then envsubst < k8s-manifests/booking-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.payment_service }}" == "true" ]; then envsubst < k8s-manifests/payment-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.notification_service }}" == "true" ]; then envsubst < k8s-manifests/notification-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.cost_calculation_service }}" == "true" ]; then envsubst < k8s-manifests/cost-calculation-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.grouping_service }}" == "true" ]; then envsubst < k8s-manifests/grouping-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.routing_service }}" == "true" ]; then envsubst < k8s-manifests/routing-service.yaml | kubectl apply -f -; fi
+          if [ "${{ steps.changed.outputs.safety_service }}" == "true" ]; then envsubst < k8s-manifests/safety-service.yaml | kubectl apply -f -; fi
