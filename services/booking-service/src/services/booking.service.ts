@@ -26,6 +26,9 @@ export const createBooking = async (
   bookingData: CreateBookingRequest
 ): Promise<{ booking: Booking; quote: Quote }> => {
   const { trip_id, seats_booked } = bookingData;
+  // pickup_location is not in CreateBookingRequest type but may be sent by clients
+  // (e.g. dev-tools simulation for detour testing). Store it if present.
+  const pickupLocation = (bookingData as any).pickup_location ?? null;
 
   // Check trip availability
   const tripQuery = `
@@ -54,10 +57,10 @@ export const createBooking = async (
     throw new Error('Drivers cannot book their own trips');
   }
 
-  // Create booking
+  // Create booking (store pickup_location if provided for detour-aware settlement)
   const bookingQuery = `
-    INSERT INTO bookings (trip_id, rider_id, seats_booked, status)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, pickup_location)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING *
   `;
   const bookingResult = await pool.query(bookingQuery, [
@@ -65,6 +68,7 @@ export const createBooking = async (
     riderId,
     seats_booked,
     BookingStatus.Pending,
+    pickupLocation ? JSON.stringify(pickupLocation) : null,
   ]);
   const booking = bookingResult.rows[0];
 

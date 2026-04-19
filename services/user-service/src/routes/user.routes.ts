@@ -151,4 +151,25 @@ router.get('/:id', asyncHandler(userController.getUserProfile));
  */
 router.put('/:userId/role', authenticateToken, asyncHandler(userController.updateUserRole));
 
+/**
+ * @route   PATCH /users/:userId/availability
+ * @desc    Toggle driver's available_for_rides flag for on-demand matching
+ * @access  Private (own user only)
+ */
+router.patch('/:userId/availability', authenticateToken, asyncHandler(userController.updateAvailability));
+
+/**
+ * @route   POST /users/:userId/debug-verify
+ * @desc    Dev-only: instantly verify user as a Driver (sets sjsu_id_status=verified, role=Driver)
+ * @access  Dev-only (returns 403 in production)
+ */
+router.post('/:userId/debug-verify', asyncHandler(userController.debugVerify));
+
+/**
+ * @route   DELETE /users/:userId/debug-delete
+ * @desc    Dev-only: hard-delete a user and their trip data
+ * @access  Dev-only (returns 403 in production)
+ */
+router.delete('/:userId/debug-delete', asyncHandler(userController.debugDelete));
+
 export default router;

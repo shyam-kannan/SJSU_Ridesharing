@@ -5,17 +5,49 @@ import Combine
 struct DriverHomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var profileVM = ProfileViewModel()
-    @State private var showCreateTrip = false
-    @State private var showVerificationAlert = false
-    @State private var showIDVerificationSheet = false
-    @State private var recentBookings: [(booking: BookingWithRider, trip: Trip)] = []
-    @State private var showTripDetails: Trip?
+
+    // ── Availability & Incoming Requests ───────────────────────────────────────
+    @State private var isAvailableForRides = false
+    @State private var incomingRequest: IncomingMatchPayload? = nil
+    @State private var showIncomingRequest = false
+    @State private var isOnlinePulsing = false
+
+    // ── Accepted trip navigation ───────────────────────────────────────────────
+    @State private var acceptedActiveTrip: Trip? = nil
+    @State private var showAcceptedTripNav = false
+
+    // ── Notifications ──────────────────────────────────────────────────────────
     @State private var showAccountMenu = false
-    @State private var isPulsing = false
     @State private var showNotifications = false
     @State private var unreadNotificationCount = 0
     @State private var notificationChatDestination: DriverNotificationChatDestination?
+
+    // ── Today stats ────────────────────────────────────────────────────────────
+    @State private var todayTripCount = 0
+    @AppStorage("hasCompletedFirstTrip") private var hasCompletedFirstTrip = false
+
+    // ── Timers ─────────────────────────────────────────────────────────────────
     private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+    private let matchPollingTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+
+    // ── Computed helpers ───────────────────────────────────────────────────────
+
+    private var activeDriverTrips: [Trip] {
+        profileVM.driverTrips.filter {
+            [TripStatus.enRoute, .arrived, .inProgress].contains($0.status)
+        }
+    }
+
+    private var currentActiveTrip: Trip? { activeDriverTrips.first }
+
+    private var todayCompletedTrips: [Trip] {
+        profileVM.driverTrips.filter {
+            $0.status == .completed &&
+            Calendar.current.isDateInToday($0.departureTime)
+        }
+    }
+
+    // ── Body ───────────────────────────────────────────────────────────────────
 
     var body: some View {
         NavigationView {
@@ -25,128 +57,26 @@ struct DriverHomeView: View {
                         .padding(.horizontal, AppConstants.pagePadding)
                         .padding(.top, 14)
 
-                    // ── Hero Create Button ──
-                    createTripCard
+                    availabilityToggleCard
                         .padding(.horizontal, AppConstants.pagePadding)
 
-                    // ── Stats Row ──
                     if let user = authVM.currentUser {
                         statsRow(user: user)
                             .padding(.horizontal, AppConstants.pagePadding)
                             .staggeredAppear(index: 0)
                     }
 
-                    // ── Recent Activity ──
-                    if !recentBookings.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Recent Activity")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.textPrimary)
-                                .padding(.horizontal, AppConstants.pagePadding)
-
-                            ForEach(recentBookings.prefix(5), id: \.booking.id) { item in
-                                Button(action: {
-                                    showTripDetails = item.trip
-                                }) {
-                                    RecentActivityCard(passenger: item.booking, trip: item.trip)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.horizontal, AppConstants.pagePadding)
-                            }
-                        }
+                    if !hasCompletedFirstTrip {
+                        howItWorksSection
+                            .padding(.horizontal, AppConstants.pagePadding)
                     }
 
-                    // ── Upcoming Trips ──
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionHeader(title: "Upcoming Trips", actionTitle: "See All") {}
+                    earningsTodayCard
+                        .padding(.horizontal, AppConstants.pagePadding)
 
-                        if profileVM.isLoading {
-                            ForEach(0..<2, id: \.self) { _ in
-                                SkeletonTripCard().padding(.horizontal, AppConstants.pagePadding)
-                            }
-                        } else if profileVM.driverTrips.isEmpty {
-                            EmptyStateView(
-                                icon: "car.badge.plus",
-                                title: "No trips yet",
-                                message: "Create your first trip to start earning",
-                                actionTitle: "Create Trip"
-                            ) { showCreateTrip = true }
-                        } else {
-                            ForEach(Array(profileVM.driverTrips.enumerated()), id: \.element.id) { i, trip in
-                                if [.enRoute, .arrived, .inProgress].contains(trip.status) {
-                                    VStack(spacing: 8) {
-                                        NavigationLink(destination: ActiveTripView(trip: trip, isDriver: true)) {
-                                            CompactTripCard(trip: trip) {
-                                                Task { await profileVM.cancelTrip(id: trip.id) }
-                                            }
-                                            .cornerRadius(20)
-                                            .shadow(color: .black.opacity(0.1), radius: 16, x: 0, y: 8)
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        Button(action: { showTripDetails = trip }) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "list.bullet.rectangle")
-                                                Text("View Trip Details")
-                                            }
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.brand)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
-                                            .background(Color.brand.opacity(0.08))
-                                            .cornerRadius(10)
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        NavigationLink(destination: ActiveTripView(trip: trip, isDriver: true)) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "sparkles")
-                                                Text("Simulate Ride")
-                                            }
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.brand)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
-                                            .background(Color.brand.opacity(0.08))
-                                            .cornerRadius(10)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.horizontal, AppConstants.pagePadding)
-                                    .staggeredAppear(index: i)
-                                } else {
-                                    VStack(spacing: 8) {
-                                        Button(action: { showTripDetails = trip }) {
-                                            CompactTripCard(trip: trip) {
-                                                Task { await profileVM.cancelTrip(id: trip.id) }
-                                            }
-                                            .cornerRadius(20)
-                                            .shadow(color: .black.opacity(0.1), radius: 16, x: 0, y: 8)
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        NavigationLink(destination: ActiveTripView(trip: trip, isDriver: true)) {
-                                            HStack(spacing: 8) {
-                                                Image(systemName: "sparkles")
-                                                Text("Simulate Ride")
-                                            }
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.brand)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
-                                            .background(Color.brand.opacity(0.08))
-                                            .cornerRadius(10)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.horizontal, AppConstants.pagePadding)
-                                    .staggeredAppear(index: i)
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer().frame(height: 100)
+                    // Extra space so tab bar (and optional active-ride banner) never
+                    // obscure the last card. 160 pt clears both.
+                    Spacer().frame(height: 160)
                 }
             }
             .background(
@@ -172,33 +102,7 @@ struct DriverHomeView: View {
                 Task { await refreshDashboardData() }
             }
             .onChange(of: authVM.currentUser?.id) { _ in
-                Task {
-                    await refreshDashboardData()
-                    await refreshNotificationBadge()
-                }
-            }
-            .sheet(isPresented: $showCreateTrip) {
-                CreateTripView()
-                    .onDisappear {
-                        Task {
-                            if let id = authVM.currentUser?.id {
-                                await profileVM.loadDriverTrips(driverId: id)
-                            }
-                        }
-                    }
-            }
-            .alert("Verification Required", isPresented: $showVerificationAlert) {
-                Button("Verify Now") { showIDVerificationSheet = true }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Please verify your SJSU ID before creating trips.")
-            }
-            .sheet(isPresented: $showIDVerificationSheet) {
-                IDVerificationView().environmentObject(authVM)
-                    .onDisappear { Task { await authVM.refreshCurrentUser() } }
-            }
-            .sheet(item: $showTripDetails) { trip in
-                DriverTripDetailsView(trip: trip)
+                Task { await refreshDashboardData() }
             }
             .sheet(isPresented: $showAccountMenu) {
                 InAppAccountMenuView()
@@ -207,13 +111,7 @@ struct DriverHomeView: View {
             .sheet(isPresented: $showNotifications) {
                 DriverNotificationsSheet(
                     onRefresh: {
-                        if let id = authVM.currentUser?.id {
-                            Task {
-                                await profileVM.loadDriverTrips(driverId: id)
-                                await loadRecentBookings()
-                                await refreshNotificationBadge()
-                            }
-                        }
+                        Task { await refreshDashboardData() }
                     },
                     onOpenNotification: { item in
                         guard item.type == "chat_message", let tripId = item.data?.tripId else { return }
@@ -236,9 +134,6 @@ struct DriverHomeView: View {
                 )
                 .environmentObject(authVM)
             }
-            .onAppear {
-                Task { await refreshNotificationBadge() }
-            }
             .onChange(of: showNotifications) { isPresented in
                 if !isPresented { Task { await refreshNotificationBadge() } }
             }
@@ -248,36 +143,238 @@ struct DriverHomeView: View {
             .onReceive(notificationBadgeTimer) { _ in
                 Task { await refreshNotificationBadge() }
             }
+            .onReceive(matchPollingTimer) { _ in
+                guard isAvailableForRides, !showIncomingRequest,
+                      let driverId = authVM.currentUser?.id else { return }
+                Task {
+                    if let payload = await MatchingService.shared.checkForIncomingRequest(driverId: driverId) {
+                        incomingRequest = payload
+                        showIncomingRequest = true
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showIncomingRequest) {
+                if let request = incomingRequest {
+                    ZStack(alignment: .bottom) {
+                        Color.black.opacity(0.55)
+                            .ignoresSafeArea()
+                            .onTapGesture {}
+                        IncomingRideRequestView(
+                            payload: request,
+                            onAccept: {
+                                showIncomingRequest = false
+                                Task {
+                                    try? await TripService.shared.acceptMatch(
+                                        tripId: request.tripId,
+                                        matchId: request.matchId
+                                    )
+                                    if let trip = try? await TripService.shared.getTrip(id: request.tripId) {
+                                        await MainActor.run {
+                                            acceptedActiveTrip = trip
+                                            showAcceptedTripNav = true
+                                        }
+                                    }
+                                }
+                            },
+                            onDecline: {
+                                showIncomingRequest = false
+                                Task {
+                                    try? await TripService.shared.declineMatch(
+                                        tripId: request.tripId,
+                                        matchId: request.matchId
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showAcceptedTripNav) {
+                if let trip = acceptedActiveTrip {
+                    NavigationView {
+                        ActiveTripView(trip: trip, isDriver: true)
+                            .environmentObject(authVM)
+                    }
+                }
+            }
+            // ── Active Ride Banner ─────────────────────────────────────────────
+            .overlay(alignment: .bottom) {
+                if let trip = currentActiveTrip {
+                    activeRideBanner(trip: trip)
+                }
+            }
         }
     }
 
-    // MARK: - Load Recent Bookings
+    // MARK: - Active Ride Banner
+
+    private func activeRideBanner(trip: Trip) -> some View {
+        Button(action: {
+            acceptedActiveTrip = trip
+            showAcceptedTripNav = true
+        }) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.18))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Active Ride")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("To \(trip.destination)")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.82))
+                        .lineLimit(1)
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    Text("Open")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.brand, Color.brand.opacity(0.85)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: Color.brand.opacity(0.45), radius: 14, x: 0, y: 5)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 90) // clears the custom tab bar (~88 pt incl. safe area)
+    }
+
+    // MARK: - How It Works Section
+
+    private var howItWorksSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("How it works")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.textPrimary)
+
+            VStack(spacing: 0) {
+                howItWorksRow(
+                    icon: "toggle.power",
+                    title: "Toggle \"Available\" above",
+                    subtitle: "Turn on availability to start receiving ride requests"
+                )
+                Divider()
+                    .padding(.leading, 74)
+                howItWorksRow(
+                    icon: "bell.badge",
+                    title: "Wait for a ride request",
+                    subtitle: "We'll notify you instantly when a rider is matched to you"
+                )
+                Divider()
+                    .padding(.leading, 74)
+                howItWorksRow(
+                    icon: "car.fill",
+                    title: "Accept and pick up",
+                    subtitle: "Accept the request and navigate to your passenger"
+                )
+            }
+            .background(Color.cardBackground)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
+        }
+    }
+
+    private func howItWorksRow(icon: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.brand.opacity(0.10))
+                    .frame(width: 44, height: 44)
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(.brand)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundColor(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+
+    // MARK: - Earnings Today Card
+
+    private var earningsTodayCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Earnings Today")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.textPrimary)
+
+            HStack(spacing: 0) {
+                VStack(spacing: 6) {
+                    Text(todayTripCount == 0 ? "–" : "\(todayTripCount)")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(todayTripCount == 0 ? .textSecondary : .textPrimary)
+                    Text(todayTripCount == 1 ? "trip" : "trips")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+
+                Divider().frame(height: 44)
+
+                VStack(spacing: 6) {
+                    Text(todayTripCount == 0
+                         ? "$0.00"
+                         : String(format: "$%.2f", Double(todayTripCount) * 5.0))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(todayTripCount == 0 ? .textSecondary : .brandGreen)
+                    Text("estimated")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 4)
+            .background(Color.cardBackground)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
+        }
+    }
+
+    // MARK: - Data Loading
+
     private func refreshDashboardData() async {
         guard let id = authVM.currentUser?.id else { return }
         await profileVM.loadDriverTrips(driverId: id)
-        await loadRecentBookings()
-    }
+        await refreshNotificationBadge()
 
-    private func loadRecentBookings() async {
-        var allBookings: [(booking: BookingWithRider, trip: Trip)] = []
+        todayTripCount = todayCompletedTrips.count
 
-        // Load bookings for each active trip
-        for trip in profileVM.driverTrips.prefix(10) {
-            do {
-                let bookings = try await TripService.shared.getTripPassengers(tripId: trip.id)
-                for booking in bookings {
-                    allBookings.append((booking: booking, trip: trip))
-                }
-            } catch {
-                print("Failed to load bookings for trip \(trip.id): \(error)")
-            }
+        // Once the driver has completed any trip, permanently dismiss the onboarding section.
+        if !hasCompletedFirstTrip &&
+           !profileVM.driverTrips.filter({ $0.status == .completed }).isEmpty {
+            hasCompletedFirstTrip = true
         }
-
-        // Sort by creation date (most recent first) and take top 5
-        recentBookings = allBookings
-            .sorted { $0.booking.createdAt > $1.booking.createdAt }
-            .prefix(5)
-            .map { $0 }
     }
 
     private func refreshNotificationBadge() async {
@@ -293,15 +390,38 @@ struct DriverHomeView: View {
         }
     }
 
+    // MARK: - Dashboard Header
+
     private var dashboardHeader: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Driver Dashboard")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
-                Text("Manage your trips, riders, and earnings")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.72))
+                if isAvailableForRides {
+                    HStack(spacing: 6) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.brandGreen.opacity(0.35))
+                                .frame(width: 16, height: 16)
+                                .scaleEffect(isOnlinePulsing ? 1.6 : 1.0)
+                                .opacity(isOnlinePulsing ? 0 : 1)
+                                .animation(.easeOut(duration: 1.2).repeatForever(autoreverses: false), value: isOnlinePulsing)
+                            Circle()
+                                .fill(Color.brandGreen)
+                                .frame(width: 8, height: 8)
+                        }
+                        .onAppear { isOnlinePulsing = true }
+                        .onDisappear { isOnlinePulsing = false }
+                        Text("Online — accepting rides")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color.brandGreen)
+                    }
+                } else {
+                    Text("Toggle availability to receive ride requests")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
+                }
             }
             Spacer()
             Button(action: { showNotifications = true }) {
@@ -355,69 +475,52 @@ struct DriverHomeView: View {
         )
     }
 
-    // MARK: - Create Trip Card
-    private var createTripCard: some View {
-        Button(action: {
-            if authVM.currentUser?.sjsuIdStatus == .verified {
-                showCreateTrip = true
-            } else {
-                showVerificationAlert = true
-            }
-        }) {
-            HStack(spacing: 14) {
-                ZStack {
-                    // Pulsing outer ring
-                    Circle()
-                        .fill(Color.white.opacity(0.15))
-                        .frame(width: 68, height: 68)
-                        .scaleEffect(isPulsing ? 1.3 : 1.0)
-                        .opacity(isPulsing ? 0 : 0.6)
-                        .onAppear {
-                            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                                isPulsing = true
-                            }
-                        }
+    // MARK: - Availability Toggle Card
 
-                    // Inner circle + icon
-                    Circle().fill(Color.white.opacity(0.2)).frame(width: 56, height: 56)
-                    Image(systemName: "plus.circle.fill").font(.system(size: 32)).foregroundColor(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Create New Trip").font(.system(size: 17, weight: .bold)).foregroundColor(.white)
-                    Text("Pick up SJSU commuters").font(.system(size: 13, weight: .medium)).foregroundColor(.white.opacity(0.78))
-                }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundColor(.white.opacity(0.7))
+    private var availabilityToggleCard: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(isAvailableForRides ? Color.brandGreen.opacity(0.15) : Color.textSecondary.opacity(0.1))
+                    .frame(width: 44, height: 44)
+                Image(systemName: isAvailableForRides ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                    .font(.system(size: 18))
+                    .foregroundColor(isAvailableForRides ? .brandGreen : .textSecondary)
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "0F172A"), Color(hex: "111827")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-                    )
-            )
-            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isAvailableForRides ? "Available for rides" : "Not available")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                Text(isAvailableForRides ? "You'll receive on-demand ride requests" : "Toggle to receive ride requests")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: $isAvailableForRides)
+                .labelsHidden()
+                .tint(.brandGreen)
+                .onChange(of: isAvailableForRides) { available in
+                    guard let userId = authVM.currentUser?.id else { return }
+                    Task {
+                        try? await UserService.shared.updateAvailability(userId: userId, available: available)
+                    }
+                }
         }
-        .scaleEffect(1)
+        .padding(16)
+        .background(Color.cardBackground)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
     }
 
     // MARK: - Stats Row
+
     private func statsRow(user: User) -> some View {
         HStack(spacing: 0) {
             DriverStatCard(icon: "star.fill", value: String(format: "%.1f", user.rating),
                            label: "Rating", color: .brandOrange)
             Divider().frame(height: 44)
             DriverStatCard(icon: "person.2.fill",
-                           value: "\(profileVM.driverTrips.count)",
+                           value: "\(activeDriverTrips.count)",
                            label: "Active Trips", color: .brand)
             Divider().frame(height: 44)
             DriverStatCard(icon: "car.fill",
@@ -430,6 +533,8 @@ struct DriverHomeView: View {
         .luxuryCard(cornerRadius: 22)
     }
 }
+
+// MARK: - Driver Notifications Sheet
 
 private struct DriverNotificationsSheet: View {
     let onRefresh: () -> Void
@@ -639,21 +744,21 @@ private struct DriverNotificationsSheet: View {
 
     private func iconName(for item: AppNotificationItem) -> String {
         switch item.type {
-        case "chat_message": return "message.fill"
-        case "booking_confirmed": return "person.2.fill"
-        case "booking_cancelled": return "xmark.seal.fill"
-        case "trip_status": return "location.fill"
-        default: return "bell.fill"
+        case "chat_message":       return "message.fill"
+        case "booking_confirmed":  return "person.2.fill"
+        case "booking_cancelled":  return "xmark.seal.fill"
+        case "trip_status":        return "location.fill"
+        default:                   return "bell.fill"
         }
     }
 
     private func iconColor(for item: AppNotificationItem) -> Color {
         switch item.type {
-        case "chat_message": return .brand
-        case "booking_confirmed": return .brandGreen
-        case "booking_cancelled": return .brandRed
-        case "trip_status": return .brandOrange
-        default: return .brand
+        case "chat_message":       return .brand
+        case "booking_confirmed":  return .brandGreen
+        case "booking_cancelled":  return .brandRed
+        case "trip_status":        return .brandOrange
+        default:                   return .brand
         }
     }
 }
@@ -665,6 +770,7 @@ private struct DriverNotificationChatDestination: Identifiable {
 }
 
 // MARK: - Driver Stat Card
+
 private struct DriverStatCard: View {
     let icon: String
     let value: String
@@ -682,7 +788,8 @@ private struct DriverStatCard: View {
     }
 }
 
-// MARK: - Section Header
+// MARK: - Section Header (shared across driver views)
+
 struct SectionHeader: View {
     let title: String
     var actionTitle: String? = nil

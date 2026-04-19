@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import CoreLocation
+import Combine
 
 struct BookingConfirmationView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -502,22 +503,28 @@ struct BookingListView: View {
             VStack(spacing: 0) {
                 bookingsHeader
 
-                if let err = vm.errorMessage {
-                    ToastBanner(message: err, type: .error)
-                        .padding(.horizontal, AppConstants.pagePadding)
-                        .padding(.top, 8)
-                }
-
                 if vm.isLoading {
                     SkeletonTripList().padding(.top, 12)
                     Spacer()
+                } else if let kind = vm.errorKind {
+                    // Contextual error state with pull-to-refresh
+                    ScrollView {
+                        bookingsErrorState(kind: kind)
+                            .padding(.top, 60)
+                            .padding(.horizontal, AppConstants.pagePadding)
+                    }
+                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
                 } else if vm.bookings.isEmpty {
-                    EmptyStateView(
-                        icon: "calendar.badge.plus",
-                        title: "No bookings yet",
-                        message: showAsDriver ? "Your passengers will appear here" : "Find a ride and get going!",
-                        actionTitle: showAsDriver ? nil : "Find Rides"
-                    ) {}
+                    ScrollView {
+                        EmptyStateView(
+                            icon: "calendar.badge.plus",
+                            title: "No bookings yet",
+                            message: showAsDriver ? "Your passengers will appear here" : "Find a ride and get going!",
+                            actionTitle: showAsDriver ? nil : "Find Rides"
+                        ) {}
+                        .padding(.top, 60)
+                    }
+                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 14) {
@@ -653,6 +660,51 @@ struct BookingListView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.top, 6)
+    }
+
+    @ViewBuilder
+    private func bookingsErrorState(kind: BookingErrorKind) -> some View {
+        let (icon, title, subtitle): (String, String, String) = {
+            switch kind {
+            case .noConnection:
+                return ("wifi.slash", "No connection", "Check your internet and pull down to refresh")
+            case .authRequired:
+                return ("lock.fill", "Session expired", "Please log out and log back in")
+            case .serverDown:
+                return ("exclamationmark.triangle", "Service unavailable", "We're working on it. Pull down to refresh")
+            case .other:
+                return ("exclamationmark.circle", "Something went wrong", "Pull down to refresh")
+            }
+        }()
+
+        VStack(spacing: 20) {
+            ZStack {
+                Circle().fill(Color.black.opacity(0.06)).frame(width: 72, height: 72)
+                Image(systemName: icon)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundColor(.textTertiary)
+            }
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.textPrimary)
+                Text(subtitle)
+                    .font(.system(size: 14))
+                    .foregroundColor(.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            if kind == .authRequired {
+                Button(action: { Task { await authVM.logout() } }) {
+                    Text("Log Out")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.brandRed)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(Color.brandRed.opacity(0.08))
+                        .clipShape(Capsule())
+                }
+            }
+        }
     }
 
     private func headerChip(_ title: String, icon: String) -> some View {

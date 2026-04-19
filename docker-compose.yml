@@ -41,6 +41,29 @@ services:
     profiles:
       - kafka
 
+  # RShareForm embedding service (Python / FastAPI)
+  embedding-service:
+    build:
+      context: ./services/embedding-service
+      dockerfile: Dockerfile
+    container_name: lessgo-embedding-service
+    ports:
+      - "3010:3010"
+    environment:
+      - EMBEDDING_SERVICE_PORT=3010
+      - DATA_DIR=/app/data/nyc_taxi
+      - MODEL_DIR=/app/models
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/lessgo_db
+    volumes:
+      # Mount local data + model dirs so files persist across container restarts
+      # and parquet files are never committed to git.
+      - ./services/embedding-service/data:/app/data
+      - ./services/embedding-service/models:/app/models
+    depends_on:
+      - postgres
+    networks:
+      - lessgo-network
+
 volumes:
   redis_data:
 

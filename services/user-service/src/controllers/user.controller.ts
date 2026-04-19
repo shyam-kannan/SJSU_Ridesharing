@@ -1,8 +1,11 @@
 import { Response } from 'express';
+import { Pool } from 'pg';
 import * as userService from '../services/user.service';
 import { AuthRequest, AppError, successResponse, errorResponse, DriverSetupRequest } from '@lessgo/shared';
 import path from 'path';
 import fs from 'fs';
+
+const availabilityPool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 /**
  * Get user profile by ID
@@ -446,4 +449,91 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
     console.error('Update user role error:', error);
     throw new AppError('Failed to update role', 500);
   }
+};
+
+/**
+ * PATCH /users/:userId/availability
+ * Toggle driver's available_for_rides flag for on-demand matching.
+ */
+export const updateAvailability = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { available_for_rides } = req.body;
+
+    if (!req.user || req.user.userId !== userId) {
+      errorResponse(res, 'You can only update your own availability', 403);
+      return;
+    }
+
+    if (typeof available_for_rides !== 'boolean') {
+      errorResponse(res, 'available_for_rides must be a boolean', 400);
+      return;
+    }
+
+    await availabilityPool.query(
+      `UPDATE users SET available_for_rides = $1, updated_at = NOW() WHERE user_id = $2`,
+      [available_for_rides, userId]
+    );
+
+    successResponse(res, { user_id: userId, available_for_rides }, 'Availability updated');
+  } catch (error) {
+    console.error('Update availability error:', error);
+    throw new AppError('Failed to update availability', 500);
+  }
+};
+
+/**
+ * POST /users/:userId/debug-verify
+ * Development-only: immediately sets sjsu_id_status = 'verified' and role = 'Driver'
+ * for a user without requiring an actual SJSU ID image upload.
+ * Returns 403 in production (NODE_ENV === 'production').
+ */
+export const debugVerify = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (process.env.NODE_ENV === 'production') {
+    errorResponse(res, 'This endpoint is not available in production', 403);
+    return;
+  }
+
+  const { userId } = req.params;
+
+  await availabilityPool.query(
+    `UPDATE users
+     SET sjsu_id_status = 'verified',
+         role = 'Driver',
+         vehicle_info = COALESCE(NULLIF(vehicle_info, ''), 'DevTools Test Vehicle'),
+         license_plate = COALESCE(NULLIF(license_plate, ''), 'DEVTOOLS1'),
+         seats_available = COALESCE(seats_available, 3),
+         updated_at = NOW()
+     WHERE user_id = $1`,
+    [userId]
+  );
+
+  successResponse(res, { user_id: userId, sjsu_id_status: 'verified', role: 'Driver' }, 'Dev: user verified as Driver');
+};
+
+/**
+ * DELETE /users/:userId/debug-delete
+ * Development-only: hard-deletes a user and their trip/request data.
+ * Returns 403 in production.
+ */
+export const debugDelete = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (process.env.NODE_ENV === 'production') {
+    errorResponse(res, 'This endpoint is not available in production', 403);
+    return;
+  }
+
+  const { userId } = req.params;
+
+  // Delete dependent rows first to avoid FK violations
+  await availabilityPool.query(
+    `DELETE FROM pending_matches
+     WHERE driver_id = $1
+        OR request_id IN (SELECT request_id FROM trip_requests WHERE rider_id = $1)`,
+    [userId]
+  );
+  await availabilityPool.query(`DELETE FROM trip_requests WHERE rider_id = $1`, [userId]);
+  await availabilityPool.query(`DELETE FROM trips WHERE driver_id = $1`, [userId]);
+  await availabilityPool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
+
+  successResponse(res, { user_id: userId }, 'Dev: user deleted');
 };

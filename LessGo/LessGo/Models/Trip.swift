@@ -190,3 +190,218 @@ struct TripListResponse: Codable {
     let trips: [Trip]
     let total: Int
 }
+
+// MARK: - On-demand Rider Request Models
+
+struct RiderTripRequest: Codable {
+    let origin: String
+    let destination: String
+    let originLat: Double
+    let originLng: Double
+    let destinationLat: Double
+    let destinationLng: Double
+    let departureTime: Date
+
+    enum CodingKeys: String, CodingKey {
+        case origin, destination
+        case originLat = "origin_lat"
+        case originLng = "origin_lng"
+        case destinationLat = "destination_lat"
+        case destinationLng = "destination_lng"
+        case departureTime = "departure_time"
+    }
+}
+
+struct RiderTripRequestResponse: Codable {
+    let requestId: String
+    let status: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
+        case status
+        case createdAt = "created_at"
+    }
+}
+
+struct TripRequestStatus: Codable {
+    let requestId: String
+    let riderId: String
+    let status: String           // pending | matched | expired | cancelled
+    let origin: String
+    let destination: String
+    let departureTime: Date
+    let matchedTripId: String?
+    let driverId: String?
+    let driverName: String?
+    let driverRating: Double?
+    let driverVehicleInfo: String?
+
+    enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
+        case riderId = "rider_id"
+        case status, origin, destination
+        case departureTime = "departure_time"
+        case matchedTripId = "matched_trip_id"
+        case driverId = "driver_id"
+        case driverName = "driver_name"
+        case driverRating = "driver_rating"
+        case driverVehicleInfo = "driver_vehicle_info"
+    }
+}
+
+// MARK: - Anchor Point (multi-passenger route merging)
+
+struct AnchorPoint: Codable, Identifiable {
+    var id: String { "\(lat),\(lng),\(type)" }
+    let lat: Double
+    let lng: Double
+    let type: AnchorType
+    let riderId: String?
+    let label: String?
+    let etaOffsetSeconds: Double?
+
+    enum AnchorType: String, Codable {
+        case pickup, dropoff
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case lat, lng, type
+        case riderId = "rider_id"
+        case label
+        case etaOffsetSeconds = "eta_offset_seconds"
+    }
+}
+
+struct AnchorPointsResponse: Codable {
+    let tripId: String
+    let anchorPoints: [AnchorPoint]
+
+    enum CodingKeys: String, CodingKey {
+        case tripId = "trip_id"
+        case anchorPoints = "anchor_points"
+    }
+}
+
+// MARK: - Frequent Route Segment (GPS trajectory mining, He et al. 2014)
+
+struct FrequentRouteCenter: Codable {
+    let lat: Double
+    let lng: Double
+}
+
+struct FrequentRouteSegment: Codable {
+    let originZone:   Int
+    let destZone:     Int
+    let timeBin:      Int
+    let frequency:    Int
+    let routeScore:   Double
+    let originCenter: FrequentRouteCenter
+    let destCenter:   FrequentRouteCenter
+
+    enum CodingKeys: String, CodingKey {
+        case originZone   = "originZone"
+        case destZone     = "destZone"
+        case timeBin      = "timeBin"
+        case frequency
+        case routeScore   = "routeScore"
+        case originCenter = "originCenter"
+        case destCenter   = "destCenter"
+    }
+}
+
+struct FrequentRoutesResponse: Codable {
+    let driverId: String
+    let routes:   [FrequentRouteSegment]
+
+    enum CodingKeys: String, CodingKey {
+        case driverId = "driver_id"
+        case routes
+    }
+}
+
+// MARK: - Incoming match notification payload
+
+struct IncomingMatchPayload: Codable {
+    let matchId: String
+    let requestId: String
+    let tripId: String
+    let riderName: String
+    let riderRating: Double
+    let origin: String
+    let destination: String
+    let departureTime: String
+    let expiresInSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case matchId = "match_id"
+        case requestId = "request_id"
+        case tripId = "trip_id"
+        case riderName = "rider_name"
+        case riderRating = "rider_rating"
+        case origin, destination
+        case departureTime = "departure_time"
+        case expiresInSeconds = "expires_in_seconds"
+    }
+}
+
+// MARK: - Trip Settlement (Dynamic Trip Settlement System)
+
+struct TripSettlement: Codable {
+    let tripId: String
+    let totalCost: Double
+    let driverEarnings: Double
+    let riderCount: Int
+    let driverMpg: Double
+    let mileageRate: Double
+    let breakdown: SettlementBreakdown
+    let riders: [RiderSettlement]
+
+    enum CodingKeys: String, CodingKey {
+        case tripId = "trip_id"
+        case totalCost = "total_cost"
+        case driverEarnings = "driver_earnings"
+        case riderCount = "rider_count"
+        case driverMpg = "driver_mpg"
+        case mileageRate = "mileage_rate"
+        case breakdown, riders
+    }
+}
+
+struct SettlementBreakdown: Codable {
+    let basePrice: Double
+    let directDistanceMiles: Double
+    let fuelPricePerGal: Double
+    let detourMultiplier: Double
+
+    enum CodingKeys: String, CodingKey {
+        case basePrice = "base_price"
+        case directDistanceMiles = "direct_distance_miles"
+        case fuelPricePerGal = "fuel_price_per_gal"
+        case detourMultiplier = "detour_multiplier"
+    }
+}
+
+struct RiderSettlement: Codable {
+    let riderId: String
+    let riderName: String
+    let amountPaid: Double
+    let status: String
+    let detourMiles: Double
+    let breakdown: String
+
+    enum CodingKeys: String, CodingKey {
+        case riderId = "rider_id"
+        case riderName = "rider_name"
+        case amountPaid = "amount_paid"
+        case detourMiles = "detour_miles"
+        case status, breakdown
+    }
+}
+
+// MARK: - Trip State Update Response (wraps trip + optional settlement)
+
+struct TripStateUpdateResponse: Codable {
+    let trip: Trip
+    let settlement: TripSettlement?
+}

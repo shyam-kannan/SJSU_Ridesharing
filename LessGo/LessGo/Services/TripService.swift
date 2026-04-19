@@ -189,19 +189,99 @@ class TripService {
         return response.bookings
     }
 
+    // MARK: - Request a Ride (on-demand matching)
+
+    func requestTrip(
+        origin: String,
+        destination: String,
+        originLat: Double,
+        originLng: Double,
+        destinationLat: Double,
+        destinationLng: Double,
+        departureTime: Date
+    ) async throws -> RiderTripRequestResponse {
+        let request = RiderTripRequest(
+            origin: origin,
+            destination: destination,
+            originLat: originLat,
+            originLng: originLng,
+            destinationLat: destinationLat,
+            destinationLng: destinationLng,
+            departureTime: departureTime
+        )
+        let response: RiderTripRequestResponse = try await network.request(
+            endpoint: "/trips/request",
+            method: .post,
+            body: request
+        )
+        return response
+    }
+
+    // MARK: - Poll Trip Request Status
+
+    func getTripRequest(id: String) async throws -> TripRequestStatus {
+        let status: TripRequestStatus = try await network.request(
+            endpoint: "/trips/request/\(id)",
+            method: .get
+        )
+        return status
+    }
+
+    // MARK: - Anchor Points
+
+    func getAnchorPoints(tripId: String) async throws -> [AnchorPoint] {
+        let response: AnchorPointsResponse = try await network.request(
+            endpoint: "/trips/\(tripId)/anchor-points",
+            method: .get,
+            requiresAuth: false
+        )
+        return response.anchorPoints
+    }
+
+    // MARK: - Frequent Routes
+
+    func getFrequentRoutes(driverId: String) async throws -> [FrequentRouteSegment] {
+        let response: FrequentRoutesResponse = try await network.request(
+            endpoint: "/trips/driver/\(driverId)/frequent-routes",
+            method: .get,
+            requiresAuth: false
+        )
+        return response.routes
+    }
+
+    // MARK: - Accept / Decline Match (driver)
+
+    func acceptMatch(tripId: String, matchId: String) async throws {
+        struct Body: Encodable { let match_id: String }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/trips/\(tripId)/accept-match",
+            method: .post,
+            body: Body(match_id: matchId)
+        )
+    }
+
+    func declineMatch(tripId: String, matchId: String) async throws {
+        struct Body: Encodable { let match_id: String }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/trips/\(tripId)/decline-match",
+            method: .post,
+            body: Body(match_id: matchId)
+        )
+    }
+
     // MARK: - Update Trip State
 
-    func updateTripState(tripId: String, status: TripStatus) async throws -> Trip {
+    func updateTripState(tripId: String, status: TripStatus) async throws -> TripStateUpdateResponse {
         struct StateUpdate: Encodable {
             let status: String
         }
 
-        let trip: Trip = try await network.request(
+        let response: TripStateUpdateResponse = try await network.request(
             endpoint: "/trips/\(tripId)/state",
             method: .put,
             body: StateUpdate(status: status.rawValue),
             requiresAuth: true
         )
-        return trip
+        return response
     }
 }

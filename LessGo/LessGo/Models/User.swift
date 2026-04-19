@@ -12,6 +12,7 @@ struct User: Codable, Identifiable {
     let vehicleInfo: String?
     let seatsAvailable: Int?
     let licensePlate: String?
+    let mpg: Double?
     let profilePicture: String?
     let createdAt: Date?
     let updatedAt: Date?
@@ -24,6 +25,7 @@ struct User: Codable, Identifiable {
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
         case licensePlate = "license_plate"
+        case mpg
         case profilePicture = "profile_picture_url"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -51,6 +53,16 @@ struct User: Codable, Identifiable {
             rating = parsed
         } else {
             rating = 0.0
+        }
+
+        // mpg may come as Double or String from Postgres DECIMAL
+        if let mpgDouble = try? container.decode(Double.self, forKey: .mpg) {
+            mpg = mpgDouble
+        } else if let mpgString = try? container.decode(String.self, forKey: .mpg),
+                  let parsed = Double(mpgString) {
+            mpg = parsed
+        } else {
+            mpg = nil
         }
     }
 }

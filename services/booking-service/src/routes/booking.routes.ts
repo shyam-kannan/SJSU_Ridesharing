@@ -1,5 +1,6 @@
 import express from 'express';
 import * as bookingController from '../controllers/booking.controller';
+import * as bookingService from '../services/booking.service';
 import { authenticateToken, requireVerifiedStudent, asyncHandler } from '@lessgo/shared';
 import { body, validationResult } from 'express-validator';
 
@@ -74,6 +75,16 @@ router.get(
   '/trip/:tripId',
   authenticateToken,
   asyncHandler(bookingController.getTripBookings)
+);
+
+// Internal service-to-service route used by cost-calculation-service for settlement.
+// No auth check — only reachable from within the service mesh (not exposed via API gateway).
+router.get(
+  '/trip/:tripId/settle',
+  asyncHandler(async (req: express.Request, res: express.Response) => {
+    const bookings = await bookingService.getBookingsByTripId(req.params.tripId);
+    res.json({ status: 'success', data: bookings });
+  })
 );
 
 export default router;

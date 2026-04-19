@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import path from 'path';
 import userRoutes from './routes/user.routes';
+import vehicleRoutes from './routes/vehicle.routes';
 import { errorHandler, notFoundHandler, requestLogger, corsMiddleware, devCorsMiddleware } from '@lessgo/shared';
 import { config } from './config';
 
@@ -35,6 +36,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/users', userRoutes);
+app.use('/vehicles', vehicleRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
