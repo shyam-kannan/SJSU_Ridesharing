@@ -26,26 +26,37 @@ jobs:
         include:
           - service: api-gateway
             dockerfile: services/api-gateway/Dockerfile
+            changed_key: api_gateway
           - service: auth-service
             dockerfile: services/auth-service/Dockerfile
+            changed_key: auth_service
           - service: user-service
             dockerfile: services/user-service/Dockerfile
+            changed_key: user_service
           - service: trip-service
             dockerfile: services/trip-service/Dockerfile
+            changed_key: trip_service
           - service: booking-service
             dockerfile: services/booking-service/Dockerfile
+            changed_key: booking_service
           - service: payment-service
             dockerfile: services/payment-service/Dockerfile
+            changed_key: payment_service
           - service: notification-service
             dockerfile: services/notification-service/Dockerfile
+            changed_key: notification_service
           - service: cost-calculation-service
             dockerfile: services/cost-calculation-service/Dockerfile
+            changed_key: cost_calculation_service
           - service: grouping-service
             dockerfile: services/grouping-service/Dockerfile
+            changed_key: grouping_service
           - service: routing-service
             dockerfile: services/routing-service/Dockerfile
+            changed_key: routing_service
           - service: safety-service
             dockerfile: services/safety-service/Dockerfile
+            changed_key: safety_service
 
     steps:
       - name: Checkout Repository
@@ -58,16 +69,18 @@ jobs:
         run: |
           set -euo pipefail
           
-          # Get list of changed files
-          if [ "${{ github.event_name }}" == "push" ]; then
-            CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-          else
-            # For workflow_dispatch, rebuild everything
-            CHANGED_FILES=$(find services -name 'Dockerfile' -exec dirname {} \; | sed 's/services\///')
-          fi
-          
           # Check each service
           services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+
+          if [ "${{ github.event_name }}" != "push" ]; then
+            # For workflow_dispatch, rebuild everything
+            for svc in $services; do
+              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
+            done
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
           
           for svc in $services; do
             if echo "$CHANGED_FILES" | grep -q "^services/$svc/"; then
@@ -144,7 +157,7 @@ jobs:
           grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
 
       - name: Build and push ${{ matrix.service }} image
-        if: steps.auth.outcome == 'success' && steps.changed.outputs[format('{0}', replace(matrix.service, '-', '_'))] == 'true'
+        if: steps.auth.outcome == 'success' && steps.changed.outputs[matrix.changed_key] == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
