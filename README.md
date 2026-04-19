@@ -49,26 +49,21 @@ cp .env.example .env
 
 3. Update the `.env` file with your actual configuration values.
 
-4. Start the infrastructure services:
+4. Start Redis locally:
 ```bash
-# Start PostgreSQL and Redis
 docker compose up -d
-
-# Start with Kafka (optional)
-docker compose --profile kafka up -d
 ```
 
-5. Set up the database:
+5. Set up the database through the bootstrap script:
 ```bash
-# Apply migrations
-npm run migrate:up
+# Migrations only
+npm run bootstrap:db
 
-# Optional: seed demo data on a fresh/empty DB only
-# Warning: this seed clears existing app data in key tables first
-npm run seed
+# Fresh database only: migrations + seed demo data
+npm run bootstrap:db -- --fresh
 ```
 
-If your Supabase database has already been seeded once, skip `npm run seed`.
+If your Supabase database has already been seeded once, skip the `--fresh` run.
 
 ## Project Structure
 
@@ -97,6 +92,8 @@ lessgo-backend/
     ├── integration/          # Integration tests
     └── load/                 # Load tests
 ```
+
+> Legacy cleanup note: the top-level [db/migrations/](db/migrations/) SQL snapshots are not used by the current npm migration workflow (`shared/database/migrations/` is the source of truth) and can be taken down after you confirm you no longer need the older SQL history.
 
 ## Development
 

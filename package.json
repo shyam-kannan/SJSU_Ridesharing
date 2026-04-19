@@ -14,6 +14,7 @@
     "migrate:down": "node-pg-migrate down -m shared/database/migrations --database-url-var DATABASE_URL",
     "migrate:status": "node-pg-migrate list -m shared/database/migrations --database-url-var DATABASE_URL",
     "seed": "node shared/database/seeds/seed.js",
+    "bootstrap:db": "node scripts/bootstrap-db.mjs",
     "test:unit": "vitest run --config vitest.config.ts",
     "test:coverage": "npm run clean:coverage && vitest run --config vitest.config.ts --coverage --coverage.reporter=text --coverage.reporter=lcov && npm run clean:coverage",
     "test:coverage:artifacts": "npm run clean:coverage && vitest run --config vitest.config.ts --coverage --coverage.reporter=text --coverage.reporter=lcov",
