@@ -50,6 +50,32 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changed
+        run: |
+          set -euo pipefail
+          
+          # Get list of changed files
+          if [ "${{ github.event_name }}" == "push" ]; then
+            CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          else
+            # For workflow_dispatch, rebuild everything
+            CHANGED_FILES=$(find services -name 'Dockerfile' -exec dirname {} \; | sed 's/services\///')
+          fi
+          
+          # Check each service
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+          
+          for svc in $services; do
+            if echo "$CHANGED_FILES" | grep -q "^services/$svc/"; then
+              echo "${svc//-/_}=true" >> $GITHUB_OUTPUT
+            else
+              echo "${svc//-/_}=false" >> $GITHUB_OUTPUT
+            fi
+          done
 
       - name: Debug GitHub OIDC context
         run: |
@@ -118,7 +144,7 @@ jobs:
           grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
 
       - name: Build and push ${{ matrix.service }} image
-        if: steps.auth.outcome == 'success'
+        if: steps.auth.outcome == 'success' && steps.changed.outputs[format('{0}', replace(matrix.service, '-', '_'))] == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -176,19 +202,21 @@ jobs:
 
       - name: Apply Kubernetes manifests
         if: steps.auth.outcome == 'success'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
-          kubectl apply -f k8s-manifests/api-gateway.yaml
-          kubectl apply -f k8s-manifests/auth-service.yaml
-          kubectl apply -f k8s-manifests/user-service.yaml
-          kubectl apply -f k8s-manifests/trip-service.yaml
-          kubectl apply -f k8s-manifests/booking-service.yaml
-          kubectl apply -f k8s-manifests/payment-service.yaml
-          kubectl apply -f k8s-manifests/notification-service.yaml
-          kubectl apply -f k8s-manifests/cost-calculation-service.yaml
-          kubectl apply -f k8s-manifests/grouping-service.yaml
-          kubectl apply -f k8s-manifests/routing-service.yaml
-          kubectl apply -f k8s-manifests/safety-service.yaml
+          envsubst < k8s-manifests/api-gateway.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/auth-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/user-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/trip-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/booking-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/payment-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/notification-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/cost-calculation-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/grouping-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/routing-service.yaml | kubectl apply -f -
+          envsubst < k8s-manifests/safety-service.yaml | kubectl apply -f -

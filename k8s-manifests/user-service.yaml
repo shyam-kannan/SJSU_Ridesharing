@@ -29,7 +29,7 @@ spec:
       enableServiceLinks: false
       containers:
       - name: user-service
-        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/user-service:latest
+        image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/user-service:${COMMIT_SHA}
         imagePullPolicy: Always
         ports:
         - containerPort: 3002
