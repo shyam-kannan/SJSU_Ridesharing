@@ -1,5 +1,6 @@
 import express from 'express';
 import * as tripController from '../controllers/trip.controller';
+import * as matchingController from '../controllers/matching.controller';
 import { authenticateToken, requireDriver, requireVerifiedStudent, asyncHandler } from '@lessgo/shared';
 import { body, validationResult } from 'express-validator';
 
@@ -59,6 +60,54 @@ router.get('/search', asyncHandler(tripController.searchTrips));
  * @access  Public
  */
 router.get('/', asyncHandler(tripController.listTrips));
+
+// ─── Debug / simulation routes (before /:id to avoid param shadowing) ────────
+
+/**
+ * @route   POST /trips/debug-seed-history
+ * @desc    Dev-only: insert completed historical trips + run frequent-route mining
+ * @access  Dev-only (returns 403 in production)
+ */
+router.post('/debug-seed-history', asyncHandler(matchingController.seedTripHistory));
+
+/**
+ * @route   GET /trips/driver/:driverId/frequent-routes
+ * @desc    Return GPS-centered frequent-route segments mined from completed trip history
+ * @access  Public (driver ID in path)
+ */
+router.get('/driver/:driverId/frequent-routes', asyncHandler(matchingController.getDriverFrequentRoutes));
+
+// ─── On-demand matching routes (must be before /:id to avoid shadowing) ──────
+
+/**
+ * @route   POST /trips/request
+ * @desc    Rider submits a ride request; triggers matching pipeline
+ * @access  Private
+ */
+router.post(
+  '/request',
+  authenticateToken,
+  [
+    body('origin').notEmpty().trim(),
+    body('destination').notEmpty().trim(),
+    body('origin_lat').isFloat(),
+    body('origin_lng').isFloat(),
+    body('destination_lat').isFloat(),
+    body('destination_lng').isFloat(),
+    body('departure_time').isISO8601(),
+  ],
+  validateRequest,
+  asyncHandler(matchingController.requestTrip)
+);
+
+/**
+ * @route   GET /trips/request/:id
+ * @desc    Poll status of a ride request
+ * @access  Private
+ */
+router.get('/request/:id', authenticateToken, asyncHandler(matchingController.getTripRequest));
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * @route   GET /trips/:id
@@ -158,5 +207,57 @@ router.post(
  * @access  Private (Driver or Rider with booking)
  */
 router.get('/:id/messages', authenticateToken, asyncHandler(tripController.getTripMessages));
+
+/**
+ * @route   POST /trips/:id/accept-match
+ * @desc    Driver accepts an incoming match
+ * @access  Private
+ */
+router.post(
+  '/:id/accept-match',
+  authenticateToken,
+  [body('match_id').notEmpty()],
+  validateRequest,
+  asyncHandler(matchingController.acceptRideMatch)
+);
+
+/**
+ * @route   POST /trips/:id/decline-match
+ * @desc    Driver declines an incoming match (retry fires automatically)
+ * @access  Private
+ */
+router.post(
+  '/:id/decline-match',
+  authenticateToken,
+  [body('match_id').notEmpty()],
+  validateRequest,
+  asyncHandler(matchingController.declineRideMatch)
+);
+
+/**
+ * @route   POST /trips/:id/merge-route
+ * @desc    Manually trigger route re-merge for a new rider
+ * @access  Private (Driver only)
+ */
+router.post(
+  '/:id/merge-route',
+  authenticateToken,
+  [
+    body('rider_id').notEmpty(),
+    body('pickup_lat').isFloat(),
+    body('pickup_lng').isFloat(),
+    body('dropoff_lat').isFloat(),
+    body('dropoff_lng').isFloat(),
+  ],
+  validateRequest,
+  asyncHandler(matchingController.triggerMergeRoute)
+);
+
+/**
+ * @route   GET /trips/:id/anchor-points
+ * @desc    Return anchor points for iOS multi-segment route rendering
+ * @access  Public
+ */
+router.get('/:id/anchor-points', asyncHandler(matchingController.fetchAnchorPoints));
 
 export default router;

@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import Combine
 
 @main
 struct LessGoApp: App {

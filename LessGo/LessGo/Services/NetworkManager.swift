@@ -63,7 +63,14 @@ class NetworkManager {
             if let accessToken = KeychainManager.shared.getAccessToken() {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             } else {
-                throw NetworkError.unauthorized
+                // No token in keychain — attempt a silent refresh before giving up.
+                // This handles the case where the access token was cleared but a
+                // refresh token still exists (e.g. app restart, token eviction).
+                if let refreshed = try? await refreshAccessToken() {
+                    request.setValue("Bearer \(refreshed)", forHTTPHeaderField: "Authorization")
+                } else {
+                    throw NetworkError.unauthorized
+                }
             }
         }
 

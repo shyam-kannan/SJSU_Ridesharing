@@ -59,9 +59,9 @@ class LocationTrackingService: NSObject, ObservableObject {
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
 
-        // Send location updates every 5 seconds
+        // Send location updates every 3 seconds
         trackingTimer?.invalidate()
-        trackingTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        trackingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.sendLocationUpdate()
         }
 
@@ -140,8 +140,8 @@ class LocationTrackingService: NSObject, ObservableObject {
         driverPollingTimer?.invalidate()
         Task { await fetchDriverLocation(tripId: tripId) }
 
-        // Poll for driver location every 5 seconds
-        driverPollingTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        // Poll for driver location every 3 seconds
+        driverPollingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             Task {
                 await self?.fetchDriverLocation(tripId: tripId)
             }

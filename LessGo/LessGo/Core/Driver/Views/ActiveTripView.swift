@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import Combine
 
 // MARK: - Active Trip View (Real-time ride tracking)
 
@@ -38,6 +39,9 @@ struct ActiveTripView: View {
     @State private var lastSentRiderPickupCoordinate: CLLocationCoordinate2D?
     @State private var isSimulatingRiderMovement = false
     @State private var riderSimulationTask: Task<Void, Never>?
+    @State private var anchorPoints: [AnchorPoint] = []
+    @State private var frequentRoutes: [FrequentRouteSegment] = []
+    @State private var settlement: TripSettlement?
 
     private let tripService = TripService.shared
 
@@ -98,6 +102,15 @@ struct ActiveTripView: View {
         }
         .task {
             startTracking()
+            if let points = try? await tripService.getAnchorPoints(tripId: trip.id), !points.isEmpty {
+                anchorPoints = points
+            }
+            // Load driver's mined frequent routes for map overlay (driver-only)
+            if isDriver {
+                if let routes = try? await tripService.getFrequentRoutes(driverId: trip.driverId) {
+                    frequentRoutes = routes
+                }
+            }
         }
         .onDisappear {
             stopTracking()
@@ -122,16 +135,29 @@ struct ActiveTripView: View {
     // MARK: - Map View
 
     private var mapView: some View {
-        RouteMapView(
-            origin: trip.originPoint?.clLocationCoordinate2D,
-            destination: trip.destinationPoint?.clLocationCoordinate2D,
-            driver: driverCoordinate,
-            routeStart: routeLineOriginCoordinate,
-            routeEnd: routeLineDestinationCoordinate,
-            riders: riderCoordinates,
-            fitAnchors: overviewFitAnchors,
-            showsUserLocation: false
-        )
+        Group {
+            if anchorPoints.isEmpty {
+                RouteMapView(
+                    origin: trip.originPoint?.clLocationCoordinate2D,
+                    destination: trip.destinationPoint?.clLocationCoordinate2D,
+                    driver: driverCoordinate,
+                    routeStart: routeLineOriginCoordinate,
+                    routeEnd: routeLineDestinationCoordinate,
+                    riders: riderCoordinates,
+                    fitAnchors: overviewFitAnchors,
+                    showsUserLocation: false
+                )
+            } else {
+                AnchorRouteMapView(
+                    origin: trip.originPoint?.clLocationCoordinate2D,
+                    destination: trip.destinationPoint?.clLocationCoordinate2D,
+                    driver: driverCoordinate,
+                    anchorPoints: anchorPoints,
+                    showsUserLocation: false,
+                    frequentRoutes: frequentRoutes
+                )
+            }
+        }
     }
 
     // MARK: - Status Banner
@@ -236,116 +262,8 @@ struct ActiveTripView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Trip Summary")
-                                .font(.system(size: 22, weight: .bold))
-                                .foregroundColor(.textPrimary)
-                            Spacer()
-                            Text(tripStatus == .completed ? "Completed" : "Cancelled")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(tripStatus == .completed ? .brandGreen : .brandRed)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background((tripStatus == .completed ? Color.brandGreen : Color.brandRed).opacity(0.10))
-                                .clipShape(Capsule())
-                        }
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 10) {
-                                Circle().fill(Color.brand).frame(width: 8, height: 8)
-                                Text(trip.origin)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            HStack(spacing: 10) {
-                                Image(systemName: "flag.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.brandGreen)
-                                    .frame(width: 8)
-                                Text(trip.destination)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(hex: "F8FAFC"))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
-                                )
-                        )
-
-                        VStack(spacing: 10) {
-                            summaryRow("Date", trip.departureTime.tripDateString)
-                            summaryRow("Time", trip.departureTime.tripTimeString)
-                            summaryRow(isDriver ? "Rider" : "Driver", otherPartyName)
-                            summaryRow("Trip Status", tripStatus.displayName)
-                            if let booking {
-                                summaryRow("Seats", "\(booking.seatsBooked)")
-                                summaryRow("Booking ID", "\(String(booking.id.prefix(8)))…")
-                                if let quote = booking.quote {
-                                    summaryRow("Quoted Total", String(format: "$%.2f", quote.maxPrice), valueColor: .brandGreen, bold: true)
-                                }
-                                if let payment = booking.payment {
-                                    summaryRow("Payment", payment.status.rawValue.capitalized)
-                                }
-                            } else {
-                                summaryRow("Seats Available", "\(trip.seatsAvailable)")
-                                summaryRow("Est. Earnings", String(format: "$%.2f", 8.50 * Double(max(1, trip.seatsAvailable))), valueColor: .brandGreen, bold: true)
-                            }
-                        }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(hex: "F8FAFC"))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
-                                )
-                        )
-
-                        HStack(spacing: 10) {
-                            summaryChip(icon: "checkmark.shield.fill", text: isDriver ? "Driver view" : "Rider view", tint: .brand)
-                            summaryChip(icon: "map.fill", text: "Route recorded", tint: .brandTeal)
-                        }
-                    }
-                    .padding(18)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color.white)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                            )
-                    )
-
-                    Button(action: { showReportIssueSheet = true }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.bubble.fill")
-                            Text("Report Safety / Trip Issue")
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.brandRed)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.brandRed.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-
-                    Button(action: { showPostRideSummary = false }) {
-                        Text(isDriver ? "Back to Driver Trip" : "Done")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Color(hex: "0F172A"))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
+                    postRideSummaryMainCard
+                    postRideSummaryActionButtons
                 }
                 .padding(16)
                 .padding(.bottom, 24)
@@ -360,6 +278,148 @@ struct ActiveTripView: View {
             }
         }
         .navigationViewStyle(.stack)
+    }
+
+    // Outer white card containing header, route, details rows, and chips.
+    @ViewBuilder
+    private var postRideSummaryMainCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            postRideSummaryHeader
+            postRideSummaryRouteCard
+            postRideSummaryDetailsCard
+            HStack(spacing: 10) {
+                summaryChip(icon: "checkmark.shield.fill", text: isDriver ? "Driver view" : "Rider view", tint: .brand)
+                summaryChip(icon: "map.fill", text: "Route recorded", tint: .brandTeal)
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+
+    // "Trip Summary" title + completed/cancelled badge.
+    @ViewBuilder
+    private var postRideSummaryHeader: some View {
+        let statusLabel  = tripStatus == .completed ? "Completed" : "Cancelled"
+        let statusColor  = tripStatus == .completed ? Color.brandGreen : Color.brandRed
+        HStack {
+            Text("Trip Summary")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.textPrimary)
+            Spacer()
+            Text(statusLabel)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(statusColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(statusColor.opacity(0.10))
+                .clipShape(Capsule())
+        }
+    }
+
+    // Origin → destination route display.
+    @ViewBuilder
+    private var postRideSummaryRouteCard: some View {
+        let cardBackground = RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color(hex: "F8FAFC"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+            )
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Circle().fill(Color.brand).frame(width: 8, height: 8)
+                Text(trip.origin)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "flag.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.brandGreen)
+                    .frame(width: 8)
+                Text(trip.destination)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .background(cardBackground)
+    }
+
+    // Summary rows (date, driver/rider, settlement or booking details).
+    @ViewBuilder
+    private var postRideSummaryDetailsCard: some View {
+        let cardBackground = RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color(hex: "F8FAFC"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+            )
+        VStack(spacing: 10) {
+            summaryRow("Date", trip.departureTime.tripDateString)
+            summaryRow("Time", trip.departureTime.tripTimeString)
+            summaryRow(isDriver ? "Rider" : "Driver", otherPartyName)
+            summaryRow("Trip Status", tripStatus.displayName)
+            if isDriver {
+                if let s = settlement {
+                    summaryRow("Riders", "\(s.riderCount)")
+                    summaryRow("Distance", String(format: "%.1f mi", s.breakdown.directDistanceMiles))
+                    summaryRow("Total Earnings", String(format: "$%.2f", s.driverEarnings), valueColor: .brandGreen, bold: true)
+                } else if let booking {
+                    summaryRow("Seats", "\(booking.seatsBooked)")
+                    summaryRow("Booking ID", "\(String(booking.id.prefix(8)))…")
+                }
+            } else {
+                if let booking {
+                    summaryRow("Seats", "\(booking.seatsBooked)")
+                    summaryRow("Booking ID", "\(String(booking.id.prefix(8)))…")
+                    if let quote = booking.quote {
+                        summaryRow("Your Fare", String(format: "$%.2f", quote.maxPrice), valueColor: .brandGreen, bold: true)
+                    }
+                    if let payment = booking.payment {
+                        summaryRow("Payment", payment.status.rawValue.capitalized)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(cardBackground)
+    }
+
+    // Report issue + dismiss buttons.
+    @ViewBuilder
+    private var postRideSummaryActionButtons: some View {
+        let dismissLabel = isDriver ? "Back to Driver Trip" : "Done"
+        Button(action: { showReportIssueSheet = true }) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.bubble.fill")
+                Text("Report Safety / Trip Issue")
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(.brandRed)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color.brandRed.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        Button(action: { showPostRideSummary = false }) {
+            Text(dismissLabel)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color(hex: "0F172A"))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
     }
 
     // MARK: - Trip Info Card
@@ -1208,13 +1268,14 @@ struct ActiveTripView: View {
         defer { isUpdatingState = false }
 
         do {
-            _ = try await tripService.updateTripState(tripId: trip.id, status: newStatus)
+            let response = try await tripService.updateTripState(tripId: trip.id, status: newStatus)
             withAnimation {
                 tripStatus = newStatus
             }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
 
             if newStatus == .completed {
+                settlement = response.settlement
                 stopTracking()
                 showPostRideSummary = true
             }

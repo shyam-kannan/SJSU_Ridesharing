@@ -31,6 +31,14 @@ struct NotificationPayloadData: Codable, Equatable {
     let senderId: String?
     let riderName: String?
     let seatsBooked: Int?
+    // Incoming ride-request fields (driver notifications)
+    let matchId: String?
+    let requestId: String?
+    let riderRating: Double?
+    let origin: String?
+    let destination: String?
+    let departureTime: String?
+    let expiresInSeconds: Int?
 
     enum CodingKeys: String, CodingKey {
         case tripId = "trip_id"
@@ -39,6 +47,12 @@ struct NotificationPayloadData: Codable, Equatable {
         case senderId = "sender_id"
         case riderName = "rider_name"
         case seatsBooked = "seats_booked"
+        case matchId = "match_id"
+        case requestId = "request_id"
+        case riderRating = "rider_rating"
+        case origin, destination
+        case departureTime = "departure_time"
+        case expiresInSeconds = "expires_in_seconds"
     }
 }
 

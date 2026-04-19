@@ -211,6 +211,51 @@ app.post('/notifications/send/cancellation', async (req, res) => {
   }
 });
 
+// ─── Driver ride-request notification ────────────────────────────────────────
+
+/**
+ * POST /notifications/driver-request
+ * Body: { driver_id, match_id, request_id, rider_name, rider_rating,
+ *         origin, destination, departure_time }
+ *
+ * Pushes a structured in-app notification to the driver so the iOS app can
+ * surface the incoming-request card with the 15-second countdown.
+ */
+app.post('/notifications/driver-request', (req, res) => {
+  const {
+    driver_id, match_id, request_id, trip_id,
+    rider_name, rider_rating,
+    origin, destination, departure_time,
+  } = req.body;
+
+  if (!driver_id || !match_id || !request_id) {
+    res.status(400).json({ status: 'error', message: 'driver_id, match_id, and request_id are required' });
+    return;
+  }
+
+  const notification = createNotification({
+    user_id: driver_id,
+    type: 'incoming_ride_request',
+    title: `Ride request from ${rider_name ?? 'Rider'}`,
+    message: `${origin} → ${destination}`,
+    data: {
+      match_id,
+      request_id,
+      trip_id:       trip_id      ?? null,
+      rider_name:    rider_name   ?? 'Rider',
+      rider_rating:  rider_rating ?? 5.0,
+      origin,
+      destination,
+      departure_time,
+      expires_in_seconds: 15,
+    },
+  });
+
+  pushNotification(notification);
+  console.log(`[DRIVER-REQUEST] driver=${driver_id} match=${match_id} rider="${rider_name}" ${origin}→${destination}`);
+  res.json({ status: 'success', message: 'Driver request notification sent', data: notification });
+});
+
 // ─── Support endpoints ────────────────────────────────────────────────────────
 
 /**

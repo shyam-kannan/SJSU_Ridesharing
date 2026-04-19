@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { config } from '../config';
 import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
+import { mineFrequentRouteFromTrip } from './frequent_route.service';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -535,6 +536,8 @@ export const updateTripState = async (tripId: string, newStatus: TripStatus): Pr
       break;
     case TripStatus.Completed:
       timestampField = 'completed_at = current_timestamp,';
+      // Fire GPS trajectory mining in the background (non-blocking)
+      setImmediate(() => mineFrequentRouteFromTrip(tripId).catch(console.error));
       break;
   }
 

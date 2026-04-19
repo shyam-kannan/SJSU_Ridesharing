@@ -52,8 +52,8 @@ class UserService {
 
     // MARK: - Setup Driver Profile
 
-    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String) async throws -> User {
-        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate)
+    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String, mpg: Double = 25.0) async throws -> User {
+        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate, mpg: mpg)
 
         let user: User = try await network.request(
             endpoint: "/users/\(id)/driver-setup",
@@ -157,6 +157,20 @@ class UserService {
         return user
     }
 
+    // MARK: - Driver Availability
+
+    func updateAvailability(userId: String, available: Bool) async throws {
+        struct AvailabilityRequest: Encodable {
+            let available_for_rides: Bool
+        }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/users/\(userId)/availability",
+            method: .patch,
+            body: AvailabilityRequest(available_for_rides: available),
+            requiresAuth: true
+        )
+    }
+
 }
 
 // MARK: - Helper Models
@@ -165,11 +179,13 @@ struct DriverSetupRequest: Codable {
     let vehicleInfo: String
     let seatsAvailable: Int
     let licensePlate: String
+    let mpg: Double?
 
     enum CodingKeys: String, CodingKey {
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
         case licensePlate = "license_plate"
+        case mpg
     }
 }
 

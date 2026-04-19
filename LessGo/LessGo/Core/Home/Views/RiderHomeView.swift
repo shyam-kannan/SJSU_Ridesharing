@@ -1,76 +1,91 @@
 import SwiftUI
-import UIKit
 import MapKit
 import Combine
+import CoreLocation
+
+// MARK: - Direction Choice
+
+private enum DirectionChoice: Equatable {
+    case none
+    case toSJSU    // origin = editable, destination = locked (SJSU)
+    case fromSJSU  // origin = locked (SJSU), destination = editable
+}
+
+// MARK: - RiderHomeView
 
 struct RiderHomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
-    @StateObject private var viewModel = TripSearchViewModel()
+    @StateObject private var requestVM = TripRequestViewModel()
     @StateObject private var locationManager = LocationManager.shared
 
-    @State private var searchText = ""
-    @State private var showViewToggle = false
     @State private var region = MKCoordinateRegion(
         center: AppConstants.sjsuCoordinate,
-        span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
-    @State private var selectedTrip: Trip?
-    @State private var showVerificationAlert = false
-    @State private var showIDVerificationSheet = false
     @State private var showAccountMenu = false
     @State private var showNotifications = false
+    @State private var showFinding = false
+    @State private var showMatchedRide = false
+    @State private var matchedTripStatus: TripRequestStatus? = nil
+    @State private var showIDVerificationSheet = false
     @State private var unreadNotificationCount = 0
     @State private var notificationChatDestination: NotificationChatDestination?
-    private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+    @State private var useLeaveNow = true
 
-    // Bottom sheet state
-    @State private var isSheetExpanded = false
-    @GestureState private var sheetDragTranslation: CGFloat = 0
-    private let collapsedSheetPeek: CGFloat = 260
+    // Direction-first flow
+    @State private var directionChoice: DirectionChoice = .none
+    @State private var editableQuery = ""
+    @State private var autocompleteResults: [DestinationPlace] = []
+    @State private var isAutocompleting = false
+    @State private var searchDebounceTask: Task<Void, Never>? = nil
+    @FocusState private var editableFieldFocused: Bool
+
+    // Sheet drag state
+    // BUG 2 FIX: sheet has two defined heights; DragGesture on handle toggles between them.
+    @State private var sheetExpanded = false
+    @State private var liveDragDelta: CGFloat = 0   // positive = user dragging down (shrink), negative = up (grow)
+
+    private let collapsedSheetHeight: CGFloat = 390  // direction-choice screen
+    private let expandedSheetHeight: CGFloat = 530   // input + departure + button (no autocomplete)
+    private let maxSheetHeight: CGFloat = 720        // ceiling when user drags up hard
+
+    private var currentSheetHeight: CGFloat {
+        let base: CGFloat = sheetExpanded ? expandedSheetHeight : collapsedSheetHeight
+        // liveDragDelta < 0 means dragging up = bigger sheet
+        let adjusted = base - liveDragDelta
+        return min(maxSheetHeight, max(collapsedSheetHeight, adjusted))
+    }
+
+    private let sjsuName = "San Jose State University"
+
+    private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationView {
-            ZStack(alignment: .top) {
-
-                // 1. Map — always full-screen background
-                mapBackground
+            ZStack(alignment: .bottom) {
+                // Full-screen map
+                Map(coordinateRegion: $region, showsUserLocation: true)
                     .ignoresSafeArea()
 
-                // 2. Floating trip preview card (above bottom sheet peek)
-                if selectedTrip != nil {
-                    mapOverlays
-                }
-
-                // 3. Floating search header over map
+                // Floating header
                 VStack {
-                    searchHeader
-                        .padding(.top, VerifyBannerView.windowTopInset)
+                    floatingHeader
+                        .padding(.horizontal, AppConstants.pagePadding)
+                        .padding(.top, 56)
                     Spacer()
                 }
 
-                // 4. Bottom sheet — always visible, draggable
-                bottomSheet
+                // Fixed-height bottom sheet
+                requestSheet
             }
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
-            .alert("Verification Required", isPresented: $showVerificationAlert) {
-                Button("Verify Now") { showIDVerificationSheet = true }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Please verify your SJSU ID before viewing trip details and booking rides.")
-            }
-            .sheet(isPresented: $showIDVerificationSheet) {
-                IDVerificationView().environmentObject(authVM)
-            }
             .sheet(isPresented: $showAccountMenu) {
-                InAppAccountMenuView()
-                    .environmentObject(authVM)
+                InAppAccountMenuView().environmentObject(authVM)
             }
             .sheet(isPresented: $showNotifications) {
                 RiderNotificationsSheet(
-                    onRefresh: {
-                    Task { await viewModel.refresh() }
-                    },
+                    onRefresh: {},
                     onOpenNotification: { item in
                         guard item.type == "chat_message", let tripId = item.data?.tripId else { return }
                         let senderName = item.title
@@ -93,605 +108,691 @@ struct RiderHomeView: View {
                 )
                 .environmentObject(authVM)
             }
-        }
-        .navigationViewStyle(.stack)
-        .task {
-            viewModel.currentUserId = authVM.currentUser?.id
-            await viewModel.searchNearby()
-            await refreshNotificationBadge()
-        }
-        .onChange(of: authVM.currentUser?.id) { newUserId in
-            viewModel.currentUserId = newUserId
-            Task {
-                await viewModel.refresh()
-                await refreshNotificationBadge()
+            .sheet(isPresented: $showIDVerificationSheet) {
+                IDVerificationView().environmentObject(authVM)
             }
-        }
-        .onAppear { Task { await refreshNotificationBadge() } }
-        .onChange(of: showNotifications) { isPresented in
-            if !isPresented { Task { await refreshNotificationBadge() } }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            Task { await refreshNotificationBadge() }
-        }
-        .onReceive(notificationBadgeTimer) { _ in
-            Task { await refreshNotificationBadge() }
-        }
-        .onChange(of: locationManager.currentLocation) { _ in
-            if selectedTrip == nil, let coord = locationManager.currentLocation?.coordinate {
-                withAnimation { region.center = coord }
+            .fullScreenCover(isPresented: $showFinding) {
+                if case .searching(let requestId) = requestVM.state {
+                    FindingDriverView(requestId: requestId, viewModel: requestVM)
+                        .environmentObject(authVM)
+                }
             }
-        }
-        .onChange(of: selectedTrip?.id) { _ in
-            guard let trip = selectedTrip else { return }
-            let coord = pinCoordinate(for: trip)
-            withAnimation(.easeInOut(duration: 0.3)) {
-                region.center = coord
-            }
-        }
-    }
-
-    // MARK: - Map Background
-
-    // Pin coordinate: "To SJSU" → rider is picked up at origin (Bay Area hub).
-    //                 "From SJSU" → rider is dropped at destination (Bay Area hub).
-    private func pinCoordinate(for trip: Trip) -> CLLocationCoordinate2D {
-        switch viewModel.searchDirection {
-        case .toSJSU:
-            return trip.originPoint?.clLocationCoordinate2D ?? AppConstants.sjsuCoordinate
-        case .fromSJSU:
-            return trip.destinationPoint?.clLocationCoordinate2D ?? AppConstants.sjsuCoordinate
-        }
-    }
-
-    private var mapBackground: some View {
-        Map(coordinateRegion: $region,
-            showsUserLocation: true,
-            annotationItems: viewModel.filteredTrips) { trip in
-            MapAnnotation(coordinate: pinCoordinate(for: trip)) {
-                TripMapMarker(trip: trip, isSelected: selectedTrip?.id == trip.id) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                        selectedTrip = (selectedTrip?.id == trip.id) ? nil : trip
+            .fullScreenCover(isPresented: $showMatchedRide) {
+                if let status = matchedTripStatus,
+                   let originCoord = requestVM.originCoordinate,
+                   let destCoord   = requestVM.destinationCoordinate {
+                    MatchedRideView(
+                        tripRequest: status,
+                        originCoordinate: originCoord,
+                        destinationCoordinate: destCoord,
+                        originLabel: requestVM.origin,
+                        destinationLabel: requestVM.destination
+                    )
+                    .environmentObject(authVM)
+                    .onDisappear {
+                        // Reset the request VM so the home screen returns to idle
+                        requestVM.reset()
+                        resetDirection()
                     }
                 }
             }
-        }
-        .ignoresSafeArea()
-    }
-
-    // MARK: - Search Header
-
-    private var searchHeader: some View {
-        VStack(spacing: 10) {
-            // Verify Banner (in-flow above greeting so it pushes content down)
-            if let user = authVM.currentUser, user.sjsuIdStatus != .verified {
-                VerifyBannerView(status: user.sjsuIdStatus) {
-                    showIDVerificationSheet = true
+            .onChange(of: requestVM.state) { newState in
+                switch newState {
+                case .searching:
+                    showFinding = true
+                case .matched(let status):
+                    showFinding = false
+                    matchedTripStatus = status
+                    // Small delay so FindingDriverView dismisses cleanly before presenting MatchedRideView
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        showMatchedRide = true
+                    }
+                case .failed:
+                    showFinding = false
+                default:
+                    break
                 }
             }
-
-            headerTopBar
-
-            // Variable location search bar + autocomplete
-            locationSearchSection
+            .onReceive(notificationBadgeTimer) { _ in
+                Task { await refreshNotificationBadge() }
+            }
+            .onAppear {
+                Task {
+                    await refreshNotificationBadge()
+                    prefillOriginFromLocation()
+                }
+            }
         }
-        .padding(.top, 4)
-        .padding(.bottom, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.black.opacity(0.84))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                )
-        )
-        .cornerRadius(22, corners: [.bottomLeft, .bottomRight])
-        .shadow(color: .black.opacity(0.24), radius: 18, x: 0, y: 8)
     }
 
-    private var headerTopBar: some View {
-        HStack(spacing: 10) {
-            headerIconButton(systemName: "line.3.horizontal") {
-                showAccountMenu = true
-            }
+    // MARK: - Floating Header
 
-            VStack(spacing: 1) {
-                Text("Find a Ride")
-                    .font(.system(size: 18, weight: .bold))
+    private var floatingHeader: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "car.fill")
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.white)
-                    .lineLimit(1)
-                Text("Good \(greeting), \(authVM.currentUser?.name.components(separatedBy: " ").first ?? "there")")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.72))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                Text("LessGo")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
             }
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Capsule()
+                    .fill(Color.black.opacity(0.82))
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+            )
 
-            headerBellButton
-        }
-        .padding(.horizontal, AppConstants.pagePadding)
-        .padding(.top, 2)
-        .padding(.bottom, 2)
-    }
+            Spacer()
 
-    private var sheetTopControls: some View {
-        VStack(spacing: 8) {
-            mapListModeToggle
-            directionToggle
-            sjsuFixedPill
-                .padding(.horizontal, AppConstants.pagePadding)
-        }
-        .padding(.top, 2)
-        .padding(.bottom, 4)
-    }
-
-    private var headerBellButton: some View {
-        Button(action: { showNotifications = true }) {
-            iconButtonShell(systemName: "bell")
+            Button(action: { showNotifications = true }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.black.opacity(0.82))
+                        .frame(width: 44, height: 44)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    Image(systemName: "bell")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
                 .overlay(alignment: .topTrailing) {
                     if unreadNotificationCount > 0 {
                         Circle()
                             .fill(Color.brandRed)
                             .frame(width: 9, height: 9)
-                            .overlay(Circle().stroke(Color.black.opacity(0.55), lineWidth: 1))
+                            .overlay(Circle().stroke(Color.black.opacity(0.5), lineWidth: 1))
                             .offset(x: -3, y: 3)
                     }
                 }
+            }
+            .buttonStyle(.plain)
+
+            Button(action: { showAccountMenu = true }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.black.opacity(0.82))
+                        .frame(width: 44, height: 44)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    Text(authVM.currentUser?.name.prefix(1).uppercased() ?? "?")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Request Sheet
+    //
+    // BUG 2 FIX: Sheet has a defined height (currentSheetHeight) that responds to:
+    //   1. directionChoice state (auto-expand when direction selected)
+    //   2. DragGesture on the handle bar (user-controlled expansion)
+    // Content lives inside a ScrollView so autocomplete results are always reachable (BUG 1 FIX).
+
+    private var requestSheet: some View {
+        VStack(spacing: 0) {
+            // ── Drag handle — gesture is attached here, not inside the ScrollView ──
+            dragHandle
+
+            // ── Scrollable content area ──
+            // BUG 1 FIX: All sheet content is inside a ScrollView. When autocomplete
+            // results push content taller than the current sheet height, the user can
+            // scroll to see every suggestion without the view being clipped.
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    if directionChoice == .none {
+                        directionChoiceContent
+                    } else {
+                        directionInputContent
+                    }
+                }
+            }
+        }
+        .frame(height: currentSheetHeight)
+        .background(Color.white)
+        .cornerRadius(28, corners: [.topLeft, .topRight])
+        .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: -4)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: currentSheetHeight)
+    }
+
+    // MARK: - Drag Handle
+    //
+    // BUG 2 FIX: DragGesture is wired here. Dragging up (negative translation.height)
+    // expands the sheet. Dragging down collapses it. A 60pt threshold prevents accidental
+    // toggles. liveDragDelta gives live feedback during the gesture.
+
+    private var dragHandle: some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(Color.gray.opacity(0.35))
+            .frame(width: 40, height: 4)
+            // Enlarge the tap/drag target so it is easy to grab
+            .padding(.vertical, 16)
+            .padding(.horizontal, 80)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 8, coordinateSpace: .local)
+                    .onChanged { value in
+                        liveDragDelta = value.translation.height
+                    }
+                    .onEnded { value in
+                        let dy = value.translation.height
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            if dy < -60 {
+                                // Dragged up → expand
+                                sheetExpanded = true
+                            } else if dy > 60 {
+                                // Dragged down → collapse; reset direction if needed
+                                sheetExpanded = false
+                                if directionChoice != .none {
+                                    resetDirection()
+                                }
+                            }
+                            liveDragDelta = 0
+                        }
+                    }
+            )
+    }
+
+    // MARK: - Direction Choice Content (initial, collapsed state)
+
+    private var directionChoiceContent: some View {
+        VStack(spacing: 0) {
+            // Greeting
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Where to,")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.textPrimary)
+                    Text("\(authVM.currentUser?.name.components(separatedBy: " ").first ?? "there")?")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.brand)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+
+            // Two large direction buttons
+            VStack(spacing: 14) {
+                directionButton(
+                    label: "To SJSU",
+                    subtitle: "Heading to campus",
+                    icon: "building.columns.fill",
+                    iconColor: .brand
+                ) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        directionChoice = .toSJSU
+                        requestVM.destination = sjsuName
+                        requestVM.destinationCoordinate = AppConstants.sjsuCoordinate
+                        editableQuery = requestVM.origin
+                        autocompleteResults = []
+                        sheetExpanded = true   // auto-expand on direction selection
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        editableFieldFocused = true
+                    }
+                }
+
+                directionButton(
+                    label: "From SJSU",
+                    subtitle: "Leaving campus",
+                    icon: "arrow.turn.up.right",
+                    iconColor: .brandGreen
+                ) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        directionChoice = .fromSJSU
+                        requestVM.origin = sjsuName
+                        requestVM.originCoordinate = AppConstants.sjsuCoordinate
+                        editableQuery = requestVM.destination
+                        autocompleteResults = []
+                        sheetExpanded = true   // auto-expand on direction selection
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        editableFieldFocused = true
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 36)
+        }
+    }
+
+    private func directionButton(
+        label: String,
+        subtitle: String,
+        icon: String,
+        iconColor: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.12))
+                        .frame(width: 50, height: 50)
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(iconColor)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(label)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.textPrimary)
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundColor(.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.textTertiary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .background(Color.cardBackground)
+            .cornerRadius(18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
 
-    private var mapListModeToggle: some View {
-        HStack(spacing: 8) {
-            mapListButton(title: "Map View", icon: "map", isActive: !isSheetExpanded) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    isSheetExpanded = false
-                }
-            }
-            mapListButton(title: "List View", icon: "list.bullet", isActive: isSheetExpanded) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    isSheetExpanded = true
-                }
-            }
-        }
-        .padding(3)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                )
-        )
-        .padding(.horizontal, AppConstants.pagePadding)
-    }
+    // MARK: - Direction Input Content (after direction selected, expanded state)
 
-    private var locationSearchSection: some View {
+    private var directionInputContent: some View {
         VStack(spacing: 0) {
-            locationSearchInput
-
-            if viewModel.showSuggestions && !viewModel.locationSuggestions.isEmpty {
-                suggestionsDropdown
+            // Header: direction label + X reset
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: directionChoice == .toSJSU ? "building.columns.fill" : "arrow.turn.up.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.brand)
+                    Text(directionChoice == .toSJSU ? "To SJSU" : "From SJSU")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.brand)
+                }
+                Spacer()
+                Button(action: resetDirection) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.textSecondary)
+                }
+                .buttonStyle(.plain)
             }
-        }
-        .padding(.horizontal, AppConstants.pagePadding)
-    }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 14)
 
-    private var locationSearchInput: some View {
-        HStack(spacing: 10) {
-            Image(systemName: viewModel.searchDirection == .toSJSU ? "location.fill" : "mappin.and.ellipse")
-                .foregroundColor(Color(hex: "84CC16"))
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 22)
+            // From / To input card
+            VStack(spacing: 0) {
+                if directionChoice == .toSJSU {
+                    editableFieldRow(placeholder: "Enter pickup location", dotColor: .brandGold)
+                    Divider().padding(.leading, 40)
+                    lockedFieldRow(text: sjsuName, icon: "mappin.circle.fill", iconColor: .brand)
+                } else {
+                    lockedFieldRow(text: sjsuName, dot: true)
+                    Divider().padding(.leading, 40)
+                    editableFieldRow(placeholder: "Enter drop-off location", dotColor: .brandGreen, isDestination: true)
+                }
+            }
+            .background(Color.cardBackground)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
 
-            TextField(viewModel.searchDirection.searchPlaceholder, text: $viewModel.searchText)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.black)
-                .autocapitalization(.none)
-                .submitLabel(.search)
-                .onSubmit { Task { await viewModel.searchUsingTypedAddressIfPossible() } }
-                .onTapGesture {
-                    if !viewModel.searchText.isEmpty {
-                        viewModel.showSuggestions = true
+            // Autocomplete results or spinner
+            // BUG 1 FIX: results are rendered in a VStack directly inside the parent ScrollView,
+            // so ALL results are visible and the user can scroll to reach them. There is no inner
+            // clipping or fixed-height constraint truncating the list to one row.
+            if !autocompleteResults.isEmpty {
+                autocompleteDropdown
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+            } else if isAutocompleting {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.8)
+                    Text("Searching…")
+                        .font(.system(size: 13))
+                        .foregroundColor(.textSecondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 10)
+                .padding(.bottom, 4)
+            }
+
+            // Departure time row
+            HStack(spacing: 12) {
+                Image(systemName: "clock")
+                    .font(.system(size: 15))
+                    .foregroundColor(.textSecondary)
+
+                if useLeaveNow {
+                    Button(action: { withAnimation { useLeaveNow = false } }) {
+                        HStack(spacing: 6) {
+                            Text("Leave now")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.textPrimary)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                                .foregroundColor(.textSecondary)
+                        }
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    DatePicker(
+                        "",
+                        selection: $requestVM.departureTime,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+
+                    Button(action: {
+                        withAnimation { useLeaveNow = true }
+                        requestVM.departureTime = Date().addingTimeInterval(300)
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.textSecondary)
+                    }
+                    .buttonStyle(.plain)
                 }
 
-            if !viewModel.searchText.isEmpty {
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.cardBackground)
+            .cornerRadius(12)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 14)
+
+            // Error banner
+            if case .failed(let msg) = requestVM.state {
+                Text(msg)
+                    .font(.system(size: 13))
+                    .foregroundColor(.brandRed)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+            }
+
+            // Request Ride button
+            Button(action: {
+                if useLeaveNow { requestVM.departureTime = Date().addingTimeInterval(300) }
+                editableFieldFocused = false
+                requestVM.submit()
+            }) {
+                HStack(spacing: 10) {
+                    if case .submitting = requestVM.state {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "car.fill")
+                    }
+                    Text(isSubmitting ? "Searching…" : "Request Ride")
+                }
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(canSubmit ? Color.brand : Color.brand.opacity(0.4))
+                .cornerRadius(16)
+            }
+            .disabled(!canSubmit)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+        }
+    }
+
+    // MARK: - Field Rows
+
+    private func editableFieldRow(
+        placeholder: String,
+        dotColor: Color,
+        isDestination: Bool = false
+    ) -> some View {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 10, height: 10)
+            TextField(placeholder, text: $editableQuery)
+                .font(.system(size: 15))
+                .foregroundColor(.textPrimary)
+                .focused($editableFieldFocused)
+                .autocorrectionDisabled()
+                .onChange(of: editableQuery) { value in
+                    scheduleSearch(value)
+                }
+            if !editableQuery.isEmpty {
                 Button(action: {
-                    viewModel.searchText = ""
-                    viewModel.showSuggestions = false
+                    editableQuery = ""
+                    autocompleteResults = []
+                    searchDebounceTask?.cancel()
+                    isAutocompleting = false
+                    if isDestination {
+                        requestVM.destination = ""
+                        requestVM.destinationCoordinate = nil
+                    } else {
+                        requestVM.origin = ""
+                        requestVM.originCoordinate = nil
+                    }
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(.textSecondary)
                         .font(.system(size: 16))
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
-                )
-        )
-        .cornerRadius(14, corners: viewModel.showSuggestions ? [.topLeft, .topRight] : .allCorners)
-        .shadow(color: .black.opacity(0.10), radius: 14, x: 0, y: 5)
     }
 
-    private var suggestionsDropdown: some View {
-        VStack(spacing: 0) {
-            ForEach(viewModel.locationSuggestions.prefix(8), id: \.self) { suggestion in
-                suggestionRow(suggestion)
-
-                if suggestion != viewModel.locationSuggestions.prefix(8).last {
-                    Divider().padding(.leading, 48)
-                }
-            }
-        }
-        .background(Color.panelGradient)
-        .cornerRadius(16, corners: [.bottomLeft, .bottomRight])
-        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-    }
-
-    private func suggestionRow(_ suggestion: MKLocalSearchCompletion) -> some View {
-        Button(action: {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            viewModel.selectSuggestion(suggestion)
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "mappin")
-                    .font(.system(size: 13))
-                    .foregroundColor(.brand)
-                    .frame(width: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(suggestion.title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .lineLimit(1)
-                    if !suggestion.subtitle.isEmpty {
-                        Text(suggestion.subtitle)
-                            .font(.system(size: 12))
-                            .foregroundColor(.textSecondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func headerIconButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            iconButtonShell(systemName: systemName)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func iconButtonShell(systemName: String) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-                .frame(width: 42, height: 42)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                )
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-        }
-    }
-
-    private func mapListButton(title: String, icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
+    private func lockedFieldRow(
+        text: String,
+        dot: Bool = false,
+        icon: String? = nil,
+        iconColor: Color = .brand
+    ) -> some View {
+        HStack(spacing: 14) {
+            if dot {
+                Circle()
+                    .fill(Color.brandGold)
+                    .frame(width: 10, height: 10)
+            } else if let icon {
                 Image(systemName: icon)
-                Text(title)
+                    .foregroundColor(iconColor)
+                    .font(.system(size: 14))
             }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(isActive ? .white : Color(hex: "475569"))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(
-                        isActive ? AnyShapeStyle(Color(hex: "111827")) : AnyShapeStyle(Color.clear)
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Direction Toggle (segmented control)
-
-    private var directionToggle: some View {
-        HStack(spacing: 0) {
-            ForEach([TripSearchViewModel.TravelDirection.toSJSU, .fromSJSU], id: \.self) { direction in
-                let isSelected = viewModel.searchDirection == direction
-                Button(action: {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                        viewModel.searchDirection = direction
-                    }
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: direction == .toSJSU ? "arrow.right.circle.fill" : "arrow.left.circle.fill")
-                            .font(.system(size: 12))
-                        Text(direction == .toSJSU ? "To SJSU" : "From SJSU")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .foregroundColor(isSelected ? .white : Color(hex: "475569"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9)
-                            .fill(isSelected ? Color(hex: "111827") : Color.clear)
-                    )
-                }
-            }
-        }
-        .padding(3)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                )
-        )
-        .cornerRadius(14)
-        .padding(.horizontal, AppConstants.pagePadding)
-    }
-
-    // MARK: - Fixed SJSU pill
-
-    private var sjsuFixedPill: some View {
-        let isToSJSU = viewModel.searchDirection == .toSJSU
-        let pillColor: Color = isToSJSU ? Color(hex: "84CC16") : Color(hex: "111827")
-        let icon = isToSJSU ? "mappin.circle.fill" : "building.columns.fill"
-        let roleText = isToSJSU ? "Fixed destination" : "Fixed pickup"
-
-        return HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundColor(pillColor)
-            Text("San Jose State University")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color(hex: "111827"))
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundColor(.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .layoutPriority(1)
             Spacer()
-            Text(roleText)
+            Image(systemName: "lock.fill")
                 .font(.system(size: 11))
-                .foregroundColor(Color(hex: "64748B"))
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
+                .foregroundColor(.textTertiary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(hex: "F8FAFC"))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .animation(.easeInOut(duration: 0.25), value: viewModel.searchDirection)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
-    // MARK: - List Content
+    // MARK: - Autocomplete Dropdown
+    //
+    // BUG 1 FIX: this view renders ALL results in a plain VStack. There is no inner
+    // ScrollView or height cap — the parent ScrollView (in requestSheet) handles
+    // scrollability. Every result from the search is visible; none are clipped.
 
-    private var listContent: some View {
-        ScrollView {
-            LazyVStack(spacing: AppConstants.itemSpacing) {
-                // Time/filter strip
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        rideFilterPill(title: "Nearby", isSelected: true)
-                        rideFilterPill(title: "Today")
-                        rideFilterPill(title: "Tomorrow")
-                        rideFilterPill(title: "This Week")
-                    }
-                    .padding(.horizontal, AppConstants.pagePadding)
-                }
-                    .padding(.top, 10)
-                    .padding(.bottom, 2)
-
-                if viewModel.isLoading {
-                    SkeletonTripList()
-                        .padding(.top, 8)
-                } else if viewModel.filteredTrips.isEmpty {
-                    EmptyStateView(
-                        icon: "car.2",
-                        title: "No trips nearby",
-                        message: "Check back later or expand your search radius",
-                        actionTitle: "Refresh"
-                    ) { Task { await viewModel.refresh() } }
-                    .padding(.top, 60)
-                } else {
-                    ForEach(viewModel.filteredTrips) { trip in
-                        // Verified users: navigate straight to trip details.
-                        // Unverified users: show alert with "Verify Now" option.
-                        if authVM.currentUser?.sjsuIdStatus == .verified {
-                            NavigationLink(destination: TripDetailsView(trip: trip).environmentObject(authVM)) {
-                                TripCardView(trip: trip)
-                                    .padding(.horizontal, AppConstants.pagePadding)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            Button(action: { showVerificationAlert = true }) {
-                                TripCardView(trip: trip)
-                                    .padding(.horizontal, AppConstants.pagePadding)
-                            }
-                            .buttonStyle(.plain)
+    private var autocompleteDropdown: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(autocompleteResults.enumerated()), id: \.element.id) { idx, place in
+                Button(action: { selectPlace(place) }) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.textSecondary.opacity(0.08))
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "mappin")
+                                .foregroundColor(.textSecondary)
+                                .font(.system(size: 13))
                         }
-                    }
-                }
-            }
-            .padding(.bottom, 100) // tab bar clearance
-        }
-        .refreshable { await viewModel.refresh() }
-    }
-
-    // MARK: - Map Overlays
-
-    private var mapOverlays: some View {
-        VStack {
-            Spacer()
-            if let trip = selectedTrip, !isSheetExpanded {
-                TripPreviewCard(trip: trip) {
-                    selectedTrip = nil
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .padding(.horizontal, AppConstants.pagePadding)
-                    .padding(.bottom, collapsedSheetPeek + 10)
-            }
-        }
-    }
-
-    // MARK: - Bottom Sheet
-
-    private var bottomSheet: some View {
-        GeometryReader { geo in
-            let collapsedOffset = geo.size.height - collapsedSheetPeek
-            let expandedOffset: CGFloat = geo.size.height * 0.12
-            let targetOffset = isSheetExpanded ? expandedOffset : collapsedOffset
-            let currentOffset = max(expandedOffset, min(collapsedOffset, targetOffset + sheetDragTranslation))
-
-            VStack(spacing: 0) {
-                // Drag handle
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.black.opacity(0.08), Color.black.opacity(0.16)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: 40, height: 5)
-                    .padding(.top, 12)
-                    .padding(.bottom, 4)
-
-                sheetTopControls
-
-                // Collapsed header row: summary label + count badge
-                if !isSheetExpanded {
-                    HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Available Rides")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(Color(hex: "111827"))
-                            Text("Nearby campus carpools")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(Color(hex: "64748B"))
+                            Text(place.name)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                                .lineLimit(1)
+                            if !place.subtitle.isEmpty {
+                                Text(place.subtitle)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.textSecondary)
+                                    .lineLimit(1)
+                            }
                         }
                         Spacer()
-                        Text(viewModel.searchDirection == .toSJSU ? "To SJSU" : "From SJSU")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color(hex: "0F172A"))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(hex: "EAF7C7"))
-                            .cornerRadius(999)
-                        Text("\(viewModel.filteredTrips.count)")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 3)
-                            .background(Color(hex: "0B63C7"))
-                            .cornerRadius(999)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
                 }
+                .buttonStyle(.plain)
 
-                // Full list content
-                listContent
+                if idx < autocompleteResults.count - 1 {
+                    Divider().padding(.leading, 64)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: geo.size.height - expandedOffset + 40)
-            .background(
-                RoundedRectangle(cornerRadius: DesignSystem.Layout.bottomSheetCornerRadius, style: .continuous)
-                    .fill(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignSystem.Layout.bottomSheetCornerRadius, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-                    .shadow(
-                        color: DesignSystem.Shadow.sheet.color,
-                        radius: DesignSystem.Shadow.sheet.radius,
-                        x: 0, y: DesignSystem.Shadow.sheet.y
-                    )
-                    .ignoresSafeArea(edges: .bottom)
-            )
-            .offset(y: currentOffset)
-            .gesture(
-                DragGesture(minimumDistance: 8, coordinateSpace: .global)
-                    .updating($sheetDragTranslation) { value, state, _ in
-                        state = value.translation.height
-                    }
-                    .onEnded { value in
-                        withAnimation(DesignSystem.Animation.sheetSnap) {
-                            if value.translation.height < -60 {
-                                isSheetExpanded = true
-                            } else if value.translation.height > 60 {
-                                isSheetExpanded = false
-                            }
-                        }
-                    }
-            )
-            .animation(DesignSystem.Animation.sheetSnap, value: isSheetExpanded)
         }
+        .background(Color.cardBackground)
+        .cornerRadius(14)
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+        )
     }
 
     // MARK: - Helpers
 
-    private var greeting: String {
-        let h = Calendar.current.component(.hour, from: Date())
-        if h < 12 { return "morning" }
-        if h < 17 { return "afternoon" }
-        return "evening"
+    private var canSubmit: Bool {
+        !requestVM.destination.isEmpty &&
+        requestVM.destinationCoordinate != nil &&
+        !requestVM.origin.isEmpty &&
+        requestVM.originCoordinate != nil &&
+        requestVM.state != .submitting
+    }
+
+    private var isSubmitting: Bool {
+        switch requestVM.state {
+        case .submitting, .searching: return true
+        default: return false
+        }
+    }
+
+    private func resetDirection() {
+        searchDebounceTask?.cancel()
+        editableQuery = ""
+        autocompleteResults = []
+        isAutocompleting = false
+        directionChoice = .none
+        sheetExpanded = false
+        requestVM.origin = ""
+        requestVM.originCoordinate = nil
+        requestVM.destination = ""
+        requestVM.destinationCoordinate = nil
+    }
+
+    private func selectPlace(_ place: DestinationPlace) {
+        editableFieldFocused = false
+        searchDebounceTask?.cancel()
+        autocompleteResults = []
+        isAutocompleting = false
+        editableQuery = place.name
+
+        switch directionChoice {
+        case .toSJSU:
+            requestVM.origin = place.name
+            requestVM.originCoordinate = place.coordinate
+        case .fromSJSU:
+            requestVM.destination = place.name
+            requestVM.destinationCoordinate = place.coordinate
+        case .none:
+            break
+        }
+    }
+
+    private func scheduleSearch(_ query: String) {
+        searchDebounceTask?.cancel()
+        guard query.count >= 2 else {
+            autocompleteResults = []
+            isAutocompleting = false
+            return
+        }
+        isAutocompleting = true
+        searchDebounceTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms debounce
+            guard !Task.isCancelled else { return }
+            await performSearch(query)
+        }
+    }
+
+    @MainActor
+    private func performSearch(_ query: String) async {
+        let req = MKLocalSearch.Request()
+        req.naturalLanguageQuery = query
+        // Bias toward San Jose / Bay Area, ~50km radius centered on SJSU
+        req.region = MKCoordinateRegion(
+            center: AppConstants.sjsuCoordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.9, longitudeDelta: 0.9)
+        )
+        do {
+            let response = try await MKLocalSearch(request: req).start()
+            autocompleteResults = response.mapItems.prefix(6).map { item in
+                DestinationPlace(
+                    name: item.name ?? item.placemark.title ?? "Unknown",
+                    subtitle: item.placemark.title ?? "",
+                    coordinate: item.placemark.coordinate
+                )
+            }
+        } catch {
+            autocompleteResults = []
+        }
+        isAutocompleting = false
+    }
+
+    private func prefillOriginFromLocation() {
+        guard let loc = locationManager.currentLocation else { return }
+        CLGeocoder().reverseGeocodeLocation(loc) { placemarks, _ in
+            if let pm = placemarks?.first {
+                let addr = [pm.name, pm.locality].compactMap { $0 }.joined(separator: ", ")
+                Task { @MainActor in
+                    requestVM.origin = addr
+                    requestVM.originCoordinate = loc.coordinate
+                }
+            }
+        }
     }
 
     private func refreshNotificationBadge() async {
-        guard let userId = authVM.currentUser?.id else {
-            unreadNotificationCount = 0
-            return
-        }
+        guard let userId = authVM.currentUser?.id else { return }
         do {
             let response = try await NotificationService.shared.listNotifications(userId: userId, limit: 1)
             unreadNotificationCount = response.unreadCount
-        } catch {
-            // Non-critical UI badge fetch
-            print("Failed to load notification badge: \(error)")
-        }
-    }
-
-    private func rideFilterPill(title: String, isSelected: Bool = false) -> some View {
-        Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(isSelected ? .white : Color(hex: "475569"))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color(hex: "0F172A") : Color(hex: "F8FAFC"))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(Color.black.opacity(isSelected ? 0 : 0.07), lineWidth: 1)
-            )
+        } catch {}
     }
 }
+
+// MARK: - Destination Place Model
+
+private struct DestinationPlace: Identifiable {
+    let id = UUID()
+    let name: String
+    let subtitle: String
+    let coordinate: CLLocationCoordinate2D
+}
+
+// MARK: - Rider Notifications Sheet
 
 private struct RiderNotificationsSheet: View {
     let onRefresh: () -> Void
@@ -765,9 +866,7 @@ private struct RiderNotificationsSheet: View {
 
                             ForEach(notifications) { item in
                                 Button(action: {
-                                    if item.isUnread {
-                                        Task { await markRead(item) }
-                                    }
+                                    if item.isUnread { Task { await markRead(item) } }
                                     if item.type == "chat_message" && item.data?.tripId != nil {
                                         dismiss()
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
@@ -794,10 +893,7 @@ private struct RiderNotificationsSheet: View {
                         .background(Color(hex: "F8FAFC"))
                         .cornerRadius(12)
 
-                    Button(action: {
-                        onRefresh()
-                        dismiss()
-                    }) {
+                    Button(action: { onRefresh(); dismiss() }) {
                         Text("Refresh Rides")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.white)
@@ -819,29 +915,19 @@ private struct RiderNotificationsSheet: View {
     private func notificationRow(_ item: AppNotificationItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
-                Circle()
-                    .fill(iconColor(for: item).opacity(0.10))
-                    .frame(width: 34, height: 34)
+                Circle().fill(iconColor(for: item).opacity(0.10)).frame(width: 34, height: 34)
                 Image(systemName: iconName(for: item))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(iconColor(for: item))
+                    .font(.system(size: 14, weight: .semibold)).foregroundColor(iconColor(for: item))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-                Text(item.message)
-                    .font(.system(size: 12))
-                    .foregroundColor(.textSecondary)
+                Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.textPrimary)
+                Text(item.message).font(.system(size: 12)).foregroundColor(.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(item.createdAt.timeAgo)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.textTertiary)
+                Text(item.createdAt.timeAgo).font(.system(size: 11, weight: .medium)).foregroundColor(.textTertiary)
             }
             Spacer()
             if item.isUnread {
-                Circle().fill(Color.brandRed).frame(width: 7, height: 7)
-                    .padding(.top, 6)
+                Circle().fill(Color.brandRed).frame(width: 7, height: 7).padding(.top, 6)
             }
         }
         .padding(12)
@@ -857,9 +943,7 @@ private struct RiderNotificationsSheet: View {
 
     private func loadNotifications() async {
         guard let userId = KeychainManager.shared.getUserId() else { return }
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
+        isLoading = true; errorMessage = nil; defer { isLoading = false }
         do {
             let response = try await NotificationService.shared.listNotifications(userId: userId, limit: 50)
             notifications = response.notifications
@@ -885,14 +969,10 @@ private struct RiderNotificationsSheet: View {
             try await NotificationService.shared.markRead(userId: userId, notificationId: item.id)
             if let idx = notifications.firstIndex(where: { $0.id == item.id }) {
                 notifications[idx] = AppNotificationItem(
-                    id: notifications[idx].id,
-                    userId: notifications[idx].userId,
-                    type: notifications[idx].type,
-                    title: notifications[idx].title,
-                    message: notifications[idx].message,
-                    data: notifications[idx].data,
-                    createdAt: notifications[idx].createdAt,
-                    readAt: Date()
+                    id: notifications[idx].id, userId: notifications[idx].userId,
+                    type: notifications[idx].type, title: notifications[idx].title,
+                    message: notifications[idx].message, data: notifications[idx].data,
+                    createdAt: notifications[idx].createdAt, readAt: Date()
                 )
                 unreadCount = max(0, unreadCount - 1)
             } else {
@@ -929,170 +1009,4 @@ private struct NotificationChatDestination: Identifiable {
     let otherPartyName: String
     let isDriver: Bool
     var id: String { "\(tripId)-\(isDriver ? "driver" : "rider")" }
-}
-
-// MARK: - Map Marker
-
-struct TripMapMarker: View {
-    let trip: Trip
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: { UIImpactFeedbackGenerator(style: .light).impactOccurred(); action() }) {
-            ZStack {
-                Circle()
-                    .fill(isSelected ? Color.brandGreen : Color.brand)
-                    .frame(width: isSelected ? 48 : 38, height: isSelected ? 48 : 38)
-                    .shadow(color: (isSelected ? Color.brandGreen : Color.brand).opacity(0.5),
-                            radius: isSelected ? 12 : 6, x: 0, y: 4)
-
-                VStack(spacing: 0) {
-                    Image(systemName: "car.fill")
-                        .font(.system(size: isSelected ? 16 : 13, weight: .bold))
-                        .foregroundColor(.white)
-                    Text("\(trip.seatsAvailable)")
-                        .font(.system(size: isSelected ? 11 : 9, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-    }
-}
-
-// MARK: - Trip Preview Card (Map)
-
-struct TripPreviewCard: View {
-    let trip: Trip
-    let onDismiss: () -> Void
-    @EnvironmentObject var authVM: AuthViewModel
-
-    private var anonymousDriverTitle: String { "Driver details after booking" }
-    private var driverRating: Double { trip.driver?.rating ?? 0 }
-
-    var body: some View {
-        NavigationLink(destination: TripDetailsView(trip: trip).environmentObject(authVM)) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("$8.50")
-                        .font(.system(size: 25, weight: .bold))
-                        .foregroundColor(.brandGreen)
-                    Text("per seat")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.textSecondary)
-                    Text(trip.departureTime.countdownString)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.brandGreen)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                .frame(width: 84, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.brand.opacity(0.10))
-                            .frame(width: 30, height: 30)
-                            .overlay(
-                                Image(systemName: "person.fill")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(Color.brand)
-                            )
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(anonymousDriverTitle)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.textPrimary)
-                                .lineLimit(1)
-                            HStack(spacing: 4) {
-                                StarRatingView(rating: driverRating, size: 8)
-                                Text(String(format: "%.1f", driverRating))
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.textSecondary)
-                            }
-                        }
-
-                        Spacer(minLength: 6)
-
-                        Text(trip.departureTime.tripTimeString)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.textPrimary)
-                            .lineLimit(1)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Circle().fill(Color.brand).frame(width: 6, height: 6)
-                            Text(trip.origin)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.textPrimary)
-                                .lineLimit(1)
-                        }
-                        HStack(spacing: 8) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.system(size: 11))
-                                .foregroundColor(.brandRed)
-                            Text(trip.destination)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.textPrimary)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    HStack {
-                        Text("\(trip.seatsAvailable) seats")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.textSecondary)
-                        Text("•")
-                            .foregroundColor(.textTertiary)
-                        Text(trip.departureTime.tripDateString)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.textSecondary)
-                            .lineLimit(1)
-                        Spacer()
-                        HStack(spacing: 5) {
-                            Text("View")
-                            Image(systemName: "arrow.right")
-                        }
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color(hex: "0F172A"))
-                        .clipShape(Capsule())
-                        .frame(minWidth: 74)
-                    }
-                }
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-            )
-            .shadow(color: .black.opacity(0.07), radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct TrailingIconLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 6) {
-            configuration.icon
-                .font(.system(size: 8))
-                .foregroundColor(.brand)
-                .frame(width: 12)
-            configuration.title
-        }
-    }
-}
-
-private extension LabelStyle where Self == TrailingIconLabelStyle {
-    static var trailingIconFix: TrailingIconLabelStyle { .init() }
 }
