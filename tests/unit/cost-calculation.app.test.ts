@@ -55,14 +55,8 @@ describe('services/cost-calculation-service/src/app', () => {
     expect(response.body.status).toBe('error');
   });
 
-  it('calculates rider max price using routing distance when available', async () => {
-    axiosPost.mockResolvedValueOnce({
-      data: {
-        data: {
-          distance_miles: 20,
-        },
-      },
-    });
+  it('falls back to default distance when routing distance is unavailable', async () => {
+    axiosPost.mockRejectedValueOnce(new Error('routing unavailable'));
 
     const { default: app } = await import('../../services/cost-calculation-service/src/app');
     const server = await startTestServer(app);
@@ -85,8 +79,8 @@ describe('services/cost-calculation-service/src/app', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('success');
-    expect(response.body.data.breakdown.total_trip_cost).toBe(15);
-    expect(response.body.data.breakdown.price_per_rider).toBe(3);
-    expect(response.body.data.max_price).toBe(3);
+    expect(response.body.data.breakdown.total_trip_cost).toBe(10);
+    expect(response.body.data.breakdown.price_per_rider).toBe(2);
+    expect(response.body.data.max_price).toBe(2);
   });
 });

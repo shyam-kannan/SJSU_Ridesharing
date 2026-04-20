@@ -69,7 +69,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         ) { granted, error in
             if let error { print("[Push] Authorization error: \(error.localizedDescription)"); return }
             if granted {
-                DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+                DispatchQueue.main.async {
+                    #if targetEnvironment(simulator)
+                    print("[Push] Simulator detected - skipping APNs device-token registration")
+                    #else
+                    UIApplication.shared.registerForRemoteNotifications()
+                    #endif
+                }
             }
             print("[Push] Permission \(granted ? "granted" : "denied")")
         }
@@ -94,6 +100,11 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
+        let message = error.localizedDescription.lowercased()
+        if message.contains("aps-environment") {
+            print("[Push] Registration failed: missing APNs entitlement (enable Push Notifications capability for this app ID/profile)")
+            return
+        }
         print("[Push] Registration failed: \(error.localizedDescription)")
     }
 

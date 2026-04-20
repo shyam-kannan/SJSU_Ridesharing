@@ -165,7 +165,13 @@ kubectl apply -f k8s-manifests/
 kubectl -n lessgo get svc api-gateway -o wide
 ```
 
-For the iOS app, set `LESSGO_API_BASE_URL` to the public API gateway URL, for example `http://<EXTERNAL-IP>/api`. The app reads that override from `APIConfig` and falls back to `http://127.0.0.1:3000/api` in the simulator.
+For the iOS app, the default API base URL is `https://lessgo-zeta.vercel.app/api` (via xcconfig).
+
+If you want to test against a local API gateway, set this Xcode Scheme environment variable:
+
+- `LESSGO_API_BASE_URL=http://127.0.0.1:3000/api`
+
+Then keep the gateway running locally (for example, `npm run dev:gateway`) while testing.
 
 ## Contributing
 

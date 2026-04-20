@@ -146,6 +146,24 @@ private struct SecureInputField: View {
     let placeholder: String
     @Binding var text: String
     @State private var isVisible = false
+    @FocusState private var isFocused: Bool
+
+    private func toggleVisibilitySafely() {
+        // Defocus before switching SecureField <-> TextField to keep keyboard
+        // accessory constraints stable.
+        let wasFocused = isFocused
+        if wasFocused {
+            isFocused = false
+        }
+
+        isVisible.toggle()
+
+        if wasFocused {
+            DispatchQueue.main.async {
+                isFocused = true
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -164,8 +182,9 @@ private struct SecureInputField: View {
                 .font(.system(size: 16))
                 .autocapitalization(.none)
                 .autocorrectionDisabled()
+                .focused($isFocused)
 
-                Button(action: { isVisible.toggle() }) {
+                Button(action: toggleVisibilitySafely) {
                     Image(systemName: isVisible ? "eye.slash" : "eye")
                         .foregroundColor(.textTertiary)
                 }

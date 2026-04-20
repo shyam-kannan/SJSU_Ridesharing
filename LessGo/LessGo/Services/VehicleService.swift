@@ -11,8 +11,8 @@ final class VehicleService {
 
     // MARK: - Config
 
-    // Match NetworkManager's base URL: http://127.0.0.1:3000/api
-    private let baseURL = "http://127.0.0.1:3000/api"
+    // Match NetworkManager's environment-aware API base URL.
+    private let baseURL = APIConfig.baseURL
 
     private func decoder() -> JSONDecoder {
         let d = JSONDecoder()

@@ -50,6 +50,20 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changed
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
       - name: Debug GitHub OIDC context
         run: |
@@ -99,14 +113,33 @@ jobs:
         if: steps.auth.outcome == 'success'
         uses: docker/setup-buildx-action@v3
 
+      - name: Debug user-service source snapshot
+        if: steps.auth.outcome == 'success' && matrix.service == 'user-service'
+        run: |
+          set -euo pipefail
+          echo "Building service: ${{ matrix.service }}"
+          echo "Commit SHA: ${GITHUB_SHA}"
+          echo "Checked out HEAD: $(git rev-parse HEAD)"
+          echo "User-service route files:"
+          find services/user-service/src/routes -maxdepth 1 -type f -name "*.ts" | sort
+          echo "Looking for unexpected vehicle.routes.ts"
+          if [ -f services/user-service/src/routes/vehicle.routes.ts ]; then
+            echo "Found services/user-service/src/routes/vehicle.routes.ts"
+          else
+            echo "vehicle.routes.ts not present"
+          fi
+          echo "User-service package dependencies excerpt:"
+          grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
+
       - name: Build and push ${{ matrix.service }} image
-        if: steps.auth.outcome == 'success'
+        if: steps.auth.outcome == 'success' && (github.event_name != 'push' || contains(steps.changed.outputs.changed_files, format('services/{0}/', matrix.service)))
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64
+          no-cache: ${{ matrix.service == 'user-service' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
@@ -122,6 +155,20 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changed
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
       - name: Validate GKE configuration
         run: |
@@ -157,19 +204,18 @@ jobs:
 
       - name: Apply Kubernetes manifests
         if: steps.auth.outcome == 'success'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
-          kubectl apply -f k8s-manifests/api-gateway.yaml
-          kubectl apply -f k8s-manifests/auth-service.yaml
-          kubectl apply -f k8s-manifests/user-service.yaml
-          kubectl apply -f k8s-manifests/trip-service.yaml
-          kubectl apply -f k8s-manifests/booking-service.yaml
-          kubectl apply -f k8s-manifests/payment-service.yaml
-          kubectl apply -f k8s-manifests/notification-service.yaml
-          kubectl apply -f k8s-manifests/cost-calculation-service.yaml
-          kubectl apply -f k8s-manifests/grouping-service.yaml
-          kubectl apply -f k8s-manifests/routing-service.yaml
-          kubectl apply -f k8s-manifests/safety-service.yaml
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+          for svc in $services; do
+            if [ "$EVENT_NAME" != "push" ] || echo "$CHANGED_FILES" | tr '|' '\n' | grep -q "^services/$svc/"; then
+              envsubst < "k8s-manifests/$svc.yaml" | kubectl apply -f -
+            fi
+          done

@@ -385,6 +385,17 @@ struct DriverHomeView: View {
         do {
             let response = try await NotificationService.shared.listNotifications(userId: userId, limit: 1)
             unreadNotificationCount = response.unreadCount
+        } catch is CancellationError {
+            // Benign: view/task lifecycle cancelled the in-flight request.
+            return
+        } catch let error as NetworkError {
+            if case .unknown(let underlying) = error,
+               let urlError = underlying as? URLError,
+               urlError.code == .cancelled {
+                // Benign URLSession cancellation (-999); avoid noisy logs.
+                return
+            }
+            print("Failed to load driver notification badge: \(error)")
         } catch {
             print("Failed to load driver notification badge: \(error)")
         }
