@@ -16,6 +16,23 @@ struct CustomTextField: View {
     @State private var showPassword = false
     @FocusState private var fieldFocused: Bool
 
+    private func togglePasswordVisibilitySafely() {
+        // Avoid swapping SecureField/TextField while first responder is active,
+        // which can trigger keyboard assistant constraint warnings.
+        let wasFocused = fieldFocused
+        if wasFocused {
+            fieldFocused = false
+        }
+
+        showPassword.toggle()
+
+        if wasFocused {
+            DispatchQueue.main.async {
+                fieldFocused = true
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
@@ -30,18 +47,20 @@ struct CustomTextField: View {
                 Group {
                     if isSecure && !showPassword {
                         SecureField(placeholder, text: $text)
+                            .keyboardType(keyboardType)
                     } else {
                         TextField(placeholder, text: $text)
                             .keyboardType(keyboardType)
                     }
                 }
                 .textInputAutocapitalization(autocapitalization)
+                .autocorrectionDisabled()
                 .focused($fieldFocused)
                 .font(.system(size: 16))
                 .foregroundColor(.textPrimary)
 
                 if isSecure {
-                    Button(action: { showPassword.toggle() }) {
+                    Button(action: togglePasswordVisibilitySafely) {
                         Image(systemName: showPassword ? "eye.slash" : "eye")
                             .font(.system(size: 16))
                             .foregroundColor(.textTertiary)

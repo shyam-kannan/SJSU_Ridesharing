@@ -1780,8 +1780,8 @@ class DevToolsViewModel: ObservableObject {
     @Published fileprivate var costSimSteps: [MatchSimStep] = []
     @Published fileprivate var costSimScenarios: [CostSimScenario] = []
 
-    private let base = "http://127.0.0.1:3000/api"
-    private let embeddingBase = "http://127.0.0.1:3010"
+    private let base = APIConfig.baseURL
+    private var embeddingBase: String { "\(APIConfig.baseURL)/embedding" }
 
     // MARK: - Simulate Full Trip
     //

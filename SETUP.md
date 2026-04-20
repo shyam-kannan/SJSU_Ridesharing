@@ -581,7 +581,9 @@ kill -9 <pid>        # stop it
 **iOS app shows "Unauthorized" or network errors**
 - Ensure all 8 backend services are running in their Terminal tabs
 - Check Docker: `docker compose ps` (postgres and redis must be "running")
-- The simulator connects via `127.0.0.1:3000` — confirm `NetworkManager.swift` has `baseURL = "http://127.0.0.1:3000/api"`
+- Default app API URL is `https://lessgo-zeta.vercel.app/api`
+- For local gateway testing, set Xcode Scheme env var: `LESSGO_API_BASE_URL=http://127.0.0.1:3000/api`
+- Keep the gateway running locally while using that override: `npm run dev:gateway`
 
 **Xcode build errors**
 Clean the build folder (**Product → Clean Build Folder**, or Cmd+Shift+K), then rebuild with Cmd+R.
