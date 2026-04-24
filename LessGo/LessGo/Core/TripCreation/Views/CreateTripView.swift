@@ -674,7 +674,7 @@ private struct Step3DetailsView: View {
                     ToastBanner(message: err, type: .error)
                 }
 
-                PrimaryButton(title: "Create Trip", icon: "car.badge.plus",
+                PrimaryButton(title: "Create Trip", icon: "car.fill",
                               isLoading: vm.isLoading, isEnabled: vm.canProceed) {
                     Task { await vm.createTrip() }
                 }

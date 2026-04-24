@@ -42,6 +42,11 @@ struct AnchorRouteMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.mapView = mapView
         mapView.showsUserLocation = showsUserLocation
+
+        guard mapView.bounds.width > 0, mapView.bounds.height > 0 else {
+            return
+        }
+
         context.coordinator.syncAnchorAnnotations(
             origin: origin,
             destination: destination,
@@ -243,6 +248,8 @@ struct AnchorRouteMapView: UIViewRepresentable {
             destination: CLLocationCoordinate2D?,
             anchors: [AnchorPoint]
         ) {
+            guard mapView.bounds.width > 0, mapView.bounds.height > 0 else { return }
+
             var coords: [CLLocationCoordinate2D] = []
             if let o = origin      { coords.append(o) }
             if let d = destination { coords.append(d) }

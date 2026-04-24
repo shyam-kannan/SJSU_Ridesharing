@@ -66,6 +66,7 @@ struct HomeView: View {
                 .padding(.top, VerifyBannerView.windowTopInset)
             }
         }
+        .navigationViewStyle(.stack)
         .onChange(of: authVM.currentUser?.id) { _ in
             withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
                 selectedTab = .home

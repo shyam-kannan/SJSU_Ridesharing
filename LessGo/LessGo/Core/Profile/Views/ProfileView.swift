@@ -708,7 +708,7 @@ struct ProfileView: View {
                 .staggeredAppear(index: 1)
 
                 if !authVM.isDriver {
-                    QuickActionCard(icon: "car.badge.plus", label: "Become Driver", color: .brandGreen) {
+                    QuickActionCard(icon: "car.fill", label: "Become Driver", color: .brandGreen) {
                         showDriverSetup = true
                     }
                     .staggeredAppear(index: 2)
