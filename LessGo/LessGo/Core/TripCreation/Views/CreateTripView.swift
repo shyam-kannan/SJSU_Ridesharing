@@ -11,14 +11,14 @@ struct CreateTripView: View {
         NavigationView {
             ZStack {
                 ZStack {
-                    Color(hex: "F4F6F2").ignoresSafeArea()
+                    Color.appBackground.ignoresSafeArea()
                     Circle()
-                        .fill(Color(hex: "A3E635").opacity(0.10))
+                        .fill(DesignSystem.Colors.accentLime.opacity(0.10))
                         .frame(width: 280)
                         .offset(x: 140, y: 560)
                         .ignoresSafeArea()
                     Circle()
-                        .fill(Color.black.opacity(0.03))
+                        .fill(DesignSystem.Colors.textPrimary.opacity(0.03))
                         .frame(width: 340)
                         .offset(x: -140, y: 40)
                         .ignoresSafeArea()
@@ -38,10 +38,10 @@ struct CreateTripView: View {
                             Spacer()
                             Text(progressPercentText)
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundColor(.black.opacity(0.9))
+                                .foregroundColor(DesignSystem.Colors.onAccentLime)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color(hex: "A3E635"))
+                                .background(DesignSystem.Colors.accentLime)
                                 .cornerRadius(999)
                         }
 
@@ -52,10 +52,10 @@ struct CreateTripView: View {
                     .padding(.bottom, 16)
                     .background(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.cardBackground)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                     )
                     .padding(.horizontal, 12)
@@ -97,9 +97,9 @@ struct CreateTripView: View {
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.textSecondary)
                                 .padding(8)
-                                .background(Color.white)
+                                .background(Color.cardBackground)
                                 .clipShape(Circle())
-                                .overlay(Circle().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+                                .overlay(Circle().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                         }
                     }
                 }
@@ -336,10 +336,10 @@ private struct Step1LocationView: View {
                     }
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.cardBackground)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                     )
                     .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 4)

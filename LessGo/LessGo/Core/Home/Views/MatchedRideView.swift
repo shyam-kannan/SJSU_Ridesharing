@@ -129,7 +129,7 @@ struct MatchedRideView: View {
                     .offset(y: sheetAppeared ? 0 : geo.size.height * 0.55)
                     .animation(.spring(response: 0.4, dampingFraction: 0.82), value: sheetAppeared)
             }
-            .background(Color(hex: "F5F5F5"))
+            .background(Color.appBackground)
             .ignoresSafeArea(edges: .top)
         }
         .navigationBarHidden(true)
@@ -225,7 +225,7 @@ struct MatchedRideView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.white)
+                .background(Color.cardBackground)
                 .cornerRadius(14)
                 .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 3)
             }
@@ -281,7 +281,7 @@ struct MatchedRideView: View {
             Spacer(minLength: 0)
                 .frame(height: 20)
         }
-        .background(Color.white)
+        .background(Color.cardBackground)
         .cornerRadius(20, corners: [.topLeft, .topRight])
         .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: -4)
     }
@@ -340,7 +340,7 @@ struct MatchedRideView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color(hex: "1C1C1E"))
+                        .background(DesignSystem.Colors.darkBrandSurface)
                         .cornerRadius(8)
                 }
 
@@ -357,7 +357,7 @@ struct MatchedRideView: View {
                 Image(systemName: "star.fill")
                     .font(.system(size: 14))
                     .foregroundColor(.brandGold)
-                Text(String(format: "%.1f", driverRating))
+                Text(String(format: "%.1f", Double(driverRating)))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.textPrimary)
             }
@@ -408,7 +408,7 @@ struct MatchedRideView: View {
                 ZStack(alignment: .topTrailing) {
                     ZStack {
                         Circle()
-                            .fill(Color(hex: "F2F2F7"))
+                            .fill(DesignSystem.Colors.fieldBackground)
                             .frame(width: 56, height: 56)
                         Image(systemName: icon)
                             .font(.system(size: 22, weight: .semibold))

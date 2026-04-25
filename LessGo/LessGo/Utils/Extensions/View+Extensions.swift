@@ -14,9 +14,9 @@ extension View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.98),
+                                Color.cardBackground.opacity(0.98),
                                 Color.cardBackground,
-                                Color(hex: "F4FAFF").opacity(0.7)
+                                DesignSystem.Colors.surfaceBackground.opacity(0.7)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -24,7 +24,7 @@ extension View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.95), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

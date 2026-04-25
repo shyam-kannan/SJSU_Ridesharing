@@ -122,11 +122,10 @@ class NetworkManager {
 
             // Handle error responses
             if !(200...299).contains(httpResponse.statusCode) {
-                if let apiError = try? decoder.decode(APIError.self, from: data) {
-                    throw NetworkError.serverError(apiError)
-                }
                 // Map HTTP status codes to specific NetworkError cases
                 switch httpResponse.statusCode {
+                case 401:
+                    throw NetworkError.unauthorized
                 case 403:
                     throw NetworkError.forbidden
                 case 404:
@@ -136,6 +135,9 @@ class NetworkManager {
                 case 429:
                     throw NetworkError.tooManyRequests
                 default:
+                    if let apiError = try? decoder.decode(APIError.self, from: data) {
+                        throw NetworkError.serverError(apiError)
+                    }
                     throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
                 }
             }
@@ -237,10 +239,23 @@ class NetworkManager {
             // ─────────────────────────────────────────────────────────────
 
             if !(200...299).contains(httpResponse.statusCode) {
-                if let apiError = try? decoder.decode(APIError.self, from: data) {
-                    throw NetworkError.serverError(apiError)
+                switch httpResponse.statusCode {
+                case 401:
+                    throw NetworkError.unauthorized
+                case 403:
+                    throw NetworkError.forbidden
+                case 404:
+                    throw NetworkError.notFound
+                case 408:
+                    throw NetworkError.timeout
+                case 429:
+                    throw NetworkError.tooManyRequests
+                default:
+                    if let apiError = try? decoder.decode(APIError.self, from: data) {
+                        throw NetworkError.serverError(apiError)
+                    }
+                    throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
                 }
-                throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
             }
 
             return try decodeResponse(from: data)

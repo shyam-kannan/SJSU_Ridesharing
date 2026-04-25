@@ -85,10 +85,10 @@ struct LoginView: View {
                     .padding(.bottom, 18)
                     .background(
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .fill(Color.white.opacity(0.98))
+                            .fill(Color.cardBackground.opacity(0.98))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                             .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 10)
                     )
@@ -140,14 +140,14 @@ struct LoginView: View {
             }
             .background(
                 ZStack {
-                    Color(hex: "F5F7F2").ignoresSafeArea()
+                    Color.appBackground.ignoresSafeArea()
                     Circle()
-                        .fill(Color(hex: "A3E635").opacity(0.12))
+                        .fill(DesignSystem.Colors.accentLime.opacity(0.12))
                         .frame(width: 320)
                         .offset(x: -130, y: 120)
                         .ignoresSafeArea()
                     Circle()
-                        .fill(Color.black.opacity(0.03))
+                        .fill(DesignSystem.Colors.textPrimary.opacity(0.03))
                         .frame(width: 280)
                         .offset(x: 120, y: 420)
                         .ignoresSafeArea()
@@ -184,7 +184,7 @@ struct LoginView: View {
     private var headerHero: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .fill(Color(hex: "17191E"))
+                .fill(DesignSystem.Colors.darkBrandSurface)
                 .frame(height: 212)
                 .overlay(
                     RoundedRectangle(cornerRadius: 32, style: .continuous)
@@ -221,7 +221,7 @@ struct LoginView: View {
                 .offset(x: 44, y: -34)
 
             Circle()
-                .fill(Color.white.opacity(0.08))
+                .fill(DesignSystem.Colors.onDark.opacity(0.08))
                 .frame(width: 150, height: 150)
                 .offset(x: 185, y: 35)
 
@@ -248,7 +248,7 @@ struct LoginView: View {
                     .lineLimit(2)
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
-                        Circle().fill(Color(hex: "A3E635")).frame(width: 8, height: 8)
+                        Circle().fill(DesignSystem.Colors.accentLime).frame(width: 8, height: 8)
                         Text("Saved account switching")
                     }
                     HStack(spacing: 6) {
@@ -275,9 +275,9 @@ struct LoginView: View {
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
-                    Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
     }

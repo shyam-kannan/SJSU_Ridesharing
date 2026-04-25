@@ -23,10 +23,10 @@ struct TripCardView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.96))
+                .fill(Color.cardBackground.opacity(0.96))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 4)
@@ -63,7 +63,7 @@ struct TripCardView: View {
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     StarRatingView(rating: driverRating, size: 8)
-                    Text(String(format: "%.1f", driverRating))
+                    Text(String(format: "%.1f", Double(driverRating)))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.textSecondary)
                 }
@@ -224,10 +224,10 @@ struct CompactTripCard: View {
                 }
             }
             .padding(10)
-            .background(Color(hex: "F8FAFC"))
+            .background(DesignSystem.Colors.fieldBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
             .cornerRadius(12)
 
@@ -319,10 +319,10 @@ struct CompactTripCard: View {
             }
         }
         .padding(14)
-        .background(Color.white)
+        .background(Color.cardBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
         )
         .cornerRadius(18)
         .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
@@ -345,7 +345,7 @@ struct CompactTripCard: View {
         .foregroundColor(.textSecondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color(hex: "F8FAFC"))
+        .background(DesignSystem.Colors.fieldBackground)
         .cornerRadius(999)
     }
 

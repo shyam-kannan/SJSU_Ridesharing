@@ -8,9 +8,10 @@ struct LessGoApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var authVM = AuthViewModel()
     @StateObject private var locationManager = LocationManager.shared
+    @AppStorage("appAppearance") private var appAppearanceRawValue = AppAppearance.system.rawValue
 
     init() {
-        configureAppearance()
+        configureAppearance(for: .system)
     }
 
     var body: some Scene {
@@ -18,25 +19,88 @@ struct LessGoApp: App {
             ContentView()
                 .environmentObject(authVM)
                 .environmentObject(locationManager)
-                .onAppear { appDelegate.authVM = authVM }
+                .preferredColorScheme(appAppearance.colorScheme)
+                .onAppear {
+                    appDelegate.authVM = authVM
+                    applyGlobalAppearance()
+                }
+                .onChange(of: appAppearanceRawValue) { _ in
+                    applyGlobalAppearance()
+                }
         }
     }
 
-    private func configureAppearance() {
+    private var appAppearance: AppAppearance {
+        AppAppearance(rawValue: appAppearanceRawValue) ?? .system
+    }
+
+    private func applyGlobalAppearance() {
+        applyWindowInterfaceStyle()
+        configureAppearance(for: appAppearance)
+    }
+
+    private func applyWindowInterfaceStyle() {
+        let style = appAppearance.uiUserInterfaceStyle
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                window.overrideUserInterfaceStyle = style
+            }
+        }
+    }
+
+    private func configureAppearance(for appearance: AppAppearance) {
         // SJSU Blue for navigation bar titles
         let sjsuBlue = UIColor(red: 0/255, green: 85/255, blue: 162/255, alpha: 1) // #0055A2
 
+        let navBackground: UIColor
+        let navTitleColor: UIColor
+        let tabBackground: UIColor
+        let tabUnselectedColor: UIColor
+
+        switch appearance {
+        case .light:
+            navBackground = .white
+            navTitleColor = sjsuBlue
+            tabBackground = .white
+            tabUnselectedColor = UIColor(red: 0.61, green: 0.64, blue: 0.69, alpha: 1)
+        case .dark:
+            navBackground = UIColor(red: 24/255, green: 26/255, blue: 31/255, alpha: 1)
+            navTitleColor = .white
+            tabBackground = UIColor(red: 24/255, green: 26/255, blue: 31/255, alpha: 1)
+            tabUnselectedColor = UIColor(red: 0.64, green: 0.67, blue: 0.73, alpha: 1)
+        case .system:
+            navBackground = UIColor { trait in
+                trait.userInterfaceStyle == .dark
+                    ? UIColor(red: 24/255, green: 26/255, blue: 31/255, alpha: 1)
+                    : .white
+            }
+            navTitleColor = UIColor { trait in
+                trait.userInterfaceStyle == .dark ? .white : sjsuBlue
+            }
+            tabBackground = UIColor { trait in
+                trait.userInterfaceStyle == .dark
+                    ? UIColor(red: 24/255, green: 26/255, blue: 31/255, alpha: 1)
+                    : .white
+            }
+            tabUnselectedColor = UIColor { trait in
+                trait.userInterfaceStyle == .dark
+                    ? UIColor(red: 0.64, green: 0.67, blue: 0.73, alpha: 1)
+                    : UIColor(red: 0.61, green: 0.64, blue: 0.69, alpha: 1)
+            }
+        }
+
         let navAppearance = UINavigationBarAppearance()
         navAppearance.configureWithOpaqueBackground()
-        navAppearance.backgroundColor = UIColor.white
+        navAppearance.backgroundColor = navBackground
         navAppearance.shadowColor = .clear
         navAppearance.titleTextAttributes = [
             .font: UIFont.systemFont(ofSize: 17, weight: .semibold),
-            .foregroundColor: sjsuBlue
+            .foregroundColor: navTitleColor
         ]
         navAppearance.largeTitleTextAttributes = [
             .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-            .foregroundColor: sjsuBlue
+            .foregroundColor: navTitleColor
         ]
         UINavigationBar.appearance().standardAppearance = navAppearance
         UINavigationBar.appearance().compactAppearance = navAppearance
@@ -45,11 +109,83 @@ struct LessGoApp: App {
         // SJSU Blue for selected tab items
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithOpaqueBackground()
-        tabAppearance.backgroundColor = .white
+        tabAppearance.backgroundColor = tabBackground
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
         UITabBar.appearance().tintColor = sjsuBlue
-        UITabBar.appearance().unselectedItemTintColor = UIColor(red: 0.61, green: 0.64, blue: 0.69, alpha: 1) // textTertiary
+        UITabBar.appearance().unselectedItemTintColor = tabUnselectedColor
+
+        // Also update already-mounted bars so theme changes are visible immediately.
+        applyAppearanceToVisibleControllers(
+            navAppearance: navAppearance,
+            tabAppearance: tabAppearance,
+            tintColor: sjsuBlue,
+            tabUnselectedColor: tabUnselectedColor
+        )
+    }
+
+    private func applyAppearanceToVisibleControllers(
+        navAppearance: UINavigationBarAppearance,
+        tabAppearance: UITabBarAppearance,
+        tintColor: UIColor,
+        tabUnselectedColor: UIColor
+    ) {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                applyAppearance(
+                    to: window.rootViewController,
+                    navAppearance: navAppearance,
+                    tabAppearance: tabAppearance,
+                    tintColor: tintColor,
+                    tabUnselectedColor: tabUnselectedColor
+                )
+            }
+        }
+    }
+
+    private func applyAppearance(
+        to controller: UIViewController?,
+        navAppearance: UINavigationBarAppearance,
+        tabAppearance: UITabBarAppearance,
+        tintColor: UIColor,
+        tabUnselectedColor: UIColor
+    ) {
+        guard let controller else { return }
+
+        if let navController = controller as? UINavigationController {
+            navController.navigationBar.standardAppearance = navAppearance
+            navController.navigationBar.compactAppearance = navAppearance
+            navController.navigationBar.scrollEdgeAppearance = navAppearance
+            navController.navigationBar.tintColor = tintColor
+        }
+
+        if let tabController = controller as? UITabBarController {
+            tabController.tabBar.standardAppearance = tabAppearance
+            tabController.tabBar.scrollEdgeAppearance = tabAppearance
+            tabController.tabBar.tintColor = tintColor
+            tabController.tabBar.unselectedItemTintColor = tabUnselectedColor
+        }
+
+        controller.children.forEach {
+            applyAppearance(
+                to: $0,
+                navAppearance: navAppearance,
+                tabAppearance: tabAppearance,
+                tintColor: tintColor,
+                tabUnselectedColor: tabUnselectedColor
+            )
+        }
+
+        if let presented = controller.presentedViewController {
+            applyAppearance(
+                to: presented,
+                navAppearance: navAppearance,
+                tabAppearance: tabAppearance,
+                tintColor: tintColor,
+                tabUnselectedColor: tabUnselectedColor
+            )
+        }
     }
 }
 

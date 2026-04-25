@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// LessGo Design System
 /// Central source of truth for all design tokens including SJSU branding,
@@ -20,6 +21,14 @@ enum DesignSystem {
         static let deepNavy = Color(hex: "071A2E")
         static let sky = Color(hex: "DCEEFF")
         static let emerald = Color(hex: "10B981")
+        static let accentLime = lime
+        static let onAccentLime = Color(hex: "111827")
+        static let darkBrandSurface = Color(hex: "17191E")
+        static let actionDarkSurface = Color(hex: "0F172A")
+        static let tabBarSurface = Color(hex: "15171B")
+        static let cautionOrange = Color(hex: "E67E22")
+        static let runningBlue = Color(hex: "1A73E8")
+        static let onDark = Color.white
 
         // Semantic Colors
         static let primary = sjsuBlue
@@ -33,24 +42,68 @@ enum DesignSystem {
         static let info = sjsuBlue
 
         // Grayscale
-        static let textPrimary = ink
-        static let textSecondary = Color(hex: "5B6472")
-        static let textTertiary = Color(hex: "8D97A6")
+        static let textPrimary = dynamicColor(light: "111827", dark: "F3F4F6")
+        static let textSecondary = dynamicColor(light: "5B6472", dark: "CDD5E1")
+        static let textTertiary = dynamicColor(light: "8D97A6", dark: "9AA7BA")
 
         // Backgrounds
-        static let background = sand
-        static let cardBackground = Color.white.opacity(0.96)
-        static let surfaceBackground = mist
+        static let background = dynamicColor(light: "F7F5EF", dark: "0F141B")
+        static let cardBackground = dynamicColor(light: "FFFFFF", dark: "171D26", lightAlpha: 0.96, darkAlpha: 0.96)
+        static let surfaceBackground = dynamicColor(light: "EDF2F8", dark: "111827")
+        static let fieldBackground = dynamicColor(light: "F8FAFC", dark: "1E2733")
+        static let groupedBackground = dynamicColor(light: "F0F2F0", dark: "1B2430")
+        static let selectedTabBackground = dynamicColor(light: "F4F7EE", dark: "E7F7D7")
 
         // Interactive
         static let buttonPrimary = sjsuBlue
         static let buttonSecondary = sjsuGold
-        static let buttonDisabled = Color(hex: "D1D5DB")
+        static let buttonDisabled = dynamicColor(light: "D1D5DB", dark: "475569")
 
         // Borders
-        static let border = Color(hex: "DDE3EC")
+        static let border = dynamicColor(light: "DDE3EC", dark: "2A3442")
         static let borderFocused = sjsuBlue
         static let borderError = error
+
+        private static func dynamicColor(
+            light: String,
+            dark: String,
+            lightAlpha: CGFloat = 1,
+            darkAlpha: CGFloat = 1
+        ) -> Color {
+            Color(
+                uiColor: UIColor { trait in
+                    if trait.userInterfaceStyle == .dark {
+                        return uiColor(from: dark, alpha: darkAlpha)
+                    }
+                    return uiColor(from: light, alpha: lightAlpha)
+                }
+            )
+        }
+
+        private static func uiColor(from hex: String, alpha: CGFloat = 1) -> UIColor {
+            let sanitized = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+            var int: UInt64 = 0
+            Scanner(string: sanitized).scanHexInt64(&int)
+
+            let r, g, b: UInt64
+            switch sanitized.count {
+            case 3:
+                r = (int >> 8) * 17
+                g = (int >> 4 & 0xF) * 17
+                b = (int & 0xF) * 17
+            default:
+                r = int >> 16
+                g = int >> 8 & 0xFF
+                b = int & 0xFF
+            }
+
+            return UIColor(
+                red: CGFloat(r) / 255,
+                green: CGFloat(g) / 255,
+                blue: CGFloat(b) / 255,
+                alpha: alpha
+            )
+        }
     }
 
     // MARK: - Typography
@@ -232,9 +285,9 @@ extension View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.98),
                                 DesignSystem.Colors.cardBackground,
-                                DesignSystem.Colors.sky.opacity(0.35)
+                                DesignSystem.Colors.cardBackground,
+                                DesignSystem.Colors.surfaceBackground.opacity(0.45)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -242,7 +295,7 @@ extension View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.95), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.card, style: .continuous)
@@ -282,14 +335,17 @@ extension View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.99), Color.white.opacity(0.94)],
+                            colors: [
+                                DesignSystem.Colors.cardBackground,
+                                DesignSystem.Colors.surfaceBackground.opacity(0.92)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(Color.white, lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
             .shadow(

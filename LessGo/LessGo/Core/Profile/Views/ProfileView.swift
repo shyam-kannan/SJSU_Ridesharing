@@ -22,6 +22,7 @@ struct ProfileView: View {
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("emailNotificationsEnabled") private var emailNotificationsEnabled = true
     @AppStorage("locationShareEnabled") private var locationShareEnabled = true
+    @AppStorage("appAppearance") private var appAppearanceRawValue = AppAppearance.system.rawValue
     @EnvironmentObject var locationManager: LocationManager
 
     var body: some View {
@@ -72,7 +73,7 @@ struct ProfileView: View {
                 .padding(.top, 8)
             }
             .background(
-                Color(hex: "F4F6F2").ignoresSafeArea()
+                Color.appBackground.ignoresSafeArea()
             )
             .navigationBarHidden(true)
             .task {
@@ -80,6 +81,16 @@ struct ProfileView: View {
                     await vm.loadProfile(userId: id)
                     if authVM.currentUser?.role == .driver {
                         await vm.loadEarnings(userId: id)
+                    }
+                }
+            }
+            .onChange(of: appAppearanceRawValue) { newValue in
+                let selectedAppearance = AppAppearance(rawValue: newValue) ?? .system
+                let style = selectedAppearance.uiUserInterfaceStyle
+                for scene in UIApplication.shared.connectedScenes {
+                    guard let windowScene = scene as? UIWindowScene else { continue }
+                    for window in windowScene.windows {
+                        window.overrideUserInterfaceStyle = style
                     }
                 }
             }
@@ -142,7 +153,7 @@ struct ProfileView: View {
             Button(action: { showAccountMenu = true }) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
+                        .fill(DesignSystem.Colors.onDark.opacity(0.08))
                         .frame(width: 44, height: 44)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -179,20 +190,20 @@ struct ProfileView: View {
             .padding(.vertical, 18)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color(hex: "F8FAFC"))
+                    .fill(Color.sheetBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.04), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
         }
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .shadow(
@@ -524,10 +535,10 @@ struct ProfileView: View {
         .padding(15)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
@@ -540,7 +551,7 @@ struct ProfileView: View {
         VStack(spacing: 10) {
             // Primary stats
             HStack(spacing: 12) {
-                ProfileStat(value: String(format: "%.1f", authVM.currentUser?.rating ?? 0),
+                ProfileStat(value: String(format: "%.1f", Double(authVM.currentUser?.rating ?? 0)),
                             label: "Rating", icon: "star.fill", color: .brandOrange)
                     .staggeredAppear(index: 0)
                 ProfileStat(value: "\(vm.stats?.totalTripsAsDriver ?? 0)",
@@ -634,10 +645,10 @@ struct ProfileView: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.white)
+                    .fill(Color.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
             .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
@@ -736,7 +747,7 @@ struct ProfileView: View {
                     Image(systemName: "star.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.brandOrange)
-                    Text(String(format: "%.1f avg", authVM.currentUser?.rating ?? 0))
+                    Text(String(format: "%.1f avg", Double(authVM.currentUser?.rating ?? 0)))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.textSecondary)
                 }
@@ -790,6 +801,10 @@ struct ProfileView: View {
                     color: .brandGreen,
                     isOn: $locationManager.isTrackingEnabled
                 )
+
+                Divider().padding(.leading, 52)
+
+                SettingsAppearanceRow(selection: appAppearanceSelection)
 
                 Divider().padding(.leading, 52)
 
@@ -851,7 +866,7 @@ struct ProfileView: View {
                 .padding(AppConstants.cardPadding)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
+                        .fill(Color.cardBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .strokeBorder(Color.brandRed.opacity(0.10), lineWidth: 1)
@@ -873,10 +888,10 @@ struct ProfileView: View {
                 .padding(AppConstants.cardPadding)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
+                        .fill(Color.cardBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                         )
                 )
                 .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
@@ -925,6 +940,13 @@ struct ProfileView: View {
             return URL(string: "\(gatewayRoot)\(raw)")
         }
         return URL(string: raw)
+    }
+
+    private var appAppearanceSelection: Binding<AppAppearance> {
+        Binding(
+            get: { AppAppearance(rawValue: appAppearanceRawValue) ?? .system },
+            set: { appAppearanceRawValue = $0.rawValue }
+        )
     }
 }
 
@@ -988,10 +1010,10 @@ private struct ProfileStat: View {
         .frame(maxWidth: .infinity).padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
@@ -1015,10 +1037,10 @@ private struct QuickActionCard: View {
             .frame(maxWidth: .infinity).padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white)
+                    .fill(Color.cardBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
             .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
@@ -1089,6 +1111,52 @@ private struct SettingsToggleRow: View {
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .tint(.brand)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+}
+
+private struct SettingsAppearanceRow: View {
+    @Binding var selection: AppAppearance
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.brand.opacity(0.10))
+                    .frame(width: 34, height: 34)
+                Image(systemName: "circle.lefthalf.filled")
+                    .font(.system(size: 16))
+                    .foregroundColor(.brand)
+            }
+
+            Text("Appearance")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.textPrimary)
+
+            Spacer()
+
+            Menu {
+                Picker("Appearance", selection: $selection) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selection.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textSecondary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.textTertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.brand.opacity(0.08))
+                .clipShape(Capsule())
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -1453,7 +1521,7 @@ private struct VehicleSpecsCard: View {
                             Divider().frame(height: 30)
                             mpgCell(label: "Combined", value: combined)
                         }
-                        .background(Color(hex: "F8FAFC"))
+                        .background(Color.sheetBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                 }
@@ -1504,7 +1572,7 @@ private struct VehicleSpecsCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Color.brand.opacity(0.18), lineWidth: 1.5)
@@ -3128,9 +3196,9 @@ struct DevToolsSection: View {
                             }
                         }
                     }
-                    .background(Color(hex: "F8FAFC"))
+                    .background(DesignSystem.Colors.fieldBackground)
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                 }
 
                 // ── Results table ───────────────────────────────────────────
@@ -3153,7 +3221,7 @@ struct DevToolsSection: View {
                         .foregroundColor(.textSecondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color(hex: "F0F2F0"))
+                        .background(DesignSystem.Colors.groupedBackground)
                         .cornerRadius(6)
 
                         // Data rows
@@ -3182,9 +3250,9 @@ struct DevToolsSection: View {
                             .foregroundColor(.textSecondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(Color.white)
+                            .background(Color.cardBackground)
                             .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                         }
                     }
                 }
@@ -3273,9 +3341,9 @@ struct DevToolsSection: View {
                             }
                         }
                     }
-                    .background(Color(hex: "F8FAFC"))
+                    .background(DesignSystem.Colors.fieldBackground)
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                 }
 
                 // ── Results table ───────────────────────────────────────────
@@ -3297,7 +3365,7 @@ struct DevToolsSection: View {
                         .foregroundColor(.textSecondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color(hex: "F0F2F0"))
+                        .background(DesignSystem.Colors.groupedBackground)
                         .cornerRadius(6)
 
                         ForEach(vm.carpoolSimResults) { r in
@@ -3322,9 +3390,9 @@ struct DevToolsSection: View {
                             .foregroundColor(.textSecondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(r.assigned ? Color.green.opacity(0.05) : Color.white)
+                            .background(r.assigned ? Color.green.opacity(0.05) : Color.cardBackground)
                             .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                         }
 
                         // Outcome badge
@@ -3348,9 +3416,9 @@ struct DevToolsSection: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
-                        .background(Color(hex: "F8FAFC"))
+                        .background(DesignSystem.Colors.fieldBackground)
                         .cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                     }
                 }
 
@@ -3384,10 +3452,10 @@ struct DevToolsSection: View {
             .padding(.top, 2)
         case .freshMatch:
             HStack(spacing: 6) {
-                Circle().fill(Color(hex: "E67E22")).frame(width: 8, height: 8)
+                Circle().fill(DesignSystem.Colors.cautionOrange).frame(width: 8, height: 8)
                 Text("FRESH MATCH — idle driver won (verify Scost values above)")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(hex: "E67E22"))
+                    .foregroundColor(DesignSystem.Colors.cautionOrange)
             }
             .padding(.top, 2)
         case .noMatch:
@@ -3408,7 +3476,7 @@ struct DevToolsSection: View {
     private func stepLabelColor(_ status: MatchSimStepStatus) -> Color {
         switch status {
         case .pending:  return .gray
-        case .running:  return Color(hex: "1A73E8")  // blue
+        case .running:  return DesignSystem.Colors.runningBlue
         case .success:  return .textPrimary
         case .error:    return .red
         }
@@ -3416,7 +3484,7 @@ struct DevToolsSection: View {
 
     private func stepRowBackground(_ status: MatchSimStepStatus) -> Color {
         switch status {
-        case .running:  return Color(hex: "1A73E8").opacity(0.05)
+        case .running:  return DesignSystem.Colors.runningBlue.opacity(0.05)
         case .error:    return Color.red.opacity(0.04)
         default:        return Color.clear
         }
@@ -3425,7 +3493,7 @@ struct DevToolsSection: View {
     private func scoreColor(_ score: String) -> Color {
         guard let v = Double(score) else { return .textSecondary }
         if v >= 0.8 { return .green }
-        if v >= 0.5 { return Color(hex: "E67E22") }
+        if v >= 0.5 { return DesignSystem.Colors.cautionOrange }
         return .textSecondary
     }
 
@@ -3433,7 +3501,7 @@ struct DevToolsSection: View {
     private func scostColor(_ score: String) -> Color {
         guard let v = Double(score) else { return .textSecondary }
         if v < 0.5  { return .green }
-        if v < 1.5  { return Color(hex: "E67E22") }
+        if v < 1.5  { return DesignSystem.Colors.cautionOrange }
         return .red
     }
 
@@ -3459,7 +3527,7 @@ struct DevToolsSection: View {
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(hex: "F0F2F0"))
+                .background(DesignSystem.Colors.groupedBackground)
                 .cornerRadius(8)
 
                 // ── Step log ───────────────────────────────────────────────────
@@ -3512,9 +3580,9 @@ struct DevToolsSection: View {
                             }
                         }
                     }
-                    .background(Color(hex: "F8FAFC"))
+                    .background(DesignSystem.Colors.fieldBackground)
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                 }
 
                 // ── Scenario results table ─────────────────────────────────────
@@ -3551,7 +3619,7 @@ struct DevToolsSection: View {
                         .foregroundColor(.textSecondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Color(hex: "F0F2F0"))
+                        .background(DesignSystem.Colors.groupedBackground)
                         .cornerRadius(6)
 
                         // Data rows
@@ -3599,9 +3667,9 @@ struct DevToolsSection: View {
                                     .padding(.bottom, 6)
                                 }
                             }
-                            .background(Color.white)
+                            .background(Color.cardBackground)
                             .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                         }
                     }
                 }
@@ -3644,9 +3712,9 @@ struct DevToolsSection: View {
                         .padding(10)
                     }
                     .frame(height: 160)
-                    .background(Color(hex: "F8FAFC"))
+                    .background(DesignSystem.Colors.fieldBackground)
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                 }
 
                 devButton(title: "Run Simulation", icon: "play.fill", running: vm.fullTripRunning, color: .brandOrange) {
@@ -3669,9 +3737,9 @@ struct DevToolsSection: View {
                 TextField("Trip ID", text: $passengerTripId)
                     .font(.system(size: 13, design: .monospaced))
                     .padding(10)
-                    .background(Color(hex: "F8FAFC"))
+                    .background(DesignSystem.Colors.fieldBackground)
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.08), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                     .autocorrectionDisabled()
 
                 if !vm.passengerJoinJSON.isEmpty {
@@ -3699,16 +3767,16 @@ struct DevToolsSection: View {
                         Text("Origin Lat").font(.system(size: 10)).foregroundColor(.textSecondary)
                         TextField("37.4146", text: $forceMatchOriginLat)
                             .font(.system(size: 12, design: .monospaced))
-                            .padding(8).background(Color(hex: "F8FAFC")).cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.black.opacity(0.08), lineWidth: 1))
+                            .padding(8).background(DesignSystem.Colors.fieldBackground).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                             .keyboardType(.decimalPad).autocorrectionDisabled()
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Origin Lng").font(.system(size: 10)).foregroundColor(.textSecondary)
                         TextField("-121.9006", text: $forceMatchOriginLng)
                             .font(.system(size: 12, design: .monospaced))
-                            .padding(8).background(Color(hex: "F8FAFC")).cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.black.opacity(0.08), lineWidth: 1))
+                            .padding(8).background(DesignSystem.Colors.fieldBackground).cornerRadius(8)
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                             .keyboardType(.decimalPad).autocorrectionDisabled()
                     }
                 }
@@ -3790,7 +3858,7 @@ struct DevToolsSection: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(Color.white)
+        .background(Color.cardBackground)
         .cornerRadius(14)
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.brandOrange.opacity(0.20), lineWidth: 1))
     }
@@ -3804,9 +3872,9 @@ struct DevToolsSection: View {
                 .padding(10)
         }
         .frame(height: 140)
-        .background(Color(hex: "F8FAFC"))
+        .background(DesignSystem.Colors.fieldBackground)
         .cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
     }
 
     private func devButton(

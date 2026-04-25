@@ -106,17 +106,17 @@ private struct CustomTabBar: View {
                         HStack(spacing: 8) {
                             ZStack {
                                 Circle()
-                                    .fill(selectedTab == item.tab ? Color(hex: "A3E635").opacity(0.18) : Color.clear)
+                                    .fill(selectedTab == item.tab ? DesignSystem.Colors.accentLime.opacity(0.18) : Color.clear)
                                     .frame(width: 30, height: 30)
                                 Image(systemName: selectedTab == item.tab ? item.selectedIcon : item.icon)
                                     .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(selectedTab == item.tab ? .black.opacity(0.9) : .white.opacity(0.65))
+                                    .foregroundColor(selectedTab == item.tab ? DesignSystem.Colors.onAccentLime : .white.opacity(0.65))
                             }
 
                             if selectedTab == item.tab {
                                 Text(item.label)
                                     .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    .foregroundColor(.black.opacity(0.9))
+                                    .foregroundColor(DesignSystem.Colors.onAccentLime)
                                     .transition(.opacity.combined(with: .move(edge: .trailing)))
                             }
                         }
@@ -127,7 +127,7 @@ private struct CustomTabBar: View {
                             Capsule()
                                 .fill(
                                     selectedTab == item.tab
-                                    ? AnyShapeStyle(Color(hex: "F4F7EE"))
+                                    ? AnyShapeStyle(DesignSystem.Colors.selectedTabBackground)
                                     : AnyShapeStyle(Color.clear)
                                 )
                         )
@@ -143,10 +143,10 @@ private struct CustomTabBar: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(hex: "15171B").opacity(0.96))
+                .fill(DesignSystem.Colors.tabBarSurface.opacity(0.96))
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.onDark.opacity(0.08), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.14), radius: 22, x: 0, y: 10)
         )
