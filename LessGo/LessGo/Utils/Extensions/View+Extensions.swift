@@ -14,8 +14,8 @@ extension View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.cardBackground.opacity(0.98),
-                                Color.cardBackground,
+                                DesignSystem.Colors.background,
+                                DesignSystem.Colors.cardBackground,
                                 DesignSystem.Colors.surfaceBackground.opacity(0.7)
                             ],
                             startPoint: .topLeading,

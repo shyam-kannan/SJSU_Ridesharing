@@ -84,16 +84,6 @@ struct ProfileView: View {
                     }
                 }
             }
-            .onChange(of: appAppearanceRawValue) { newValue in
-                let selectedAppearance = AppAppearance(rawValue: newValue) ?? .system
-                let style = selectedAppearance.uiUserInterfaceStyle
-                for scene in UIApplication.shared.connectedScenes {
-                    guard let windowScene = scene as? UIWindowScene else { continue }
-                    for window in windowScene.windows {
-                        window.overrideUserInterfaceStyle = style
-                    }
-                }
-            }
             .sheet(isPresented: $showEdit) {
                 EditProfileView(vm: vm, userId: authVM.currentUser?.id ?? "")
                     .onDisappear { Task { await authVM.refreshCurrentUser() } }
