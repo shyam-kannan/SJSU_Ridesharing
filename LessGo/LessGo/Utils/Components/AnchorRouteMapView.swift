@@ -43,10 +43,6 @@ struct AnchorRouteMapView: UIViewRepresentable {
         context.coordinator.mapView = mapView
         mapView.showsUserLocation = showsUserLocation
 
-        guard mapView.bounds.width > 0, mapView.bounds.height > 0 else {
-            return
-        }
-
         context.coordinator.syncAnchorAnnotations(
             origin: origin,
             destination: destination,
