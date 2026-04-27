@@ -90,58 +90,12 @@ class NetworkManager {
         // ───────────────────────────────────────────────────────────────────
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw NetworkError.unknown(NSError(domain: "Invalid response", code: 0))
-            }
-
-            // ── DEBUG LOGGING ────────────────────────────────────────────
-            #if DEBUG
-            let rawBody = String(data: data, encoding: .utf8) ?? "<non-UTF8 data>"
-            print("[API] ◀ HTTP \(httpResponse.statusCode) \(url.path)")
-            print("[API] Response body: \(rawBody)")
-            #endif
-            // ─────────────────────────────────────────────────────────────
-
-            // Handle 401 - Token expired, try to refresh
-            if httpResponse.statusCode == 401 {
-                if requiresAuth, let refreshed = try? await refreshAccessToken() {
-                    // Retry request with new token
-                    request.setValue("Bearer \(refreshed)", forHTTPHeaderField: "Authorization")
-                    let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
-                    guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                          (200...299).contains(retryHttpResponse.statusCode) else {
-                        throw NetworkError.unauthorized
-                    }
-                    return try decodeResponse(from: retryData)
-                } else {
-                    throw NetworkError.unauthorized
-                }
-            }
-
-            // Handle error responses
-            if !(200...299).contains(httpResponse.statusCode) {
-                if let apiError = try? decoder.decode(APIError.self, from: data) {
-                    throw NetworkError.serverError(apiError)
-                }
-                // Map HTTP status codes to specific NetworkError cases
-                switch httpResponse.statusCode {
-                case 403:
-                    throw NetworkError.forbidden
-                case 404:
-                    throw NetworkError.notFound
-                case 408:
-                    throw NetworkError.timeout
-                case 429:
-                    throw NetworkError.tooManyRequests
-                default:
-                    throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
-                }
-            }
-
-            return try decodeResponse(from: data)
-
+            return try await performRequest(
+                request: request,
+                url: url,
+                logPrefix: "[API]",
+                requiresAuth: requiresAuth
+            )
         } catch let error as NetworkError {
             throw error
         } catch let error as URLError {
@@ -222,29 +176,12 @@ class NetworkManager {
         // ───────────────────────────────────────────────────────────────────
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw NetworkError.unknown(NSError(domain: "Invalid response", code: 0))
-            }
-
-            // ── DEBUG LOGGING ────────────────────────────────────────────
-            #if DEBUG
-            let rawBody = String(data: data, encoding: .utf8) ?? "<non-UTF8 data>"
-            print("[API] ◀ MULTIPART HTTP \(httpResponse.statusCode) \(url.path)")
-            print("[API] Response body: \(rawBody)")
-            #endif
-            // ─────────────────────────────────────────────────────────────
-
-            if !(200...299).contains(httpResponse.statusCode) {
-                if let apiError = try? decoder.decode(APIError.self, from: data) {
-                    throw NetworkError.serverError(apiError)
-                }
-                throw NetworkError.unknown(NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode))
-            }
-
-            return try decodeResponse(from: data)
-
+            return try await performRequest(
+                request: request,
+                url: url,
+                logPrefix: "[API]",
+                requiresAuth: requiresAuth
+            )
         } catch let error as NetworkError {
             throw error
         } catch {
@@ -287,6 +224,68 @@ class NetworkManager {
             throw NetworkError.decodingError(decodingError)
         } catch {
             throw NetworkError.decodingError(error)
+        }
+    }
+
+    private func performRequest<T: Codable>(
+        request: URLRequest,
+        url: URL,
+        logPrefix: String,
+        requiresAuth: Bool
+    ) async throws -> T {
+        var request = request
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.unknown(NSError(domain: "Invalid response", code: 0))
+        }
+
+        // ── DEBUG LOGGING ────────────────────────────────────────────
+        #if DEBUG
+        let rawBody = String(data: data, encoding: .utf8) ?? "<non-UTF8 data>"
+        print("\(logPrefix) ◀ HTTP \(httpResponse.statusCode) \(url.path)")
+        print("\(logPrefix) Response body: \(rawBody)")
+        #endif
+        // ─────────────────────────────────────────────────────────────
+
+        if httpResponse.statusCode == 401 {
+            if requiresAuth, let refreshed = try? await refreshAccessToken() {
+                request.setValue("Bearer \(refreshed)", forHTTPHeaderField: "Authorization")
+                let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
+                guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                      (200...299).contains(retryHttpResponse.statusCode) else {
+                    throw NetworkError.unauthorized
+                }
+                return try decodeResponse(from: retryData)
+            } else {
+                throw NetworkError.unauthorized
+            }
+        }
+
+        if !(200...299).contains(httpResponse.statusCode) {
+            throw networkError(for: httpResponse.statusCode, data: data)
+        }
+
+        return try decodeResponse(from: data)
+    }
+
+    private func networkError(for statusCode: Int, data: Data) -> NetworkError {
+        switch statusCode {
+        case 401:
+            return .unauthorized
+        case 403:
+            return .forbidden
+        case 404:
+            return .notFound
+        case 408:
+            return .timeout
+        case 429:
+            return .tooManyRequests
+        default:
+            if let apiError = try? decoder.decode(APIError.self, from: data) {
+                return .serverError(apiError)
+            }
+            return .unknown(NSError(domain: "HTTP \(statusCode)", code: statusCode))
         }
     }
 

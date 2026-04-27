@@ -416,7 +416,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_APP_API_BASE_URL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_API_BASE_URL = "$(API_BASE_URL)";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSExceptionAllowsInsecureHTTPLoads = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSIncludesSubdomains = NO;
@@ -463,11 +463,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 89677447JX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_APP_API_BASE_URL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_API_BASE_URL = "$(API_BASE_URL)";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSExceptionAllowsInsecureHTTPLoads = YES;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSIncludesSubdomains = NO;

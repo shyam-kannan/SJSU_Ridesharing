@@ -194,16 +194,16 @@ struct ActiveTripView: View {
         Button(action: { dismiss() }) {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.92))
+                    .fill(Color.cardBackground)
                     .frame(width: 42, height: 42)
                     .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.black.opacity(0.85))
+                    .foregroundColor(.textPrimary)
             }
         }
         .padding(.leading, 16)
@@ -217,7 +217,7 @@ struct ActiveTripView: View {
             ZStack(alignment: .topTrailing) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color(hex: "17191E"))
+                        .fill(DesignSystem.Colors.darkBrandSurface)
                         .frame(width: 58, height: 58)
                         .overlay(
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -226,7 +226,7 @@ struct ActiveTripView: View {
                         .shadow(color: .black.opacity(0.22), radius: 14, y: 8)
                     Image(systemName: "message.fill")
                         .font(.system(size: 22))
-                        .foregroundColor(Color(hex: "A3E635"))
+                        .foregroundColor(DesignSystem.Colors.accentLime)
                 }
 
                 if unreadCount > 0 {
@@ -268,7 +268,7 @@ struct ActiveTripView: View {
                 .padding(16)
                 .padding(.bottom, 24)
             }
-            .background(Color(hex: "F4F6F2").ignoresSafeArea())
+            .background(Color.appBackground.ignoresSafeArea())
             .navigationTitle("Post Ride")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -295,10 +295,10 @@ struct ActiveTripView: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
     }
@@ -327,10 +327,10 @@ struct ActiveTripView: View {
     @ViewBuilder
     private var postRideSummaryRouteCard: some View {
         let cardBackground = RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color(hex: "F8FAFC"))
+            .fill(Color.sheetBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -359,10 +359,10 @@ struct ActiveTripView: View {
     @ViewBuilder
     private var postRideSummaryDetailsCard: some View {
         let cardBackground = RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color(hex: "F8FAFC"))
+            .fill(Color.sheetBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
         VStack(spacing: 10) {
             summaryRow("Date", trip.departureTime.tripDateString)
@@ -417,7 +417,7 @@ struct ActiveTripView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "0F172A"))
+                .background(DesignSystem.Colors.actionDarkSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
@@ -483,10 +483,10 @@ struct ActiveTripView: View {
                     .padding(12)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(hex: "F8FAFC"))
+                            .fill(Color.sheetBackground)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                     )
 
@@ -508,14 +508,14 @@ struct ActiveTripView: View {
         .frame(height: maxHeight, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color.white.opacity(0.96))
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
                 .overlay(alignment: .top) {
                     LinearGradient(
-                        colors: [Color(hex: "A3E635").opacity(0.08), .clear],
+                        colors: [DesignSystem.Colors.accentLime.opacity(0.08), .clear],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -571,7 +571,7 @@ struct ActiveTripView: View {
                     Image(systemName: "star.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.brandGold)
-                    Text(String(format: "%.1f", driver.rating))
+                    Text(String(format: "%.1f", Double(driver.rating)))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.textPrimary)
                 }
@@ -1607,7 +1607,7 @@ private struct PostRideReportSheet: View {
                 .padding(16)
                 .padding(.bottom, 24)
             }
-            .background(Color(hex: "F4F6F2").ignoresSafeArea())
+            .background(Color.appBackground.ignoresSafeArea())
             .navigationTitle("Report Issue")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Close") { dismiss() } } }
@@ -1655,10 +1655,10 @@ private struct PostRideReportSheet: View {
                 .foregroundColor(issueType == type ? .white : .textPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(issueType == type ? Color(hex: "0F172A") : Color.white)
+                .background(issueType == type ? DesignSystem.Colors.actionDarkSurface : Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.black.opacity(issueType == type ? 0 : 0.06), lineWidth: 1)
+                    .strokeBorder(issueType == type ? Color.clear : DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
@@ -1690,10 +1690,10 @@ private struct PostRideReportSheet: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color.white)
+            .background(Color.cardBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
@@ -1708,10 +1708,11 @@ private struct PostRideReportSheet: View {
             TextEditor(text: $notes)
                 .frame(minHeight: 120)
                 .padding(12)
-                .background(Color.white)
+                .scrollContentBackground(.hidden)
+                .background(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
@@ -1726,7 +1727,7 @@ private struct PostRideReportSheet: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "0F172A"))
+                .background(DesignSystem.Colors.actionDarkSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .disabled(isSubmitting)
@@ -1734,19 +1735,19 @@ private struct PostRideReportSheet: View {
 
     private func whiteCard() -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.white)
+            .fill(Color.cardBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
     }
 
     private func tintedCard() -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(hex: "F8FAFC"))
+            .fill(Color.sheetBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
     }
 

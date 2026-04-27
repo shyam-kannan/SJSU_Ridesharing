@@ -213,7 +213,7 @@ struct IDVerificationView: View {
                     Text("USE TEST ID (Debug Mode)")
                         .font(.system(size: 15, weight: .bold))
                 }
-                .foregroundColor(.black)
+                .foregroundColor(DesignSystem.Colors.onAccentLime)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .background(Color.yellow.opacity(0.35))
