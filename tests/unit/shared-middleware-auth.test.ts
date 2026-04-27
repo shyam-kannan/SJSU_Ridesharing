@@ -6,7 +6,8 @@ import { requestJson, startTestServer } from './http-test-utils';
 const TEST_SECRET = 'test-jwt-secret-auth-middleware';
 
 function makeToken(payload: Record<string, unknown>, secret = TEST_SECRET, expiresIn = '1h') {
-  return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
+  const options: jwt.SignOptions = { expiresIn };
+  return jwt.sign(payload, secret, options);
 }
 
 function makeAccessToken(
