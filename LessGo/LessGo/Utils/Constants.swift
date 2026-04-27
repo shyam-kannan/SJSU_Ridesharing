@@ -29,9 +29,13 @@ enum APIConfig {
             return nil
         }
 
-        // Never route mobile app traffic to a local gateway in hosted deployments.
+        // Reject loopback endpoints outside local development contexts.
         if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+#if DEBUG || targetEnvironment(simulator)
+            return trimmed
+#else
             return nil
+#endif
         }
         return trimmed
     }
