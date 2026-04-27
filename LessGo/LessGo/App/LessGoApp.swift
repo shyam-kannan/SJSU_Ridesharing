@@ -11,7 +11,8 @@ struct LessGoApp: App {
     @AppStorage("appAppearance") private var appAppearanceRawValue = AppAppearance.system.rawValue
 
     init() {
-        configureAppearance(for: .system)
+        let persistedAppearance = AppAppearance(rawValue: appAppearanceRawValue) ?? .system
+        configureAppearance(for: persistedAppearance)
     }
 
     var body: some Scene {

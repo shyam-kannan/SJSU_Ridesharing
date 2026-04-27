@@ -1708,6 +1708,7 @@ private struct PostRideReportSheet: View {
             TextEditor(text: $notes)
                 .frame(minHeight: 120)
                 .padding(12)
+                .scrollContentBackground(.hidden)
                 .background(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)

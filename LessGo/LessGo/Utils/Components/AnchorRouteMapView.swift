@@ -44,9 +44,17 @@ struct AnchorRouteMapView: UIViewRepresentable {
         mapView.showsUserLocation = showsUserLocation
 
         guard mapView.bounds.width > 0, mapView.bounds.height > 0 else {
+            context.coordinator.scheduleLayoutRetry {
+                guard mapView.bounds.width > 0, mapView.bounds.height > 0 else { return }
+                self.syncMapContent(mapView, context: context)
+            }
             return
         }
 
+        syncMapContent(mapView, context: context)
+    }
+
+    private func syncMapContent(_ mapView: MKMapView, context: Context) {
         context.coordinator.syncAnchorAnnotations(
             origin: origin,
             destination: destination,
@@ -73,6 +81,18 @@ struct AnchorRouteMapView: UIViewRepresentable {
         private var lastAnchorKey: String = ""
         private var lastFrequentRouteKey: String = ""
         private var pendingDirections: [MKDirections] = []
+        private var pendingLayoutRetry = false
+
+        func scheduleLayoutRetry(_ retry: @escaping () -> Void) {
+            guard !pendingLayoutRetry else { return }
+            pendingLayoutRetry = true
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.pendingLayoutRetry = false
+                retry()
+            }
+        }
 
         // MARK: Annotations
 
