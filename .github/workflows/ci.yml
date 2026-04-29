@@ -24,38 +24,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run shared response tests
-        run: npm run test:unit -- tests/unit/shared-response.test.ts
-
-      - name: Run shared validation tests
-        run: npm run test:unit -- tests/unit/shared-validation.test.ts
-
-      - name: Run trip geocoding tests
-        run: npm run test:unit -- tests/unit/trip-geocoding.test.ts
-
-      - name: Run auth security tests
-        run: npm run test:unit -- tests/unit/auth-security-services.test.ts
-
-      - name: Run service config tests
-        run: npm run test:unit -- tests/unit/service-configs.test.ts
-
-      - name: Run API gateway route tests
-        run: npm run test:unit -- tests/unit/api-gateway.app.test.ts
-
-      - name: Run cost calculation route tests
-        run: npm run test:unit -- tests/unit/cost-calculation.app.test.ts
-
-      - name: Run notification service route tests
-        run: npm run test:unit -- tests/unit/notification.app.test.ts
-
-      - name: Run trip service route tests
-        run: npm run test:unit -- tests/unit/trip-service.app-routes.test.ts
-
-      - name: Run booking service route tests
-        run: npm run test:unit -- tests/unit/booking-service.app-routes.test.ts
-
-      - name: Run payment service route tests
-        run: npm run test:unit -- tests/unit/payment-service.app-routes.test.ts
+      - name: Run all unit tests
+        run: npm run test:unit
 
       - name: Verify key service test coverage mapping
         run: npm run test:service-coverage
