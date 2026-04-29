@@ -437,7 +437,7 @@ struct DriverHomeView: View {
             Spacer()
             Button(action: { showNotifications = true }) {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
+                    .fill(DesignSystem.Colors.onDark.opacity(0.08))
                     .frame(width: 44, height: 44)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -462,7 +462,7 @@ struct DriverHomeView: View {
             Button(action: { showAccountMenu = true }) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
+                        .fill(DesignSystem.Colors.onDark.opacity(0.08))
                         .frame(width: 44, height: 44)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -527,7 +527,7 @@ struct DriverHomeView: View {
 
     private func statsRow(user: User) -> some View {
         HStack(spacing: 0) {
-            DriverStatCard(icon: "star.fill", value: String(format: "%.1f", user.rating),
+            DriverStatCard(icon: "star.fill", value: String(format: "%.1f", Double(user.rating)),
                            label: "Rating", color: .brandOrange)
             Divider().frame(height: 44)
             DriverStatCard(icon: "person.2.fill",
@@ -571,10 +571,10 @@ private struct DriverNotificationsSheet: View {
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
+                        .fill(Color.cardBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                         )
                 )
 
@@ -646,7 +646,7 @@ private struct DriverNotificationsSheet: View {
                         .foregroundColor(.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color(hex: "F8FAFC"))
+                        .background(Color.sheetBackground)
                         .cornerRadius(12)
 
                     Button(action: {
@@ -658,13 +658,13 @@ private struct DriverNotificationsSheet: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color(hex: "0F172A"))
+                            .background(DesignSystem.Colors.actionDarkSurface)
                             .cornerRadius(12)
                     }
                 }
             }
             .padding(16)
-            .background(Color(hex: "F4F6F2").ignoresSafeArea())
+            .background(Color.appBackground.ignoresSafeArea())
             .navigationBarHidden(true)
             .task { await loadNotifications() }
         }
@@ -697,10 +697,10 @@ private struct DriverNotificationsSheet: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(item.isUnread ? Color.white : Color.white.opacity(0.9))
+                .fill(item.isUnread ? Color.cardBackground : Color.sheetBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
     }

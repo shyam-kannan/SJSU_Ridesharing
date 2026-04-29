@@ -56,10 +56,10 @@ struct PassengerCard: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: "F8FAFC"))
+                    .fill(Color.sheetBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
 
@@ -86,7 +86,7 @@ struct PassengerCard: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.white)
+                .background(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(DesignSystem.Colors.sjsuBlue.opacity(0.15), lineWidth: 1)
@@ -145,10 +145,10 @@ struct PassengerCard: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)

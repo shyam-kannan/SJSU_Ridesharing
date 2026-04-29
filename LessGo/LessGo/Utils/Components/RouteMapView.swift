@@ -225,6 +225,8 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func fitVisibleRegionIfNeeded(_ mapView: MKMapView, coordinates: [CLLocationCoordinate2D]) {
+            guard mapView.bounds.width > 0, mapView.bounds.height > 0 else { return }
+
             let key = fitKey(for: coordinates)
             guard key != lastFitKey else { return }
             lastFitKey = key

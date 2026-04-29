@@ -61,9 +61,9 @@ extension Color {
     static var canvasGradient: LinearGradient {
         LinearGradient(
             colors: [
-                Color(hex: "F7F8FB"),
-                Color(hex: "EEF4FB"),
-                Color(hex: "F8F4EA")
+                DesignSystem.Colors.background,
+                DesignSystem.Colors.surfaceBackground,
+                DesignSystem.Colors.cardBackground
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -73,8 +73,8 @@ extension Color {
     static var panelGradient: LinearGradient {
         LinearGradient(
             colors: [
-                Color.white.opacity(0.96),
-                Color(hex: "F6FAFF").opacity(0.98)
+                DesignSystem.Colors.cardBackground,
+                DesignSystem.Colors.surfaceBackground.opacity(0.92)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing

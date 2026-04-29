@@ -546,9 +546,9 @@ struct BookingListView: View {
             }
             .background(
                 ZStack {
-                    Color(hex: "F4F6F2").ignoresSafeArea()
+                    Color.appBackground.ignoresSafeArea()
                     Circle()
-                        .fill(Color(hex: "A3E635").opacity(0.10))
+                        .fill(DesignSystem.Colors.accentLime.opacity(0.10))
                         .frame(width: 260)
                         .offset(x: 140, y: 520)
                         .ignoresSafeArea()
@@ -606,7 +606,7 @@ struct BookingListView: View {
                 Button(action: { showAccountMenu = true }) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
+                            .fill(DesignSystem.Colors.onDark.opacity(0.08))
                             .frame(width: 42, height: 42)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -631,10 +631,10 @@ struct BookingListView: View {
                 .padding(4)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white)
+                        .fill(Color.cardBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                         )
                 )
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showAsDriver)
@@ -679,7 +679,7 @@ struct BookingListView: View {
 
         VStack(spacing: 20) {
             ZStack {
-                Circle().fill(Color.black.opacity(0.06)).frame(width: 72, height: 72)
+                Circle().fill(DesignSystem.Colors.textPrimary.opacity(0.06)).frame(width: 72, height: 72)
                 Image(systemName: icon)
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundColor(.textTertiary)
@@ -714,10 +714,10 @@ struct BookingListView: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
         }
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(DesignSystem.Colors.onDark.opacity(0.8))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.08))
+        .background(DesignSystem.Colors.onDark.opacity(0.08))
         .clipShape(Capsule())
     }
 }
@@ -772,10 +772,10 @@ private struct BookingRow: View {
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 11)
-                    .background(Color(hex: "0F172A"))
+                    .background(DesignSystem.Colors.actionDarkSurface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.onDark.opacity(0.08), lineWidth: 1)
                     )
                     .cornerRadius(14)
                 }
@@ -799,10 +799,10 @@ private struct BookingRow: View {
                     }
                 }
                 .padding(10)
-                .background(Color(hex: "F8FAFC"))
+                .background(Color.sheetBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
                 .cornerRadius(12)
 
@@ -828,7 +828,7 @@ private struct BookingRow: View {
                                 .background(paymentStatusPillColor.opacity(0.12))
                                 .cornerRadius(999)
                         }
-                        .foregroundColor(.black.opacity(0.85))
+                        .foregroundColor(.textPrimary)
                     }
                 }
             }
@@ -959,10 +959,10 @@ private struct BookingRow: View {
         .padding(15)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(statusColor == .brandGreen ? Color(hex: "84CC16").opacity(0.6) : Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(statusColor == .brandGreen ? DesignSystem.Colors.accentLime.opacity(0.6) : DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
                 .overlay(alignment: .top) {
                     LinearGradient(
@@ -1024,7 +1024,7 @@ private struct BookingRideDetailView: View {
                     }
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
                     .padding(.horizontal, 20)
 
@@ -1068,8 +1068,8 @@ private struct BookingRideDetailView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.96))
-        .overlay(Capsule().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+        .background(Color.cardBackground)
+        .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
@@ -1103,10 +1103,10 @@ private struct BookingRideDetailView: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: "F8FAFC"))
+                    .fill(Color.sheetBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
 
@@ -1166,10 +1166,10 @@ private struct BookingRideDetailView: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: "F8FAFC"))
+                    .fill(Color.sheetBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
         }
@@ -1211,10 +1211,10 @@ private struct BookingRideDetailView: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: "F8FAFC"))
+                    .fill(Color.sheetBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
         }
@@ -1286,9 +1286,9 @@ private struct BookingRideDetailView: View {
         .foregroundColor(tint)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(Color(hex: "F8FAFC"))
+        .background(Color.sheetBackground)
         .overlay(
-            Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+            Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
         )
         .clipShape(Capsule())
     }
