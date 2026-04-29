@@ -271,8 +271,6 @@ class NetworkManager {
 
     private func networkError(for statusCode: Int, data: Data) -> NetworkError {
         switch statusCode {
-        case 401:
-            return .unauthorized
         case 403:
             return .forbidden
         case 404:
