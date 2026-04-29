@@ -81,20 +81,41 @@ enum DesignSystem {
         }
 
         private static func uiColor(from hex: String, alpha: CGFloat = 1) -> UIColor {
-            let sanitized = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+            let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+
+            func invalidHexColorFallback() -> UIColor {
+                #if DEBUG
+                assertionFailure("Invalid hex color token: \(hex)")
+                #endif
+                return UIColor(red: 0, green: 0, blue: 0, alpha: alpha)
+            }
+
+            guard normalized.count == 3 || normalized.count == 6 else {
+                return invalidHexColorFallback()
+            }
+
+            guard normalized.unicodeScalars.allSatisfy({ CharacterSet.hexadecimalDigits.contains($0) }) else {
+                return invalidHexColorFallback()
+            }
+
             var int: UInt64 = 0
-            Scanner(string: sanitized).scanHexInt64(&int)
+            guard Scanner(string: normalized).scanHexInt64(&int) else {
+                return invalidHexColorFallback()
+            }
 
             let r, g, b: UInt64
-            switch sanitized.count {
+            switch normalized.count {
             case 3:
                 r = (int >> 8) * 17
                 g = (int >> 4 & 0xF) * 17
                 b = (int & 0xF) * 17
-            default:
+            case 6:
                 r = int >> 16
                 g = int >> 8 & 0xFF
                 b = int & 0xFF
+            default:
+                return invalidHexColorFallback()
             }
 
             return UIColor(
