@@ -79,6 +79,30 @@ services:
     networks:
       - lessgo-network
 
+  # Safety Service
+  safety-service:
+    build:
+      context: .
+      dockerfile: ./services/safety-service/Dockerfile
+    container_name: lessgo-safety-service
+    ports:
+      - "8005:8005"
+    environment:
+      - NODE_ENV=development
+      - SAFETY_SERVICE_PORT=8005
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/lessgo_db
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8004
+      - ROUTE_DEVIATION_THRESHOLD_METERS=50
+      - SPEED_TOLERANCE_PERCENT=15
+      - SPEED_ANOMALY_WINDOW_SECONDS=10
+      - LOCATION_POLL_INTERVAL_SECONDS=5
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - lessgo-network
+
 volumes:
   postgres_data:
   redis_data:
