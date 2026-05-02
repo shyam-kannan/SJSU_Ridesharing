@@ -1,27 +1,32 @@
-FROM node:20-alpine
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy root package.json and workspace configuration if it exists
-# In this monorepo styled setup we copy the whole services folder or specific files
-# To simplify, we copy the required local packages
 COPY package*.json ./
-COPY tsconfig.base.json ../
-
-# Install dependencies for shared first
-COPY shared ../shared
-RUN cd ../shared && npm install && npm run build
-
-# Copy safety service package.json
-COPY services/safety-service/package*.json ./
+COPY tsconfig.base.json ./
+COPY shared/package*.json ./shared/
+COPY services/safety-service/package*.json ./services/safety-service/
 RUN npm install
 
-# Copy source code
-COPY services/safety-service/src ./src
-COPY services/safety-service/tsconfig.json ./
+COPY shared ./shared
+COPY services/safety-service ./services/safety-service
 
-# Build the TypeScript code
-RUN npm run build
+RUN npm run build -w @lessgo/shared
+RUN npm run build -w safety-service
+
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY shared/package*.json ./shared/
+COPY services/safety-service/package*.json ./services/safety-service/
+RUN npm install --omit=dev --workspace @lessgo/shared --workspace safety-service --include-workspace-root=false
+
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/services/safety-service/dist ./services/safety-service/dist
+
+WORKDIR /app/services/safety-service
 
 EXPOSE 8005
 
