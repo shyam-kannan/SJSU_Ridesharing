@@ -2,23 +2,51 @@ import Redis from 'ioredis';
 import { config } from '../config';
 import polyline from '@mapbox/polyline';
 
-let redisClient: Redis;
+let redisClientInstance: Redis | null = null;
+let redisInitializationPromise: Promise<boolean> | null = null;
 
-export const initializeRedis = async () => {
-  redisClient = new Redis(config.redisUrl);
-  return new Promise((resolve, reject) => {
-    redisClient.on('ready', () => {
-      console.log('✅ Connected to Redis successfully');
-      resolve(true);
-    });
-    redisClient.on('error', (err) => {
-      console.error('❌ Redis connection error:', err);
-      reject(err);
-    });
-  });
+const getOrCreateRedisClient = (): Redis => {
+  if (!redisClientInstance) {
+    redisClientInstance = new Redis(config.redisUrl);
+  }
+
+  return redisClientInstance;
 };
 
-export const getRedisClient = () => redisClient;
+const redisClient: Redis = new Proxy({} as Redis, {
+  get(_target, prop, receiver) {
+    const client = getOrCreateRedisClient();
+    const value = Reflect.get(client as unknown as object, prop, receiver);
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
+
+export const initializeRedis = async () => {
+  const client = getOrCreateRedisClient();
+
+  if (client.status === 'ready') {
+    console.log('✅ Connected to Redis successfully');
+    return true;
+  }
+
+  if (!redisInitializationPromise) {
+    redisInitializationPromise = new Promise<boolean>((resolve, reject) => {
+      client.once('ready', () => {
+        console.log('✅ Connected to Redis successfully');
+        resolve(true);
+      });
+      client.once('error', (err) => {
+        console.error('❌ Redis connection error:', err);
+        redisInitializationPromise = null;
+        reject(err);
+      });
+    });
+  }
+
+  return redisInitializationPromise;
+};
+
+export const getRedisClient = () => getOrCreateRedisClient();
 
 export interface GeoPoint {
   lat: number;
