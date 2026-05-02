@@ -24,7 +24,7 @@ struct DriverTripDetailsView: View {
                         origin: trip.originPoint?.clLocationCoordinate2D,
                         destination: trip.destinationPoint?.clLocationCoordinate2D,
                         driver: nil,
-                        showsUserLocation: false
+                        showsUserLocation: true
                     )
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))

@@ -14,7 +14,7 @@ struct RouteMapView: UIViewRepresentable {
     var routeEnd: CLLocationCoordinate2D? = nil
     var riders: [CLLocationCoordinate2D] = []
     var fitAnchors: [CLLocationCoordinate2D]? = nil
-    var showsUserLocation: Bool = false
+    var showsUserLocation: Bool = true
     var onRouteUpdated: ((RouteMapInfo?) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {

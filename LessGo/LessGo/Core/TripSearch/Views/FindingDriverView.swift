@@ -23,10 +23,6 @@ struct FindingDriverView: View {
     @State private var dotCount = 0
     private let dotTimer = Timer.publish(every: 0.55, on: .main, in: .common).autoconnect()
 
-    // Pulse animation
-    @State private var pulseScale: CGFloat = 1.0
-    @State private var pulseOpacity: Double = 0.6
-
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
@@ -68,46 +64,8 @@ struct FindingDriverView: View {
                 destination: viewModel.destinationCoordinate,
                 driver: nil,
                 anchorPoints: [],
-                showsUserLocation: false
+                showsUserLocation: true
             )
-
-            // Pulsing ring centered on the pickup area (top-center of map frame)
-            GeometryReader { geo in
-                pulsingRing
-                    .frame(width: 80, height: 80)
-                    .position(
-                        x: geo.size.width / 2,
-                        y: geo.size.height * 0.48
-                    )
-            }
-        }
-    }
-
-    // MARK: - Pulsing Ring
-
-    private var pulsingRing: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.brand.opacity(pulseOpacity * 0.4), lineWidth: 3)
-                .scaleEffect(pulseScale * 1.45)
-            Circle()
-                .stroke(Color.brand.opacity(pulseOpacity * 0.65), lineWidth: 3)
-                .scaleEffect(pulseScale * 1.20)
-            Circle()
-                .fill(Color.brand.opacity(0.22))
-                .scaleEffect(pulseScale * 0.95)
-            Circle()
-                .fill(Color.brand)
-                .frame(width: 14, height: 14)
-        }
-        .onAppear {
-            withAnimation(
-                .easeInOut(duration: 1.5)
-                .repeatForever(autoreverses: true)
-            ) {
-                pulseScale = 1.18
-                pulseOpacity = 1.0
-            }
         }
     }
 
