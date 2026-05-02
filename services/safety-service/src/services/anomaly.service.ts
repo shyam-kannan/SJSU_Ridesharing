@@ -12,7 +12,7 @@ export interface AnomalyRecord {
   detected_at: Date;
   location: any;
   acknowledged: boolean;
-  acknowledged_at: Date;
+  acknowledged_at: Date | null;
 }
 
 /**
