@@ -16,6 +16,7 @@ cd "$ROOT/services/booking-service" && npm run dev > /tmp/booking.log 2>&1 &
 cd "$ROOT/services/notification-service" && npm run dev > /tmp/notification.log 2>&1 &
 cd "$ROOT/services/cost-calculation-service" && npm run dev > /tmp/cost.log 2>&1 &
 cd "$ROOT/services/payment-service" && npm run dev > /tmp/payment.log 2>&1 &
+cd "$ROOT/services/safety-service" && npm run dev > /tmp/safety.log 2>&1 &
 
 echo "Starting Python services..."
 cd "$ROOT/services/routing-service" && python app/main.py > /tmp/routing.log 2>&1 &
@@ -54,3 +55,4 @@ check "cost-service     :3009" "http://127.0.0.1:3009/health"
 check "embedding-service:3010" "http://127.0.0.1:3010/health"
 check "grouping-service :8001" "http://127.0.0.1:8001/health"
 check "routing-service  :8002" "http://127.0.0.1:8002/health"
+check "safety-service   :8005" "http://127.0.0.1:8005/health"
