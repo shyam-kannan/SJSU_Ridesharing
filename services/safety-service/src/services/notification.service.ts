@@ -4,7 +4,7 @@ import { config } from '../config';
 /**
  * Notify the user via the Notification Service
  */
-export const notifyUser = async (user_id: string, title: string, message: string, data?: any) => {
+export const notifyUser = async (user_id: string, title: string, message: string, data?: Record<string, unknown>) => {
   try {
     await axios.post(`${config.notificationServiceUrl}/notifications/push`, {
       user_id,
