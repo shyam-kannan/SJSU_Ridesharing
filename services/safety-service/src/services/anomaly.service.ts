@@ -126,7 +126,7 @@ export const checkAnomalies = async (
 const logAnomaly = async (ride_id: string, type: 'route_deviation' | 'speed_anomaly', locationPg: string) => {
   try {
     await query(
-      `INSERT INTO anomaly_events (trip_id, type, location) VALUES ($1, $2, ST_GeomFromText($3, 4326))`,
+      `INSERT INTO anomaly_events (trip_id, type, location) VALUES ($1, $2, ST_GeogFromText($3))`,
       [ride_id, type, locationPg]
     );
     console.log(`[Anomaly] Logged ${type} for ride ${ride_id}`);
