@@ -1,4 +1,5 @@
 -- Create anomaly_events table for tracking route and speed deviations
+CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE TABLE IF NOT EXISTS anomaly_events (
   anomaly_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   trip_id UUID NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
