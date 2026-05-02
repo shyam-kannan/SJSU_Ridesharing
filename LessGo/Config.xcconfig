@@ -1,0 +1,5 @@
+// Common configuration shared by all environments
+// This file is included by environment-specific xcconfig files
+
+// Default values (override in environment-specific files)
+API_BASE_URL = https://lessgo-zeta.vercel.app/api

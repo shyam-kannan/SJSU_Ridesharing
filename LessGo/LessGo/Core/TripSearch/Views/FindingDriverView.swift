@@ -37,7 +37,7 @@ struct FindingDriverView: View {
                 searchingSheet
                     .frame(maxWidth: .infinity)
             }
-            .background(Color(hex: "F5F5F5"))
+            .background(Color.appBackground)
             .ignoresSafeArea(edges: .top)
         }
         .onReceive(dotTimer) { _ in
@@ -130,7 +130,7 @@ struct FindingDriverView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 36)
         }
-        .background(Color.white)
+        .background(Color.cardBackground)
         .cornerRadius(20, corners: [.topLeft, .topRight])
         .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: -4)
     }
@@ -165,11 +165,11 @@ struct FindingDriverView: View {
             Spacer()
         }
         .padding(16)
-        .background(Color(hex: "F8FAFC"))
+        .background(DesignSystem.Colors.fieldBackground)
         .cornerRadius(14)
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
         )
     }
 }

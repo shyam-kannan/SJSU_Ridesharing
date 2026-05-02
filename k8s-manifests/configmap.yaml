@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lessgo-config
+  namespace: lessgo
+data:
+  NODE_ENV: "production"
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  ROUTE_CACHE_TTL: "3600"
+  # Service Discovery: Kubernetes DNS for inter-service communication
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  USER_SERVICE_URL: "http://user-service:3002"
+  TRIP_SERVICE_URL: "http://trip-service:3003"
+  BOOKING_SERVICE_URL: "http://booking-service:3004"
+  PAYMENT_SERVICE_URL: "http://payment-service:3005"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:3006"
+  COST_SERVICE_URL: "http://cost-calculation-service:3009"
+  GROUPING_SERVICE_URL: "http://grouping-service:8000"
+  ROUTING_SERVICE_URL: "http://routing-service:8000"
+  SAFETY_SERVICE_URL: "http://safety-service:8000"

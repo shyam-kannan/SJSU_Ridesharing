@@ -8,11 +8,22 @@
     "services/*"
   ],
   "scripts": {
+    "clean:coverage": "rm -rf coverage",
     "migrate:create": "node-pg-migrate create -m shared/database/migrations",
     "migrate:up": "node-pg-migrate up -m shared/database/migrations --database-url-var DATABASE_URL",
     "migrate:down": "node-pg-migrate down -m shared/database/migrations --database-url-var DATABASE_URL",
     "migrate:status": "node-pg-migrate list -m shared/database/migrations --database-url-var DATABASE_URL",
     "seed": "node shared/database/seeds/seed.js",
+    "bootstrap:db": "node scripts/bootstrap-db.mjs",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:coverage": "npm run clean:coverage && vitest run --config vitest.config.ts --coverage --coverage.reporter=text --coverage.reporter=lcov && npm run clean:coverage",
+    "test:coverage:artifacts": "npm run clean:coverage && vitest run --config vitest.config.ts --coverage --coverage.reporter=text --coverage.reporter=lcov",
+    "test:service-coverage": "node tests/check-service-coverage.mjs",
+    "test:db": "node tests/check-supabase-postgres.mjs",
+    "test:gateway:smoke": "bash tests/test-gateway-smoke.sh",
+    "test:gateway:smoke:prod": "GATEWAY_URL=http://136.109.119.177 bash tests/test-gateway-smoke.sh",
+    "test:ci": "npm run test:unit && npm run test:service-coverage",
+    "test": "npm run test:unit",
     "dev:auth": "cd services/auth-service && npm run dev",
     "dev:user": "cd services/user-service && npm run dev",
     "dev:trip": "cd services/trip-service && npm run dev",
@@ -40,7 +51,9 @@
     "pg": "^8.11.3"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.9",
     "concurrently": "^9.2.1",
-    "dotenv-cli": "^7.4.4"
+    "dotenv-cli": "^7.4.4",
+    "vitest": "^2.1.8"
   }
 }

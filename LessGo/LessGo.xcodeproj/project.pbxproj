@@ -32,6 +32,9 @@
 		17961E8E2F43EB98002C32D2 /* LessGoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LessGoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		17961E982F43EB98002C32D2 /* LessGoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LessGoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		17A8F6E12F451FFA005CFF55 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
+		17ABC0012F456A1B003D4E2C /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		17ABC0022F456A1B003D4E2C /* Config.Dev.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.Dev.xcconfig; sourceTree = "<group>"; };
+		17ABC0042F456A1B003D4E2C /* Config.Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.Prod.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -81,6 +84,9 @@
 		17961E782F43EB97002C32D2 = {
 			isa = PBXGroup;
 			children = (
+				17ABC0012F456A1B003D4E2C /* Config.xcconfig */,
+				17ABC0022F456A1B003D4E2C /* Config.Dev.xcconfig */,
+				17ABC0042F456A1B003D4E2C /* Config.Prod.xcconfig */,
 				17961E832F43EB97002C32D2 /* LessGo */,
 				17961E912F43EB98002C32D2 /* LessGoTests */,
 				17961E9B2F43EB98002C32D2 /* LessGoUITests */,
@@ -400,6 +406,7 @@
 		};
 		17961EA32F43EB98002C32D2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 17ABC0022F456A1B003D4E2C /* Config.Dev.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -409,6 +416,10 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_API_BASE_URL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSExceptionAllowsInsecureHTTPLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSIncludesSubdomains = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to scan your SJSU ID for verification.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to show nearby rides.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo library access to upload your SJSU ID for verification.";
@@ -446,15 +457,21 @@
 		};
 		17961EA42F43EB98002C32D2 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 17ABC0042F456A1B003D4E2C /* Config.Prod.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 89677447JX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_API_BASE_URL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSExceptionAllowsInsecureHTTPLoads = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSExceptionDomains_136.109.119.177_NSIncludesSubdomains = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to scan your SJSU ID for verification.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to show nearby rides.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo library access to upload your SJSU ID for verification.";

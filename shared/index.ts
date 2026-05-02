@@ -11,6 +11,7 @@ export { validateRequest } from './middleware/validateRequest';
 
 // Utilities
 export { successResponse, errorResponse, paginatedResponse } from './utils/response';
+export { getSecretValue } from './utils/secrets';
 export {
   isValidEmail,
   isValidSJSUEmail,

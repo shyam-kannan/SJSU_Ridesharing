@@ -88,7 +88,7 @@ struct SkeletonTripCard: View {
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.97))
+        .background(Color.cardBackground.opacity(0.97))
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 6)
         .staggeredAppear(index: index, delay: 0.1)

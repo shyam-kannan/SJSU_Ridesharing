@@ -86,7 +86,6 @@ const SEATING_MAP: Record<string, number> = {
   model3: 5, 'model 3': 5, models: 5, 'model s': 5,
   // Sports / coupes (4)
   mustang: 4, camaro: 4, challenger: 4, '86': 4, brz: 4, supra: 4,
-  'model s': 4,
   // 2-seaters
   corvette: 2, miata: 2, 'mx-5': 2, mx5: 2, boxster: 2, cayman: 2,
   viper: 2, solstice: 2, sky: 2,

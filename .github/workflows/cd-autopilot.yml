@@ -1,0 +1,221 @@
+name: CD - Build and Push Images
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  AR_REPO_NAME: ${{ vars.AR_REPO_NAME }}
+  AR_LOCATION: ${{ vars.AR_LOCATION }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-gateway
+            dockerfile: services/api-gateway/Dockerfile
+          - service: auth-service
+            dockerfile: services/auth-service/Dockerfile
+          - service: user-service
+            dockerfile: services/user-service/Dockerfile
+          - service: trip-service
+            dockerfile: services/trip-service/Dockerfile
+          - service: booking-service
+            dockerfile: services/booking-service/Dockerfile
+          - service: payment-service
+            dockerfile: services/payment-service/Dockerfile
+          - service: notification-service
+            dockerfile: services/notification-service/Dockerfile
+          - service: cost-calculation-service
+            dockerfile: services/cost-calculation-service/Dockerfile
+          - service: grouping-service
+            dockerfile: services/grouping-service/Dockerfile
+          - service: routing-service
+            dockerfile: services/routing-service/Dockerfile
+          - service: safety-service
+            dockerfile: services/safety-service/Dockerfile
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changed
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+
+      - name: Debug GitHub OIDC context
+        run: |
+          echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+          echo "GITHUB_ACTOR=${GITHUB_ACTOR}"
+          echo "GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+
+      - name: Validate Artifact Registry configuration
+        run: |
+          if [ -z "${PROJECT_ID}" ] || [ -z "${AR_REPO_NAME}" ] || [ -z "${AR_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
+            echo "Missing required GitHub variables or secrets for Artifact Registry publishing."
+            exit 1
+          fi
+        env:
+          GCP_DEPLOYER_SA: ${{ secrets.GCP_DEPLOYER_SA }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Report auth failure details
+        if: steps.auth.outcome != 'success'
+        run: |
+          echo "Google authentication failed before any build step ran."
+          echo "Check the Workload Identity Provider attribute condition and repo/ref binding."
+          echo "Expected repository: ${GITHUB_REPOSITORY}"
+          echo "Expected ref: ${GITHUB_REF}"
+          exit 1
+
+      - name: Set up Google Cloud SDK
+        if: steps.auth.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        if: steps.auth.outcome == 'success'
+        run: gcloud auth configure-docker "${{ env.AR_LOCATION }}-docker.pkg.dev" --quiet
+
+      - name: Setup Docker Buildx
+        if: steps.auth.outcome == 'success'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Debug user-service source snapshot
+        if: steps.auth.outcome == 'success' && matrix.service == 'user-service'
+        run: |
+          set -euo pipefail
+          echo "Building service: ${{ matrix.service }}"
+          echo "Commit SHA: ${GITHUB_SHA}"
+          echo "Checked out HEAD: $(git rev-parse HEAD)"
+          echo "User-service route files:"
+          find services/user-service/src/routes -maxdepth 1 -type f -name "*.ts" | sort
+          echo "Looking for unexpected vehicle.routes.ts"
+          if [ -f services/user-service/src/routes/vehicle.routes.ts ]; then
+            echo "Found services/user-service/src/routes/vehicle.routes.ts"
+          else
+            echo "vehicle.routes.ts not present"
+          fi
+          echo "User-service package dependencies excerpt:"
+          grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
+
+      - name: Build and push ${{ matrix.service }} image
+        if: steps.auth.outcome == 'success' && (github.event_name != 'push' || contains(steps.changed.outputs.changed_files, format('services/{0}/', matrix.service)))
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          no-cache: ${{ matrix.service == 'user-service' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.AR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO_NAME }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.AR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO_NAME }}/${{ matrix.service }}:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changed
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+
+      - name: Validate GKE configuration
+        run: |
+          if [ -z "${PROJECT_ID}" ] || [ -z "${GKE_CLUSTER}" ] || [ -z "${GKE_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
+            echo "Missing required GitHub variables or secrets for GKE deployment."
+            exit 1
+          fi
+        env:
+          GCP_DEPLOYER_SA: ${{ secrets.GCP_DEPLOYER_SA }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Set up Google Cloud SDK
+        if: steps.auth.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: Enable GKE auth plugin for kubectl
+        if: steps.auth.outcome == 'success'
+        run: echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
+
+      - name: Get GKE credentials
+        if: steps.auth.outcome == 'success'
+        run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$PROJECT_ID"
+
+      - name: Apply Kubernetes manifests
+        if: steps.auth.outcome == 'success'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          kubectl apply -f k8s-manifests/namespace.yaml
+          kubectl apply -f k8s-manifests/configmap.yaml
+          kubectl apply -f k8s-manifests/secretproviderclass.yaml
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+          for svc in $services; do
+            if [ "$EVENT_NAME" != "push" ] || echo "$CHANGED_FILES" | tr '|' '\n' | grep -q "^services/$svc/"; then
+              envsubst < "k8s-manifests/$svc.yaml" | kubectl apply -f -
+            fi
+          done

@@ -192,7 +192,8 @@ class AuthService {
     // MARK: - Helpers
 
     var isLoggedIn: Bool {
-        KeychainManager.shared.getAccessToken() != nil
+        KeychainManager.shared.getAccessToken() != nil ||
+        KeychainManager.shared.getRefreshToken() != nil
     }
 }
 

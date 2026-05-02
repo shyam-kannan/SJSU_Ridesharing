@@ -36,12 +36,16 @@ class BookingViewModel: ObservableObject {
                 bookings = response.bookings
             }
         } catch let error as NetworkError {
-            print("[TripsView] Bookings fetch failed: \(error)")
+            #if DEBUG
+            print("[BookingViewModel] Failed to load bookings: \(error)")
+            #endif
             errorMessage = error.userMessage
             errorKind = errorKindFor(error)
         } catch {
-            print("[TripsView] Bookings fetch failed (unknown): \(error)")
-            errorMessage = "Something went wrong. Please try again."
+            #if DEBUG
+            print("[BookingViewModel] Failed to load bookings: \(error)")
+            #endif
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             errorKind = .other
         }
     }
@@ -67,10 +71,16 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[BookingViewModel] Failed to create booking: \(error)")
+            #endif
             errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
         } catch {
+            #if DEBUG
+            print("[BookingViewModel] Failed to create booking: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
@@ -94,10 +104,16 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[BookingViewModel] Failed to confirm booking: \(error)")
+            #endif
             errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
         } catch {
+            #if DEBUG
+            print("[BookingViewModel] Failed to confirm booking: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
@@ -118,10 +134,16 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[BookingViewModel] Failed to cancel booking: \(error)")
+            #endif
             errorMessage = error.userMessage
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return false
         } catch {
+            #if DEBUG
+            print("[BookingViewModel] Failed to cancel booking: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }
@@ -138,9 +160,15 @@ class BookingViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[BookingViewModel] Failed to rate booking: \(error)")
+            #endif
             errorMessage = error.userMessage
             return false
         } catch {
+            #if DEBUG
+            print("[BookingViewModel] Failed to rate booking: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false
         }

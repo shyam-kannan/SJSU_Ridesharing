@@ -90,19 +90,40 @@ class ProfileViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            async let userTask = userService.getUserProfile(id: userId)
+            let fetchedUser = try await userService.getUserProfile(id: userId)
+            user = fetchedUser
+            editName = fetchedUser.name
+            editEmail = fetchedUser.email
+
             async let ratingsTask = userService.getUserRatings(id: userId)
             async let statsTask = userService.getUserStats(id: userId)
 
-            let (fetchedUser, ratingsResp, fetchedStats) = try await (userTask, ratingsTask, statsTask)
-            user = fetchedUser
-            ratings = ratingsResp.ratings
-            stats = fetchedStats
-            editName = fetchedUser.name
-            editEmail = fetchedUser.email
+            do {
+                let ratingsResp = try await ratingsTask
+                ratings = ratingsResp.ratings
+            } catch {
+                #if DEBUG
+                print("[ProfileViewModel] Failed to load ratings: \(error)")
+                #endif
+            }
+
+            do {
+                let fetchedStats = try await statsTask
+                stats = fetchedStats
+            } catch {
+                #if DEBUG
+                print("[ProfileViewModel] Failed to load stats: \(error)")
+                #endif
+            }
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to load profile: \(error)")
+            #endif
             errorMessage = error.userMessage
         } catch {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to load profile: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
@@ -153,8 +174,14 @@ class ProfileViewModel: ObservableObject {
             successMessage = "Driver profile saved!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to setup driver: \(error)")
+            #endif
             errorMessage = error.userMessage
         } catch {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to setup driver: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
@@ -262,7 +289,11 @@ class ProfileViewModel: ObservableObject {
             // screen can compute active trips, today's completions, etc. locally.
             let response = try await tripService.listTrips(driverId: driverId, limit: 50)
             driverTrips = response.trips
-        } catch {}
+        } catch {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to load driver trips: \(error)")
+            #endif
+        }
     }
 
     // MARK: - Cancel Trip
@@ -272,7 +303,11 @@ class ProfileViewModel: ObservableObject {
             _ = try await tripService.cancelTrip(id: id)
             driverTrips.removeAll { $0.id == id }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-        } catch {}
+        } catch {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to cancel trip: \(error)")
+            #endif
+        }
     }
 
     // MARK: - Profile Picture Upload
@@ -288,8 +323,14 @@ class ProfileViewModel: ObservableObject {
             successMessage = "Profile picture updated!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to upload profile picture: \(error)")
+            #endif
             errorMessage = error.userMessage
         } catch {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to upload profile picture: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
@@ -305,8 +346,14 @@ class ProfileViewModel: ObservableObject {
             successMessage = "Profile picture removed!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to remove profile picture: \(error)")
+            #endif
             errorMessage = error.userMessage
         } catch {
+            #if DEBUG
+            print("[ProfileViewModel] Failed to remove profile picture: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
@@ -338,7 +385,9 @@ class ProfileViewModel: ObservableObject {
             )
             await MainActor.run { self.earnings = earnings }
         } catch {
-            print("Failed to load earnings: \(error)")
+            #if DEBUG
+            print("[ProfileViewModel] Failed to load earnings: \(error)")
+            #endif
         }
     }
 }

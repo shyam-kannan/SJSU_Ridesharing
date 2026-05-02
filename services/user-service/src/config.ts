@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
 
@@ -7,10 +8,10 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
 
   // Database
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: getSecretValue('DATABASE_URL'),
 
   // JWT (for authentication middleware)
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+  jwtSecret: getSecretValue('JWT_SECRET', 'default-secret-change-in-production'),
 };
 
 // Validate required config

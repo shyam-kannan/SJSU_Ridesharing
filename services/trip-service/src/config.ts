@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { getSecretValue } from '@lessgo/shared';
 
 dotenv.config();
 
@@ -7,13 +8,13 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
 
   // Database
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: getSecretValue('DATABASE_URL'),
 
   // JWT (for authentication middleware)
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+  jwtSecret: getSecretValue('JWT_SECRET', 'default-secret-change-in-production'),
 
   // Google Maps API
-  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+  googleMapsApiKey: getSecretValue('GOOGLE_MAPS_API_KEY'),
 
   // Geospatial defaults (Bay Area spans ~100km from SJSU to SF)
   defaultSearchRadius: 100000, // 100km — covers all Bay Area hubs
