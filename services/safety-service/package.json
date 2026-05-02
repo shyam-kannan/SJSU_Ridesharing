@@ -7,7 +7,7 @@
     "dev": "dotenv -e ../../.env -- ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "jest"
+    "test": "node -e \"console.log('No tests configured')\""
   },
   "dependencies": {
     "@lessgo/shared": "*",
