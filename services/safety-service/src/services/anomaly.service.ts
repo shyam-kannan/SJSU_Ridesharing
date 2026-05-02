@@ -41,21 +41,24 @@ export const checkAnomalies = async (
   // Wait, geolib has a method `getDistanceFromLine(point, start, end)`
   // A simpler approach is to loop through the segments and find if distance < threshold.
   
-  let isDeviated = true;
-  for (let i = 0; i < rideState.planned_route.length - 1; i++) {
-    const start = rideState.planned_route[i];
-    const end = rideState.planned_route[i + 1];
-    
-    // Check if the current location is near this segment
-    if (isPointNearLine(currentLocation, start, end, config.routeDeviationThresholdMeters)) {
-      isDeviated = false;
-      break;
+  const canCheckRouteDeviation = rideState.planned_route.length >= 2;
+  let isDeviated = false;
+  if (canCheckRouteDeviation) {
+    isDeviated = true;
+    for (let i = 0; i < rideState.planned_route.length - 1; i++) {
+      const start = rideState.planned_route[i];
+      const end = rideState.planned_route[i + 1];
+      
+      // Check if the current location is near this segment
+      if (isPointNearLine(currentLocation, start, end, config.routeDeviationThresholdMeters)) {
+        isDeviated = false;
+        break;
+      }
     }
   }
 
   // If we iterated all segments and still true, then it's a deviation
-  if (isDeviated && rideState.planned_route.length > 0) {
-    // Only flag if route is defined
+  if (canCheckRouteDeviation && isDeviated) {
     detectedAnomalies.push('route_deviation');
     await logAnomaly(ride_id, 'route_deviation', locationPg);
     
