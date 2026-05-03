@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import googlemaps
-import redis
+# import redis
 import json
 import hashlib
 import os
@@ -28,24 +28,29 @@ app.add_middleware(
 # Initialize Google Maps client
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 if not GOOGLE_MAPS_API_KEY:
-    print("⚠️  GOOGLE_MAPS_API_KEY not set - routing will fail")
+    print("⚠️ GOOGLE_MAPS_API_KEY not set - routing will fail")
     gmaps = None
 else:
     gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
 
+# Redis client disabled - Redis not configured
 # Initialize Redis client
-in_kubernetes = os.getenv("KUBERNETES_SERVICE_HOST") is not None
-default_redis_url = "redis://redis:6379" if in_kubernetes else "redis://127.0.0.1:6379"
-REDIS_URL = os.getenv("REDIS_URL", default_redis_url)
-CACHE_TTL = int(os.getenv("ROUTE_CACHE_TTL", "3600"))  # 1 hour default
+# in_kubernetes = os.getenv("KUBERNETES_SERVICE_HOST") is not None
+# default_redis_url = "redis://redis:6379" if in_kubernetes else "redis://127.0.0.1:6379"
+# REDIS_URL = os.getenv("REDIS_URL", default_redis_url)
+# CACHE_TTL = int(os.getenv("ROUTE_CACHE_TTL", "3600"))  # 1 hour default
+#
+# try:
+#     redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+#     redis_client.ping()
+#     print(f"✅ Connected to Redis at {REDIS_URL}")
+# except Exception as e:
+#     print(f"⚠️ Redis connection failed: {e}")
+#     redis_client = None
 
-try:
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-    redis_client.ping()
-    print(f"✅ Connected to Redis at {REDIS_URL}")
-except Exception as e:
-    print(f"⚠️  Redis connection failed: {e}")
-    redis_client = None
+# Stub redis_client to None - caching disabled
+redis_client = None
+CACHE_TTL = 3600  # 1 hour default (kept for compatibility)
 
 
 class RouteRequest(BaseModel):
@@ -72,7 +77,7 @@ def health_check():
         "status": "success",
         "message": "Routing Service is running",
         "google_maps_configured": GOOGLE_MAPS_API_KEY is not None,
-        "redis_connected": redis_client is not None,
+        "redis_connected": False,  # Redis disabled
     }
 
 
@@ -80,22 +85,22 @@ def health_check():
 async def calculate_route(request: RouteRequest):
     """
     Calculate route distance and duration using Google Maps Distance Matrix API
-    Results are cached in Redis for 1 hour
+    Results are cached in Redis for 1 hour (caching currently disabled)
     """
     if not gmaps:
         raise HTTPException(status_code=503, detail="Google Maps API not configured")
 
-    # Check cache first
-    cache_key = get_cache_key(request.origin, request.destination)
-
-    if redis_client:
-        try:
-            cached = redis_client.get(cache_key)
-            if cached:
-                print(f"✅ Cache hit for route: {request.origin} → {request.destination}")
-                return RouteResponse(**json.loads(cached))
-        except Exception as e:
-            print(f"⚠️  Redis get error: {e}")
+    # Check cache disabled - Redis not configured
+    # cache_key = get_cache_key(request.origin, request.destination)
+    #
+    # if redis_client:
+    #     try:
+    #         cached = redis_client.get(cache_key)
+    #         if cached:
+    #             print(f"✅ Cache hit for route: {request.origin} → {request.destination}")
+    #             return RouteResponse(**json.loads(cached))
+    #     except Exception as e:
+    #         print(f"⚠️ Redis get error: {e}")
 
     # Call Google Maps Directions API
     try:
@@ -104,7 +109,7 @@ async def calculate_route(request: RouteRequest):
         destination = request.destination.strip()
 
         # Check for very close points (epsilon check)
-        # If they look like coordinates, we can do a quick check
+        # If they looked like coordinates, we can do a quick check
         is_coord = False
         try:
             o_lat, o_lng = map(float, origin.split(','))
@@ -149,17 +154,17 @@ async def calculate_route(request: RouteRequest):
             "polyline": polyline,
         }
 
-        # Cache the result
-        if redis_client:
-            try:
-                redis_client.setex(
-                    cache_key,
-                    CACHE_TTL,
-                    json.dumps(response_data)
-                )
-                print(f"✅ Cached route: {origin} → {destination}")
-            except Exception as e:
-                print(f"⚠️  Redis set error: {e}")
+        # Cache disabled - Redis not configured
+        # if redis_client:
+        #     try:
+        #         redis_client.setex(
+        #             cache_key,
+        #             CACHE_TTL,
+        #             json.dumps(response_data)
+        #         )
+        #         print(f"✅ Cached route: {origin} → {destination}")
+        #     except Exception as e:
+        #         print(f"⚠️ Redis set error: {e}")
 
         return RouteResponse(**response_data)
 
