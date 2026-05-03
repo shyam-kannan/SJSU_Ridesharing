@@ -376,6 +376,8 @@ struct MatchedRideView: View {
                 chatUnreadBadge = 0
                 showChat = true
             }
+            .disabled(phase == .completed || phase == .cancelled)
+            .opacity(phase == .completed || phase == .cancelled ? 0.4 : 1.0)
 
             Spacer()
 

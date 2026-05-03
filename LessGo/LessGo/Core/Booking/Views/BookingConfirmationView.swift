@@ -894,8 +894,8 @@ private struct BookingRow: View {
                 }
             }
 
-            // Chat button for confirmed/completed bookings so riders can reopen chat history
-            if (booking.status == .confirmed || booking.status == .completed), let trip = booking.trip {
+            // Chat button for confirmed bookings only — disabled after ride completes
+            if booking.status == .confirmed, let trip = booking.trip {
                 if showAsDriver, let rider = booking.rider {
                     NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
                         HStack(spacing: 8) {
@@ -1231,7 +1231,7 @@ private struct BookingRideDetailView: View {
                 }
             }
 
-            if booking.status == .confirmed || booking.status == .completed {
+            if booking.status == .confirmed {
                 if showAsDriver, let rider = booking.rider {
                     NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
                         actionPill(title: "Chat with \(rider.name)", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)

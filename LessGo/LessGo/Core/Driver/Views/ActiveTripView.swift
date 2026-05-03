@@ -62,14 +62,16 @@ struct ActiveTripView: View {
                 // Bottom Card (constrained so the map remains visible)
                 tripInfoCard(maxHeight: min(max(360, geo.size.height * 0.58), 560))
 
-                // Floating Chat Button
-                VStack {
-                    Spacer()
-                    HStack {
+                // Floating Chat Button (hidden once ride ends)
+                if tripStatus != .completed && tripStatus != .cancelled {
+                    VStack {
                         Spacer()
-                        chatButton
-                            .padding(.trailing, 20)
-                            .padding(.bottom, min(max(280, geo.size.height * 0.34), 380))
+                        HStack {
+                            Spacer()
+                            chatButton
+                                .padding(.trailing, 20)
+                                .padding(.bottom, min(max(280, geo.size.height * 0.34), 380))
+                        }
                     }
                 }
             }
@@ -654,19 +656,20 @@ struct ActiveTripView: View {
                 statusLabel(text: "Trip was cancelled.", icon: "xmark.circle.fill", color: .brandRed)
             }
 
-            // Chat and Call buttons for rider
-            HStack(spacing: 12) {
-                Button(action: { showChat = true }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "message.fill")
-                        Text("Chat")
+            if tripStatus != .completed && tripStatus != .cancelled {
+                HStack(spacing: 12) {
+                    Button(action: { showChat = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "message.fill")
+                            Text("Chat")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.brand.opacity(0.1))
+                        .cornerRadius(12)
                     }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.brand)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.brand.opacity(0.1))
-                    .cornerRadius(12)
                 }
             }
 
