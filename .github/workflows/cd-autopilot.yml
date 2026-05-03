@@ -113,24 +113,6 @@ jobs:
         if: steps.auth.outcome == 'success'
         uses: docker/setup-buildx-action@v3
 
-      - name: Debug user-service source snapshot
-        if: steps.auth.outcome == 'success' && matrix.service == 'user-service'
-        run: |
-          set -euo pipefail
-          echo "Building service: ${{ matrix.service }}"
-          echo "Commit SHA: ${GITHUB_SHA}"
-          echo "Checked out HEAD: $(git rev-parse HEAD)"
-          echo "User-service route files:"
-          find services/user-service/src/routes -maxdepth 1 -type f -name "*.ts" | sort
-          echo "Looking for unexpected vehicle.routes.ts"
-          if [ -f services/user-service/src/routes/vehicle.routes.ts ]; then
-            echo "Found services/user-service/src/routes/vehicle.routes.ts"
-          else
-            echo "vehicle.routes.ts not present"
-          fi
-          echo "User-service package dependencies excerpt:"
-          grep -n "\"dependencies\"\|\"axios\"" services/user-service/package.json || true
-
       - name: Build and push ${{ matrix.service }} image
         if: steps.auth.outcome == 'success' && (github.event_name != 'push' || contains(steps.changed.outputs.changed_files, format('services/{0}/', matrix.service)))
         uses: docker/build-push-action@v6
@@ -170,6 +152,25 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
           echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
+      - name: Detect k8s manifest changes
+        id: k8s-changed
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "k8s_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if any k8s-manifest files changed
+          if echo "$CHANGED_FILES" | grep -q "^k8s-manifests/"; then
+            echo "k8s_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "k8s_changed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
+
       - name: Validate GKE configuration
         run: |
           if [ -z "${PROJECT_ID}" ] || [ -z "${GKE_CLUSTER}" ] || [ -z "${GKE_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
@@ -202,12 +203,8 @@ jobs:
         if: steps.auth.outcome == 'success'
         run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$PROJECT_ID"
 
-      - name: Install envsubst
-        if: steps.auth.outcome == 'success'
-        run: apt-get update && apt-get install -y gettext-base
-
-      - name: Apply Kubernetes manifests
-        if: steps.auth.outcome == 'success'
+      - name: Deploy Kubernetes manifests
+        if: steps.auth.outcome == 'success' && (steps.k8s-changed.outputs.k8s_changed == 'true' || github.event_name != 'push')
         env:
           COMMIT_SHA: ${{ github.sha }}
           CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
@@ -215,12 +212,20 @@ jobs:
         run: |
           set -euo pipefail
           export COMMIT_SHA
+
+          # Apply base resources
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
+
+          # List of services to deploy
           services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+
           for svc in $services; do
+            # Deploy if it's a workflow_dispatch or if the service files changed
             if [ "$EVENT_NAME" != "push" ] || echo "$CHANGED_FILES" | tr '|' '\n' | grep -q "^services/$svc/"; then
-              envsubst < "k8s-manifests/$svc.yaml" | kubectl apply -f -
+              # Use sed to substitute COMMIT_SHA placeholder with actual value
+              sed "s/\${COMMIT_SHA}/$COMMIT_SHA/g" "k8s-manifests/$svc.yaml" | kubectl apply -f -
+              echo "Deployed $svc with commit SHA: $COMMIT_SHA"
             fi
           done
