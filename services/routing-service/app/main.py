@@ -124,7 +124,7 @@ async def calculate_route(request: RouteRequest):
                     duration_seconds=0,
                     polyline=""
                 )
-        except:
+        except ValueError:
             pass
 
         result = gmaps.directions(
