@@ -17,7 +17,6 @@
     "express-validator": "^7.0.1",
     "cors": "^2.8.5",
     "uuid": "^9.0.1",
-    "ioredis": "^5.3.2",
     "axios": "^1.6.2",
     "@mapbox/polyline": "^1.2.1",
     "geolib": "^3.3.3"

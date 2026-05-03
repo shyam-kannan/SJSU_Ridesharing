@@ -3,6 +3,7 @@ import { errorHandler, notFoundHandler, requestLogger, corsMiddleware, devCorsMi
 import safetyRoutes from './routes/safety.routes';
 import { config } from './config';
 
+// K8s manifest update - port fix (8005)
 const app: Application = express();
 
 app.use(express.json());

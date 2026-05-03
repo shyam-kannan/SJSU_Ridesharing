@@ -8,6 +8,8 @@ import hashlib
 import os
 from typing import Optional, Union
 from dotenv import load_dotenv
+
+# K8s manifest update - port fix (8002)
 from app.secret_loader import load_mounted_secrets
 
 load_dotenv()
