@@ -1,13 +1,33 @@
-FROM python:3.10-slim
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY services/safety-service/requirements.txt ./
+COPY package*.json ./
+COPY tsconfig.base.json ./
+COPY shared/package*.json ./shared/
+COPY services/safety-service/package*.json ./services/safety-service/
+RUN npm install
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY shared ./shared
+COPY services/safety-service ./services/safety-service
 
-COPY services/safety-service ./
+RUN npm run build -w @lessgo/shared
+RUN npm run build -w safety-service
 
-EXPOSE 8000
+FROM node:22-alpine AS runner
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+WORKDIR /app
+
+COPY package*.json ./
+COPY shared/package*.json ./shared/
+COPY services/safety-service/package*.json ./services/safety-service/
+RUN npm install --omit=dev --workspace @lessgo/shared --workspace safety-service --include-workspace-root=false
+
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/services/safety-service/dist ./services/safety-service/dist
+
+WORKDIR /app/services/safety-service
+
+EXPOSE 8005
+
+CMD ["npm", "start"]

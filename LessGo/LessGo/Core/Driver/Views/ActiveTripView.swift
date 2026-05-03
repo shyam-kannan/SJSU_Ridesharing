@@ -145,7 +145,7 @@ struct ActiveTripView: View {
                     routeEnd: routeLineDestinationCoordinate,
                     riders: riderCoordinates,
                     fitAnchors: overviewFitAnchors,
-                    showsUserLocation: false
+                    showsUserLocation: true
                 )
             } else {
                 AnchorRouteMapView(
@@ -153,7 +153,7 @@ struct ActiveTripView: View {
                     destination: trip.destinationPoint?.clLocationCoordinate2D,
                     driver: driverCoordinate,
                     anchorPoints: anchorPoints,
-                    showsUserLocation: false,
+                    showsUserLocation: true,
                     frequentRoutes: frequentRoutes
                 )
             }
