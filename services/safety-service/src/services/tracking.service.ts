@@ -1,53 +1,57 @@
-import Redis from 'ioredis';
-import { config } from '../config';
+// import Redis from 'ioredis';
+// import { config } from '../config';
 import polyline from '@mapbox/polyline';
 
-let redisClientInstance: Redis | null = null;
-let redisInitializationPromise: Promise<boolean> | null = null;
+// NOTE: Redis functionality has been commented out to allow the service to run without Redis configuration.
+// Ride state is now stored in-memory using a Map for development purposes.
+// To restore Redis: uncomment the imports above and re-enable all Redis-related code.
 
-const getOrCreateRedisClient = (): Redis => {
-  if (!redisClientInstance) {
-    redisClientInstance = new Redis(config.redisUrl);
-  }
+// let redisClientInstance: Redis | null = null;
+// let redisInitializationPromise: Promise<boolean> | null = null;
 
-  return redisClientInstance;
-};
+// const getOrCreateRedisClient = (): Redis => {
+//   if (!redisClientInstance) {
+//     redisClientInstance = new Redis(config.redisUrl);
+//   }
+//   return redisClientInstance;
+// };
 
-const redisClient: Redis = new Proxy({} as Redis, {
-  get(_target, prop, receiver) {
-    const client = getOrCreateRedisClient();
-    const value = Reflect.get(client as unknown as object, prop, receiver);
-    return typeof value === 'function' ? value.bind(client) : value;
-  },
-});
+// const redisClient: Redis = new Proxy({} as Redis, {
+//   get(_target, prop, receiver) {
+//     const client = getOrCreateRedisClient();
+//     const value = Reflect.get(client as unknown as object, prop, receiver);
+//     return typeof value === 'function' ? value.bind(client) : value;
+//   },
+// });
 
-export const initializeRedis = async () => {
-  const client = getOrCreateRedisClient();
+// export const initializeRedis = async () => {
+//   const client = getOrCreateRedisClient();
+//
+//   if (client.status === 'ready') {
+//     console.log('✅ Connected to Redis successfully');
+//     return true;
+//   }
+//
+//   if (!redisInitializationPromise) {
+//     redisInitializationPromise = new Promise<boolean>((resolve, reject) => {
+//       client.once('ready', () => {
+//         console.log('✅ Connected to Redis successfully');
+//         resolve(true);
+//       });
+//       client.once('error', (err) => {
+//         console.error('❌ Redis connection error:', err);
+//         redisInitializationPromise = null;
+//         reject(err);
+//       });
+//     });
+//   }
+//
+//   return redisInitializationPromise;
+// };
 
-  if (client.status === 'ready') {
-    console.log('✅ Connected to Redis successfully');
-    return true;
-  }
+// export const getRedisClient = () => getOrCreateRedisClient();
 
-  if (!redisInitializationPromise) {
-    redisInitializationPromise = new Promise<boolean>((resolve, reject) => {
-      client.once('ready', () => {
-        console.log('✅ Connected to Redis successfully');
-        resolve(true);
-      });
-      client.once('error', (err) => {
-        console.error('❌ Redis connection error:', err);
-        redisInitializationPromise = null;
-        reject(err);
-      });
-    });
-  }
-
-  return redisInitializationPromise;
-};
-
-export const getRedisClient = () => getOrCreateRedisClient();
-
+// In-memory storage for ride state (development only)
 export interface GeoPoint {
   lat: number;
   lng: number;
@@ -60,8 +64,15 @@ export interface RideState {
   speed_violations_count: number;
 }
 
-// Prefix for Redis keys
-const RIDE_KEY_PREFIX = 'safety:ride:';
+// In-memory storage for ride states
+const rideStates = new Map<string, RideState>();
+
+// Speed violations storage with timestamps
+interface SpeedViolationWindow {
+  count: number;
+  expiresAt: number;
+}
+const speedViolations = new Map<string, SpeedViolationWindow>();
 
 /**
  * Start tracking a ride, storing its decoded polyline route
@@ -69,7 +80,7 @@ const RIDE_KEY_PREFIX = 'safety:ride:';
 export const startTracking = async (ride_id: string, encoded_polyline: string) => {
   const decoded = polyline.decode(encoded_polyline);
   // polyline.decode returns an array of [lat, lng] arrays
-  const planned_route: GeoPoint[] = decoded.map(([lat, lng]) => ({ lat, lng }));
+  const planned_route: GeoPoint[] = decoded.map((point: number[]) => ({ lat: point[0], lng: point[1] }));
 
   const state: RideState = {
     ride_id,
@@ -77,59 +88,61 @@ export const startTracking = async (ride_id: string, encoded_polyline: string) =
     speed_violations_count: 0
   };
 
-  // Store in Redis (expires in 24 hours to prevent memory leaks)
-  await redisClient.setex(`${RIDE_KEY_PREFIX}${ride_id}`, 86400, JSON.stringify(state));
+  // Store in-memory (no expiration - relies on stopTracking to clean up)
+  rideStates.set(ride_id, state);
+  console.log(`[Tracking] Started tracking ride ${ride_id} with ${planned_route.length} route points`);
 };
 
 /**
  * Stop tracking a ride
  */
 export const stopTracking = async (ride_id: string) => {
-  await redisClient.del(`${RIDE_KEY_PREFIX}${ride_id}`);
+  rideStates.delete(ride_id);
+  speedViolations.delete(ride_id);
+  console.log(`[Tracking] Stopped tracking ride ${ride_id}`);
 };
 
 /**
  * Get active ride state
  */
 export const getRideState = async (ride_id: string): Promise<RideState | null> => {
-  const data = await redisClient.get(`${RIDE_KEY_PREFIX}${ride_id}`);
-  if (!data) return null;
-  return JSON.parse(data) as RideState;
+  return rideStates.get(ride_id) || null;
 };
 
 /**
  * Update ride state
  */
 export const updateRideState = async (ride_id: string, state: RideState) => {
-  await redisClient.setex(`${RIDE_KEY_PREFIX}${ride_id}`, 86400, JSON.stringify(state));
+  rideStates.set(ride_id, state);
 };
 
 /**
  * Get speed violations count for the last N seconds window (sliding window)
- * We use an atomic INCR with expiration for simplicity. If a speed violation occurs, we increment a counter.
- * The counter expires after the window seconds.
+ * Simplified in-memory implementation without Redis
  */
 export const incrementAndGetSpeedViolations = async (ride_id: string, windowSeconds: number): Promise<number> => {
+  const now = Date.now();
   const key = `safety:speed_violations:${ride_id}`;
-  const multi = redisClient.multi();
-  
-  multi.incr(key);
-  // Only set TTL if we just created it or it's about to expire?
-  // Actually, we can just let it expire if no more violations happen.
-  // Wait, INCR on a key that doesn't exist creates it with TTL -1. we need to set EXPIRE.
-  
-  // A simpler way: we just set expire every time. It resets the window of the "sustained" speeding.
-  // So if they keep speeding, the key survives.
-  multi.expire(key, windowSeconds);
-  
-  const results = await multi.exec();
-  if (results && results[0] && !results[0][0]) {
-    return results[0][1] as number; // Return the incr result
+  const existing = speedViolations.get(key);
+
+  if (!existing || now > existing.expiresAt) {
+    // Create new window
+    const newViolation = { count: 1, expiresAt: now + (windowSeconds * 1000) };
+    speedViolations.set(key, newViolation);
+    return 1;
   }
-  return 1;
+
+  // Increment existing window
+  existing.count++;
+  speedViolations.set(key, existing);
+  return existing.count;
 };
 
+/**
+ * Reset speed violations for a ride
+ */
 export const resetSpeedViolations = async (ride_id: string) => {
   const key = `safety:speed_violations:${ride_id}`;
-  await redisClient.del(key);
+  speedViolations.delete(key);
 };
+

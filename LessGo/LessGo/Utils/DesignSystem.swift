@@ -95,7 +95,7 @@ enum DesignSystem {
                 return invalidHexColorFallback()
             }
 
-            guard normalized.unicodeScalars.allSatisfy({ CharacterSet.hexadecimalDigits.contains($0) }) else {
+            guard normalized.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains($0) }) else {
                 return invalidHexColorFallback()
             }
 

@@ -7,7 +7,6 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.SAFETY_SERVICE_PORT || '8005', 10),
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   dbUrl: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/lessgo_db',
   
   // Notification Service
