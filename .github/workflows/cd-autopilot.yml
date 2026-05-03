@@ -202,6 +202,10 @@ jobs:
         if: steps.auth.outcome == 'success'
         run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$PROJECT_ID"
 
+      - name: Install envsubst
+        if: steps.auth.outcome == 'success'
+        run: apt-get update && apt-get install -y gettext-base
+
       - name: Apply Kubernetes manifests
         if: steps.auth.outcome == 'success'
         env:
@@ -210,6 +214,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          export COMMIT_SHA
           kubectl apply -f k8s-manifests/namespace.yaml
           kubectl apply -f k8s-manifests/configmap.yaml
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
