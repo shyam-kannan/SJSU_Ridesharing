@@ -1,7 +1,100 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import axios from 'axios';
+import jwt from 'jsonwebtoken';
 import { requestJson, startTestServer } from './http-test-utils';
 
 let closeServer: (() => Promise<void>) | null = null;
+let driverToken: string;
+let riderToken: string;
+
+const makeAccessToken = (payload: { userId: string; email: string; role: 'Driver' | 'Rider'; sjsuIdStatus?: 'pending' | 'verified' | 'rejected' }) => {
+  const jwtSecret = process.env.JWT_SECRET;
+
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET is required for trip tests');
+  }
+
+  return jwt.sign({ ...payload, type: 'access' }, jwtSecret);
+};
+
+const tripServiceMocks = vi.hoisted(() => ({
+  searchTripsNearby: vi.fn(),
+  createTrip: vi.fn(),
+  isLocationNearSJSU: vi.fn(),
+}));
+
+vi.mock('../../services/trip-service/src/services/trip.service', () => tripServiceMocks);
+
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+  get: vi.fn(),
+  post: vi.fn(),
+  isAxiosError: vi.fn((error) => Boolean((error as any)?.isAxiosError)),
+}));
+
+vi.mock('@lessgo/shared', async () => {
+  const actual = await vi.importActual<typeof import('@lessgo/shared')>('@lessgo/shared');
+
+  return {
+    ...actual,
+    authenticateToken: (req: any, res: any, next: any) => {
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader) {
+        res.status(401).json({ status: 'error', message: 'Access token required' });
+        return;
+      }
+
+      if (authHeader === `Bearer ${process.env.TEST_RIDER_TOKEN}`) {
+        req.user = {
+          userId: 'rider-456',
+          email: 'sim-rider@sjsu.edu',
+          role: 'Rider',
+          sjsuIdStatus: 'verified',
+        };
+        next();
+        return;
+      }
+
+      if (authHeader === `Bearer ${process.env.TEST_DRIVER_TOKEN}`) {
+        req.user = {
+          userId: 'driver-123',
+          email: 'sim-driver@sjsu.edu',
+          role: 'Driver',
+          sjsuIdStatus: 'verified',
+        };
+        next();
+        return;
+      }
+
+      res.status(403).json({ status: 'error', message: 'Invalid token' });
+    },
+    requireDriver: (req: any, res: any, next: any) => {
+      if (!req.user) {
+        res.status(401).json({ status: 'error', message: 'Authentication required' });
+        return;
+      }
+
+      if (req.user.role !== 'Driver') {
+        res.status(403).json({ status: 'error', message: 'Only drivers can create trips' });
+        return;
+      }
+
+      next();
+    },
+    requireVerifiedStudent: (req: any, res: any, next: any) => {
+      if (!req.user) {
+        res.status(401).json({ status: 'error', message: 'Authentication required' });
+        return;
+      }
+
+      next();
+    },
+  };
+});
 
 beforeEach(() => {
   vi.resetModules();
@@ -9,6 +102,30 @@ beforeEach(() => {
   process.env.GOOGLE_MAPS_API_KEY = 'trip-test-key';
   process.env.JWT_SECRET = 'trip-test-secret';
   process.env.NODE_ENV = 'test';
+  driverToken = makeAccessToken({
+    userId: 'driver-123',
+    email: 'sim-driver@sjsu.edu',
+    role: 'Driver',
+    sjsuIdStatus: 'verified',
+  });
+  riderToken = makeAccessToken({
+    userId: 'rider-456',
+    email: 'sim-rider@sjsu.edu',
+    role: 'Rider',
+    sjsuIdStatus: 'verified',
+  });
+  process.env.TEST_DRIVER_TOKEN = driverToken;
+  process.env.TEST_RIDER_TOKEN = riderToken;
+
+  vi.mocked(axios.get).mockResolvedValue({
+    data: {
+      data: {
+        vehicle_info: 'Honda Civic',
+        seats_available: 4,
+        license_plate: 'ABC123',
+      },
+    },
+  } as any);
 });
 
 afterEach(async () => {
@@ -43,11 +160,11 @@ describe('Enhanced Trip Search Endpoint', () => {
 
       const response = await requestJson<{ status: string; message: string }>({
         baseUrl: server.baseUrl,
-        method:GET',
+        method: 'GET',
         path: '/trips/search',
         query: {
           origin_lat: 'invalid',
-          origin_lng: '-122.8811',
+          origin_lng: -122.8811,
         },
       });
 
@@ -57,12 +174,7 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('returns trips with pagination', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue([
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([
         {
           trip_id: 'trip-1',
           driver_id: 'driver-1',
@@ -85,6 +197,10 @@ describe('Enhanced Trip Search Endpoint', () => {
         },
       ]);
 
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
+
       const response = await requestJson<{
         status: string;
         data: { trips: any[]; total: number; has_more: boolean };
@@ -93,10 +209,10 @@ describe('Enhanced Trip Search Endpoint', () => {
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
-          limit: '10',
-          offset: '0',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
+          limit: 10,
+          offset: 0,
         },
       });
 
@@ -108,15 +224,14 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('supports pagination with limit and offset', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue([
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([
         { trip_id: 'trip-1', seats_available: 3 },
         { trip_id: 'trip-2', seats_available: 2 },
       ]);
+
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
 
       const response = await requestJson<{
         status: string;
@@ -126,10 +241,10 @@ describe('Enhanced Trip Search Endpoint', () => {
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
-          limit: '10',
-          offset: '0',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
+          limit: 10,
+          offset: 0,
         },
       });
 
@@ -139,17 +254,16 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('indicates when more results are available', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue(
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce(
         Array.from({ length: 10 }, (_, i) => ({
           trip_id: `trip-${i}`,
           seats_available: 3,
         }))
       );
+
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
 
       const response = await requestJson<{
         status: string;
@@ -159,10 +273,10 @@ describe('Enhanced Trip Search Endpoint', () => {
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
-          limit: '10',
-          offset: '0',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
+          limit: 10,
+          offset: 0,
         },
       });
 
@@ -172,12 +286,7 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('supports destination coordinates for from_sjsu direction', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue([
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([
         {
           trip_id: 'trip-1',
           origin: 'SJSU',
@@ -187,6 +296,10 @@ describe('Enhanced Trip Search Endpoint', () => {
         },
       ]);
 
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
+
       const response = await requestJson<{
         status: string;
         data: { search_params: any };
@@ -195,12 +308,12 @@ describe('Enhanced Trip Search Endpoint', () => {
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
-          destination_lat: '37.7749',
-          destination_lng: '-122.4194',
-          limit: '10',
-          offset: '0',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
+          destination_lat: 37.7749,
+          destination_lng: -122.4194,
+          limit: 10,
+          offset: 0,
         },
       });
 
@@ -211,12 +324,7 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('supports departure time filters', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue([
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([
         {
           trip_id: 'trip-1',
           departure_time: new Date('2026-05-04T09:00:00Z'),
@@ -224,17 +332,21 @@ describe('Enhanced Trip Search Endpoint', () => {
         },
       ]);
 
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
+
       const response = await requestJson<{ status: string }>({
         baseUrl: server.baseUrl,
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
           departure_after: '2026-05-04T08:00:00Z',
           departure_before: '2026-05-04T10:00:00Z',
-          limit: '10',
-          offset: '0',
+          limit: 10,
+          offset: 0,
         },
       });
 
@@ -242,27 +354,26 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('supports min_seats filter', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue([
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([
         {
           trip_id: 'trip-1',
           seats_available: 3,
         },
       ]);
 
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
+
       const response = await requestJson<{ status: string }>({
         baseUrl: server.baseUrl,
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
           min_seats: '2',
-          limit: '10',
+          limit: 10,
           offset: '0',
         },
       });
@@ -271,26 +382,25 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('limits max results to 50', async () => {
-      const { default: app } = await import('../../services/trip-service/src/app');
-      const server = await startTestServer(app);
-      closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue(
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce(
         Array.from({ length: 50 }, (_, i) => ({
           trip_id: `trip-${i}`,
           seats_available: 3,
         }))
       );
 
+      const { default: app } = await import('../../services/trip-service/src/app');
+      const server = await startTestServer(app);
+      closeServer = server.close;
+
       const response = await requestJson<{ status: string }>({
         baseUrl: server.baseUrl,
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
-          limit: '100', // Should be capped at 50
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
+          limit: 100, // Should be capped at 50
           offset: '0',
         },
       });
@@ -300,12 +410,11 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('returns empty array when no trips found', async () => {
+      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([]);
+
       const { default: app } = await import('../../services/trip-service/src/app');
       const server = await startTestServer(app);
       closeServer = server.close;
-
-      const { searchTripsNearby } = await import('../../services/trip-service/src/services/trip.service');
-      vi.mocked(searchTripsNearby).mockResolvedValue([]);
 
       const response = await requestJson<{
         status: string;
@@ -315,9 +424,9 @@ describe('Enhanced Trip Search Endpoint', () => {
         method: 'GET',
         path: '/trips/search',
         query: {
-          origin_lat: '37.3352',
-          origin_lng: '-122.8811',
-          limit: '10',
+          origin_lat: 37.3352,
+          origin_lng: -122.8811,
+          limit: 10,
           offset: '0',
         },
       });
@@ -363,7 +472,7 @@ describe('Enhanced Trip Search Endpoint', () => {
           method: 'POST',
           path: '/trips',
           headers: {
-            'Authorization': 'Bearer rider-token',
+            Authorization: `Bearer ${riderToken}`,
           },
           body: {
             origin: 'San Francisco',
@@ -379,28 +488,25 @@ describe('Enhanced Trip Search Endpoint', () => {
       });
 
       it('accepts trip with SJSU as origin', async () => {
-        const { default: app } = await import('../../services/trip-service/src/app');
-        const server = await startTestServer(app);
-        closeServer = server.close;
-
-        const { createTrip } = await import('../../services/trip-service/src/services/trip.service');
-        vi.mocked(createTrip).mockResolvedValue({
+        tripServiceMocks.createTrip.mockResolvedValueOnce({
           trip_id: 'trip-1',
           origin: 'San Jose State University',
           destination: 'Downtown San Jose',
           featured: false,
           max_riders: 3,
         });
+        tripServiceMocks.isLocationNearSJSU.mockResolvedValueOnce(true);
 
-        const { isLocationNearSJSU } = await import('../../services/trip-service/src/services/trip.service');
-        vi.mocked(isLocationNearSJSU).mockResolvedValue(true);
+        const { default: app } = await import('../../services/trip-service/src/app');
+        const server = await startTestServer(app);
+        closeServer = server.close;
 
         const response = await requestJson<{ status: string }>({
           baseUrl: server.baseUrl,
           method: 'POST',
           path: '/trips',
           headers: {
-            'Authorization': 'Bearer driver-token',
+            Authorization: `Bearer ${driverToken}`,
           },
           body: {
             origin: 'San Jose State University',
@@ -415,28 +521,25 @@ describe('Enhanced Trip Search Endpoint', () => {
       });
 
       it('accepts trip with SJSU as destination', async () => {
-        const { default: app } = await import('../../services/trip-service/src/app');
-        const server = await startTestServer(app);
-        closeServer = server.close;
-
-        const { createTrip } = await import('../../services/trip-service/src/services/trip.service');
-        vi.mocked(createTrip).mockResolvedValue({
+        tripServiceMocks.createTrip.mockResolvedValueOnce({
           trip_id: 'trip-1',
           origin: 'Downtown San Jose',
           destination: 'San Jose State University',
           featured: false,
           max_riders: 3,
         });
+        tripServiceMocks.isLocationNearSJSU.mockResolvedValueOnce(true);
 
-        const { isLocationNearSJSU } = await import('../../services/trip-service/src/services/trip.service');
-        vi.mocked(isLocationNearSJSU).mockResolvedValue(true);
+        const { default: app } = await import('../../services/trip-service/src/app');
+        const server = await startTestServer(app);
+        closeServer = server.close;
 
         const response = await requestJson<{ status: string }>({
           baseUrl: server.baseUrl,
           method: 'POST',
           path: '/trips',
           headers: {
-            'Authorization: 'Bearer driver-token',
+            Authorization: `Bearer ${driverToken}`,
           },
           body: {
             origin: 'Downtown San Jose',
@@ -451,19 +554,18 @@ describe('Enhanced Trip Search Endpoint', () => {
       });
 
       it('rejects trip with neither origin nor destination near SJSU', async () => {
+        tripServiceMocks.isLocationNearSJSU.mockResolvedValueOnce(false);
+
         const { default: app } = await import('../../services/trip-service/src/app');
         const server = await startTestServer(app);
         closeServer = server.close;
-
-        const { isLocationNearSJSU } = await import('../../services/trip-service/src/services/trip.service');
-        vi.mocked(isLocationNearSJSU).mockResolvedValue(false);
 
         const response = await requestJson<{ status: string; message: string }>({
           baseUrl: server.baseUrl,
           method: 'POST',
           path: '/trips',
           headers: {
-            'Authorization: 'Bearer driver-token',
+            Authorization: `Bearer ${driverToken}`,
           },
           body: {
             origin: 'Downtown San Francisco',
@@ -479,6 +581,16 @@ describe('Enhanced Trip Search Endpoint', () => {
       });
 
       it('rejects trip creation when driver profile is incomplete', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: {
+            data: {
+              vehicle_info: null,
+              seats_available: null,
+              license_plate: null,
+            },
+          },
+        } as any);
+
         const { default: app } = await import('../../services/trip-service/src/app');
         const server = await startTestServer(app);
         closeServer = server.close;
@@ -488,7 +600,7 @@ describe('Enhanced Trip Search Endpoint', () => {
           method: 'POST',
           path: '/trips',
           headers: {
-            Authorization: 'Bearer driver-token',
+            Authorization: `Bearer ${driverToken}`,
           },
           body: {
             origin: 'San Francisco',
