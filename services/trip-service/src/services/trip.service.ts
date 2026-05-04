@@ -194,6 +194,8 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
  * @param originLng Origin longitude
  * @param radiusMeters Search radius in meters
  * @param filters Additional filters
+ * @param limit Number of results to return
+ * @param offset Number of results to skip
  * @returns Array of matching trips
  */
 export const searchTripsNearby = async (
@@ -205,7 +207,9 @@ export const searchTripsNearby = async (
     departureAfter?: Date;
     departureBefore?: Date;
     status?: TripStatus;
-  }
+  },
+  limit: number = 10,
+  offset: number = 0
 ): Promise<TripWithDriver[]> => {
   let query = `
     SELECT
@@ -278,7 +282,9 @@ export const searchTripsNearby = async (
     paramIndex++;
   }
 
-  query += ` ORDER BY distance_meters ASC LIMIT 50`;
+  query += ` ORDER BY distance_meters ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+  values.push(limit);
+  values.push(offset);
 
   const result = await pool.query(query, values);
 
@@ -701,6 +707,45 @@ export const markMessagesAsRead = async (tripId: string, userId: string): Promis
   await pool.query(query, [tripId, userId]);
 };
 
+/**
+ * Check if a location is near SJSU
+ * @param location Location address string
+ * @param sjsuLat SJSU latitude
+ * @param sjsuLng SJSU longitude
+ * @param radiusMeters Search radius in meters
+ * @returns True if location is within radius of SJSU
+ */
+export const isLocationNearSJSU = async (
+  location: string,
+  sjsuLat: number,
+  sjsuLng: number,
+  radiusMeters: number
+): Promise<boolean> => {
+  try {
+    const { originPoint } = await geocodeTripLocations(location, location);
+
+    // Calculate distance using Haversine formula
+    const R = 3959; // Earth radius in miles
+    const lat1 = (originPoint.lat * Math.PI) / 180;
+    const lat2 = (sjsuLat * Math.PI) / 180;
+    const deltaLat = ((sjsuLat - originPoint.lat) * Math.PI) / 180;
+    const deltaLng = ((sjsuLng - originPoint.lng) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distanceMiles = R * c;
+    const distanceMeters = distanceMiles * 1609.34;
+
+    return distanceMeters <= radiusMeters;
+  } catch (error) {
+    console.error('Error checking SJSU proximity:', error);
+    return false;
+  }
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
@@ -714,4 +759,5 @@ export default {
   sendMessage,
   getTripMessages,
   markMessagesAsRead,
+  isLocationNearSJSU,
 };

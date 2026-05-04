@@ -31,6 +31,14 @@ export enum BookingStatus {
   Completed = 'completed',
 }
 
+export enum BookingState {
+  Pending = 'pending',      // Awaiting driver approval
+  Approved = 'approved',    // Driver approved the booking
+  Rejected = 'rejected',    // Driver rejected the booking
+  Cancelled = 'cancelled',  // Booking cancelled by rider or driver
+  Completed = 'completed',  // Trip completed
+}
+
 export enum PaymentStatus {
   Pending = 'pending',
   Captured = 'captured',
@@ -101,6 +109,8 @@ export interface Trip {
   seats_available: number;
   recurrence?: string;
   status: TripStatus;
+  featured?: boolean;      // New field for promoting routes
+  max_riders?: number;     // New field for max concurrent bookings
   created_at: Date;
   updated_at: Date;
 }
@@ -120,6 +130,7 @@ export interface Booking {
   trip_id: string;
   rider_id: string;
   status: BookingStatus;
+  booking_state?: BookingState;  // New field for driver approval flow
   seats_booked: number;
   created_at: Date;
   updated_at: Date;

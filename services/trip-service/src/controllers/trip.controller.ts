@@ -42,6 +42,34 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
 
     const tripData: CreateTripRequest = req.body;
 
+    // Validate SJSU requirement
+    const sjsuCoordinates = { lat: 37.3352, lng: -122.8811 };
+    const sjsuRadiusMeters = 800; // ~0.5 miles
+
+    // Check if origin or destination is within SJSU radius
+    const isOriginSJSU = await tripService.isLocationNearSJSU(
+      tripData.origin,
+      sjsuCoordinates.lat,
+      sjsuCoordinates.lng,
+      sjsuRadiusMeters
+    );
+
+    const isDestinationSJSU = await tripService.isLocationNearSJSU(
+      tripData.destination,
+      sjsuCoordinates.lat,
+      sjsuCoordinates.lng,
+      sjsuRadiusMeters
+    );
+
+    if (!isOriginSJSU && !isDestinationSJSU) {
+      errorResponse(
+        res,
+        'All LessGo trips must connect to SJSU. Please ensure either your origin or destination is near San Jose State University.',
+        400
+      );
+      return;
+    }
+
     const trip = await tripService.createTrip(req.user.userId, tripData);
 
     successResponse(res, trip, 'Trip created successfully', 201);
@@ -108,10 +136,14 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
     const {
       origin_lat,
       origin_lng,
+      destination_lat,
+      destination_lng,
       radius_meters,
       min_seats,
       departure_after,
       departure_before,
+      limit,
+      offset,
     } = req.query;
 
     // Validate required parameters
@@ -146,7 +178,14 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
       filters.departureBefore = new Date(departure_before as string);
     }
 
-    const trips = await tripService.searchTripsNearby(lat, lng, radius, filters);
+    // Pagination parameters
+    const limitValue = limit ? Math.min(parseInt(limit as string), 50) : 10;
+    const offsetValue = offset ? parseInt(offset as string) : 0;
+
+    const trips = await tripService.searchTripsNearby(lat, lng, radius, filters, limitValue, offsetValue);
+
+    // Calculate if there are more results
+    const hasMore = trips.length === limitValue;
 
     successResponse(
       res,
@@ -154,10 +193,18 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
         trips,
         search_params: {
           origin: { lat, lng },
+          destination: destination_lat && destination_lng
+            ? { lat: parseFloat(destination_lat as string), lng: parseFloat(destination_lng as string) }
+            : undefined,
           radius_meters: radius,
           filters,
+          pagination: {
+            limit: limitValue,
+            offset: offsetValue,
+          },
         },
         total: trips.length,
+        has_more: hasMore,
       },
       'Trips found successfully'
     );

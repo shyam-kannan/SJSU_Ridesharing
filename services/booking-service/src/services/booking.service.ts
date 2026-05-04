@@ -59,8 +59,8 @@ export const createBooking = async (
 
   // Create booking (store pickup_location if provided for detour-aware settlement)
   const bookingQuery = `
-    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, pickup_location)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location)
+    VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING *
   `;
   const bookingResult = await pool.query(bookingQuery, [
@@ -68,6 +68,7 @@ export const createBooking = async (
     riderId,
     seats_booked,
     BookingStatus.Pending,
+    'pending',  // booking_state for driver approval flow
     pickupLocation ? JSON.stringify(pickupLocation) : null,
   ]);
   const booking = bookingResult.rows[0];
@@ -159,6 +160,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     trip_id: row.trip_id,
     rider_id: row.rider_id,
     status: row.status,
+    booking_state: row.booking_state || 'pending',
     seats_booked: row.seats_booked,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -538,11 +540,13 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       b.rider_id,
       b.seats_booked,
       b.status,
+      b.booking_state,
       b.pickup_location,
       b.created_at,
       u.name as rider_name,
       u.email as rider_email,
-      u.rating as rider_rating
+      u.rating as rider_rating,
+      u.profile_picture_url as rider_profile_picture_url
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
     WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending')
@@ -551,6 +555,114 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
 
   const result = await pool.query(query, [tripId]);
   return result.rows;
+};
+
+/**
+ * Approve a booking (driver only)
+ * @param bookingId Booking's UUID
+ * @param driverId Driver's UUID (for authorization)
+ * @returns Updated booking
+ */
+export const approveBooking = async (
+  bookingId: string,
+  driverId: string
+): Promise<BookingWithDetails> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Get booking with trip details
+    const bookingData = await getBookingById(bookingId);
+    if (!bookingData) {
+      throw new Error('Booking not found');
+    }
+
+    // Verify user is the driver of the trip
+    if (bookingData.trip.driver_id !== driverId) {
+      throw new Error('Unauthorized: You must be the driver of this trip');
+    }
+
+    if (bookingData.booking_state === 'approved') {
+      throw new Error('Booking is already approved');
+    }
+
+    if (bookingData.booking_state === 'rejected' || bookingData.booking_state === 'cancelled') {
+      throw new Error('Cannot approve a rejected or cancelled booking');
+    }
+
+    // Update booking state
+    await client.query(
+      'UPDATE bookings SET booking_state = $1, updated_at = current_timestamp WHERE booking_id = $2',
+      ['approved', bookingId]
+    );
+
+    // Deduct seats from trip
+    const tripUpdate = await client.query(
+      `UPDATE trips
+       SET seats_available = seats_available - $1, updated_at = current_timestamp
+       WHERE trip_id = $2
+         AND status = 'pending'
+         AND seats_available >= $1`,
+      [bookingData.seats_booked, bookingData.trip_id]
+    );
+
+    if (tripUpdate.rowCount === 0) {
+      throw new Error('Not enough seats available');
+    }
+
+    await client.query('COMMIT');
+
+    const updatedBooking = await getBookingById(bookingId);
+    return updatedBooking!;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Reject a booking (driver only)
+ * @param bookingId Booking's UUID
+ * @param driverId Driver's UUID (for authorization)
+ * @returns Updated booking
+ */
+export const rejectBooking = async (
+  bookingId: string,
+  driverId: string
+): Promise<BookingWithDetails> => {
+  // Get booking with trip details
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new Error('Booking not found');
+  }
+
+  // Verify user is the driver of the trip
+  if (bookingData.trip.driver_id !== driverId) {
+    throw new Error('Unauthorized: You must be the driver of this trip');
+  }
+
+  if (bookingData.booking_state === 'rejected') {
+    throw new Error('Booking is already rejected');
+  }
+
+  if (bookingData.booking_state === 'approved') {
+    throw new Error('Cannot reject an approved booking');
+  }
+
+  // Update booking state
+  const query = `
+    UPDATE bookings
+    SET booking_state = $1, updated_at = current_timestamp
+    WHERE booking_id = $2
+  `;
+
+  await pool.query(query, ['rejected', bookingId]);
+
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
 };
 
 export default {
@@ -562,4 +674,6 @@ export default {
   createRating,
   updatePickupLocation,
   getBookingsByTripId,
+  approveBooking,
+  rejectBooking,
 };

@@ -312,3 +312,97 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
     throw new AppError('Failed to get trip bookings', 500);
   }
 };
+
+/**
+ * Approve a booking (driver only)
+ * PATCH /api/bookings/:id/approve
+ */
+export const approveBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    const booking = await bookingService.approveBooking(id, req.user.userId);
+
+    successResponse(res, booking, 'Booking approved successfully');
+
+    // Fire notification to rider
+    if (booking.rider && booking.trip) {
+      const depTime = new Date(booking.trip.departure_time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+      fireInAppNotification({
+        user_id: booking.rider.user_id,
+        type: 'booking_approved',
+        title: 'Ride Confirmed',
+        message: `Your ride from ${booking.trip.origin} to ${booking.trip.destination} is confirmed`,
+        data: {
+          trip_id: booking.trip.trip_id,
+          booking_id: booking.booking_id,
+          driver_name: booking.trip.driver?.name,
+        },
+      });
+
+      fireEmail('/notifications/send/booking-confirmation', {
+        email: booking.rider.email,
+        riderName: booking.rider.name,
+        origin: booking.trip.origin,
+        destination: booking.trip.destination,
+        departureTime: depTime,
+        seats: booking.seats_booked,
+        amount: booking.quote?.max_price ?? 0,
+        bookingId: booking.booking_id,
+      });
+    }
+  } catch (error) {
+    console.error('Approve booking error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to approve booking', 500);
+  }
+};
+
+/**
+ * Reject a booking (driver only)
+ * PATCH /api/bookings/:id/reject
+ */
+export const rejectBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    const booking = await bookingService.rejectBooking(id, req.user.userId);
+
+    successResponse(res, booking, 'Booking rejected successfully');
+
+    // Fire notification to rider
+    if (booking.rider) {
+      fireInAppNotification({
+        user_id: booking.rider.user_id,
+        type: 'booking_rejected',
+        title: 'Request Declined',
+        message: 'Your request was declined. Browse other rides.',
+        data: {
+          trip_id: booking.trip_id,
+          booking_id: booking.booking_id,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Reject booking error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to reject booking', 500);
+  }
+};

@@ -42,6 +42,10 @@ router.put('/:id/confirm', authenticateToken, asyncHandler(bookingController.con
 
 router.put('/:id/cancel', authenticateToken, asyncHandler(bookingController.cancelBooking));
 
+router.patch('/:id/approve', authenticateToken, asyncHandler(bookingController.approveBooking));
+
+router.patch('/:id/reject', authenticateToken, asyncHandler(bookingController.rejectBooking));
+
 router.post(
   '/:id/rate',
   authenticateToken,
