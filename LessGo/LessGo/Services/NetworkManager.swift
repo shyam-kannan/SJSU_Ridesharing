@@ -41,6 +41,24 @@ class NetworkManager {
         return encoder
     }()
 
+    private func restoreSavedSessionIfNeeded() {
+        guard KeychainManager.shared.getAccessToken() == nil ||
+                KeychainManager.shared.getRefreshToken() == nil,
+              let userId = KeychainManager.shared.getUserId() else {
+            return
+        }
+
+        if KeychainManager.shared.getAccessToken() == nil,
+           let savedAccess = KeychainManager.shared.getAccessToken(for: userId) {
+            KeychainManager.shared.saveAccessToken(savedAccess)
+        }
+
+        if KeychainManager.shared.getRefreshToken() == nil,
+           let savedRefresh = KeychainManager.shared.getRefreshToken(for: userId) {
+            KeychainManager.shared.saveRefreshToken(savedRefresh)
+        }
+    }
+
     // MARK: - Generic Request Method
 
     func request<T: Codable>(
@@ -60,6 +78,7 @@ class NetworkManager {
 
         // Add auth token if required
         if requiresAuth {
+            restoreSavedSessionIfNeeded()
             if let accessToken = KeychainManager.shared.getAccessToken() {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             } else {
@@ -132,10 +151,15 @@ class NetworkManager {
 
         // Add auth token if required
         if requiresAuth {
+            restoreSavedSessionIfNeeded()
             if let accessToken = KeychainManager.shared.getAccessToken() {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             } else {
-                throw NetworkError.unauthorized
+                if let refreshed = try? await refreshAccessToken() {
+                    request.setValue("Bearer \(refreshed)", forHTTPHeaderField: "Authorization")
+                } else {
+                    throw NetworkError.unauthorized
+                }
             }
         }
 
@@ -248,13 +272,16 @@ class NetworkManager {
         #endif
         // ─────────────────────────────────────────────────────────────
 
-        if httpResponse.statusCode == 401 {
+        if shouldRefreshToken(for: httpResponse.statusCode, data: data) {
             if requiresAuth, let refreshed = try? await refreshAccessToken() {
                 request.setValue("Bearer \(refreshed)", forHTTPHeaderField: "Authorization")
                 let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
                 guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
                       (200...299).contains(retryHttpResponse.statusCode) else {
-                    throw NetworkError.unauthorized
+                    if let retryHttpResponse = retryResponse as? HTTPURLResponse {
+                        throw networkError(for: retryHttpResponse.statusCode, data: retryData)
+                    }
+                    throw NetworkError.unknown(NSError(domain: "Invalid response", code: 0))
                 }
                 return try decodeResponse(from: retryData)
             } else {
@@ -267,6 +294,20 @@ class NetworkManager {
         }
 
         return try decodeResponse(from: data)
+    }
+
+    private func shouldRefreshToken(for statusCode: Int, data: Data) -> Bool {
+        guard statusCode == 401 || statusCode == 403 else { return false }
+        guard statusCode == 403 else { return true }
+
+        if let apiError = try? decoder.decode(APIError.self, from: data) {
+            let message = apiError.message.lowercased()
+            return message.contains("expired token") ||
+                message.contains("token expired") ||
+                message.contains("invalid or expired token")
+        }
+
+        return false
     }
 
     private func networkError(for statusCode: Int, data: Data) -> NetworkError {
@@ -288,6 +329,7 @@ class NetworkManager {
     }
 
     private func refreshAccessToken() async throws -> String {
+        restoreSavedSessionIfNeeded()
         guard let refreshToken = KeychainManager.shared.getRefreshToken() else {
             throw NetworkError.unauthorized
         }
@@ -301,6 +343,9 @@ class NetworkManager {
         )
 
         KeychainManager.shared.saveAccessToken(tokenData.accessToken)
+        if let userId = KeychainManager.shared.getUserId() {
+            KeychainManager.shared.saveAccessToken(tokenData.accessToken, for: userId)
+        }
         return tokenData.accessToken
     }
 }
