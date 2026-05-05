@@ -6,8 +6,7 @@ struct DriverHomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var profileVM = ProfileViewModel()
 
-    // ── Availability & Incoming Requests ───────────────────────────────────────
-    @State private var isAvailableForRides = false
+    // ── Incoming Requests ──────────────────────────────────────────────────────
     @State private var incomingRequest: IncomingMatchPayload? = nil
     @State private var showIncomingRequest = false
     @State private var isOnlinePulsing = false
@@ -60,9 +59,6 @@ struct DriverHomeView: View {
                     dashboardHeader
                         .padding(.horizontal, AppConstants.pagePadding)
                         .padding(.top, 14)
-
-                    availabilityToggleCard
-                        .padding(.horizontal, AppConstants.pagePadding)
 
                     // Post a Ride button
                     postRideButton
@@ -155,7 +151,7 @@ struct DriverHomeView: View {
                 Task { await refreshNotificationBadge() }
             }
             .onReceive(matchPollingTimer) { _ in
-                guard isAvailableForRides, !showIncomingRequest,
+                guard !showIncomingRequest,
                       let driverId = authVM.currentUser?.id else { return }
                 Task {
                     if let payload = await MatchingService.shared.checkForIncomingRequest(driverId: driverId) {
@@ -291,13 +287,6 @@ struct DriverHomeView: View {
 
             VStack(spacing: 0) {
                 howItWorksRow(
-                    icon: "toggle.power",
-                    title: "Toggle \"Available\" above",
-                    subtitle: "Turn on availability to start receiving ride requests"
-                )
-                Divider()
-                    .padding(.leading, 74)
-                howItWorksRow(
                     icon: "bell.badge",
                     title: "Wait for a ride request",
                     subtitle: "We'll notify you instantly when a rider is matched to you"
@@ -430,7 +419,7 @@ struct DriverHomeView: View {
                 Text("Driver Dashboard")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
-                if isAvailableForRides {
+                if isOnlinePulsing {
                     HStack(spacing: 6) {
                         ZStack {
                             Circle()
@@ -505,43 +494,6 @@ struct DriverHomeView: View {
                         .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                 )
         )
-    }
-
-    // MARK: - Availability Toggle Card
-
-    private var availabilityToggleCard: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(isAvailableForRides ? Color.brandGreen.opacity(0.15) : Color.textSecondary.opacity(0.1))
-                    .frame(width: 44, height: 44)
-                Image(systemName: isAvailableForRides ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                    .font(.system(size: 18))
-                    .foregroundColor(isAvailableForRides ? .brandGreen : .textSecondary)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isAvailableForRides ? "Available for rides" : "Not available")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-                Text(isAvailableForRides ? "You'll receive on-demand ride requests" : "Toggle to receive ride requests")
-                    .font(.system(size: 12))
-                    .foregroundColor(.textSecondary)
-            }
-            Spacer()
-            Toggle("", isOn: $isAvailableForRides)
-                .labelsHidden()
-                .tint(.brandGreen)
-                .onChange(of: isAvailableForRides) { available in
-                    guard let userId = authVM.currentUser?.id else { return }
-                    Task {
-                        try? await UserService.shared.updateAvailability(userId: userId, available: available)
-                    }
-                }
-        }
-        .padding(16)
-        .background(Color.cardBackground)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
     }
 
     // MARK: - Stats Row

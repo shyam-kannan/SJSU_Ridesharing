@@ -182,7 +182,15 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
     const limitValue = limit ? Math.min(parseInt(limit as string), 50) : 10;
     const offsetValue = offset ? parseInt(offset as string) : 0;
 
-    const trips = await tripService.searchTripsNearby(lat, lng, radius, filters, limitValue, offsetValue);
+    const destLat = destination_lat ? parseFloat(destination_lat as string) : NaN;
+    const destLng = destination_lng ? parseFloat(destination_lng as string) : NaN;
+    const hasDestCoords = !isNaN(destLat) && !isNaN(destLng);
+
+    const departureTime = filters.departureAfter ?? new Date();
+
+    const trips = hasDestCoords
+      ? await tripService.searchTripsWithRerouting(lat, lng, destLat, destLng, departureTime, filters, limitValue, offsetValue)
+      : await tripService.searchTripsNearby(lat, lng, radius, filters, limitValue, offsetValue);
 
     // Calculate if there are more results
     const hasMore = trips.length === limitValue;

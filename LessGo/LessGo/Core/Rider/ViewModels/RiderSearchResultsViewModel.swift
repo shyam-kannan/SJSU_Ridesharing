@@ -43,6 +43,8 @@ class RiderSearchResultsViewModel: ObservableObject {
                 direction: criteria.direction.rawValue,
                 originLat: criteria.coordinate.latitude,
                 originLng: criteria.coordinate.longitude,
+                destinationLat: criteria.destinationCoordinate.latitude,
+                destinationLng: criteria.destinationCoordinate.longitude,
                 departureAfter: criteria.departureTime,
                 limit: limit,
                 offset: offset
@@ -75,6 +77,8 @@ class RiderSearchResultsViewModel: ObservableObject {
                 direction: criteria.direction.rawValue,
                 originLat: criteria.coordinate.latitude,
                 originLng: criteria.coordinate.longitude,
+                destinationLat: criteria.destinationCoordinate.latitude,
+                destinationLng: criteria.destinationCoordinate.longitude,
                 departureAfter: criteria.departureTime,
                 limit: limit,
                 offset: offset

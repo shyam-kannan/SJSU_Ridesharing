@@ -1,8 +1,16 @@
 import { Pool } from 'pg';
+import axios from 'axios';
 import { config } from '../config';
 import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
 import { mineFrequentRouteFromTrip } from './frequent_route.service';
+import {
+  rankWithEmbedding,
+  computeScost,
+  haversineMeters,
+  TripRequestRow,
+  CandidateTrip,
+} from './matching.service';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -752,12 +760,145 @@ export const isLocationNearSJSU = async (
   }
 };
 
+// ── ML-ranked search for posted rides with rerouting ────────────────────────
+
+export interface CostBreakdown {
+  base_fare: number;
+  detour_surcharge: number;
+  per_rider_split: number;
+}
+
+export interface EnrichedTripWithDriver extends TripWithDriver {
+  detour_miles?: number;
+  adjusted_eta_minutes?: number;
+  cost_breakdown?: CostBreakdown;
+}
+
+export const searchTripsWithRerouting = async (
+  originLat: number,
+  originLng: number,
+  destinationLat: number,
+  destinationLng: number,
+  departureTime: Date,
+  filters?: {
+    minSeats?: number;
+    departureAfter?: Date;
+    departureBefore?: Date;
+  },
+  limit: number = 10,
+  offset: number = 0
+): Promise<EnrichedTripWithDriver[]> => {
+  // Stage 1: PostGIS proximity — reuse searchTripsNearby (top 20, 5km radius)
+  const stage1 = await searchTripsNearby(
+    originLat,
+    originLng,
+    5000,
+    filters,
+    20,
+    0
+  );
+
+  if (stage1.length === 0) return [];
+
+  // Build synthetic TripRequestRow for embedding + Scost stages
+  const syntheticReq: TripRequestRow = {
+    request_id: 'search',
+    rider_id:   'search',
+    origin_lat:       originLat,
+    origin_lng:       originLng,
+    destination_lat:  destinationLat,
+    destination_lng:  destinationLng,
+    departure_time:   departureTime,
+    max_scost:        null,
+  };
+
+  // Map TripWithDriver → CandidateTrip shape expected by matching utilities
+  const candidates: CandidateTrip[] = stage1.map(t => ({
+    trip_id:           t.trip_id,
+    driver_id:         t.driver_id,
+    origin_lat:        t.origin_point.lat,
+    origin_lng:        t.origin_point.lng,
+    destination_lat:   t.destination_point.lat,
+    destination_lng:   t.destination_point.lng,
+    departure_time:    new Date(t.departure_time),
+    seats_available:   t.seats_available,
+    distance_to_rider_m: haversineMeters(originLat, originLng, t.origin_point.lat, t.origin_point.lng),
+    route_score:       0,
+  }));
+
+  // Stage 2: embedding ranking
+  const ranked = await rankWithEmbedding(syntheticReq, candidates);
+
+  // Stage 3: Scost filter + sort
+  const scored: Array<{ trip: TripWithDriver; candidate: CandidateTrip; scostTotal: number }> = [];
+
+  for (const candidate of ranked) {
+    const bd = computeScost(syntheticReq, candidate, 0, false);
+    if (bd.total === Infinity) continue;
+
+    const original = stage1.find(t => t.trip_id === candidate.trip_id);
+    if (!original) continue;
+
+    scored.push({ trip: original, candidate, scostTotal: bd.total });
+  }
+
+  scored.sort((a, b) => a.scostTotal - b.scostTotal);
+
+  // Apply pagination after ML ranking
+  const page = scored.slice(offset, offset + limit);
+
+  // Enrich each result with detour_miles, adjusted_eta_minutes, cost_breakdown
+  const enriched: EnrichedTripWithDriver[] = await Promise.all(
+    page.map(async ({ trip, candidate }) => {
+      const detourMeters = haversineMeters(originLat, originLng, candidate.origin_lat, candidate.origin_lng);
+      const detourMiles = detourMeters / 1609.34;
+
+      let adjustedEtaMinutes: number | undefined;
+      try {
+        // Two-leg ETA: driver_origin → rider_pickup + rider_pickup → destination
+        const [leg1, leg2] = await Promise.all([
+          axios.post(`${config.routingServiceUrl}/route/calculate`, {
+            origin:      `${candidate.origin_lat},${candidate.origin_lng}`,
+            destination: `${originLat},${originLng}`,
+          }, { timeout: 4000 }),
+          axios.post(`${config.routingServiceUrl}/route/calculate`, {
+            origin:      `${originLat},${originLng}`,
+            destination: `${destinationLat},${destinationLng}`,
+          }, { timeout: 4000 }),
+        ]);
+        const totalSec = (leg1.data?.duration_seconds ?? 0) + (leg2.data?.duration_seconds ?? 0);
+        adjustedEtaMinutes = Math.round(totalSec / 60);
+      } catch {
+        // Routing service unavailable — omit ETA
+      }
+
+      const baseFare = 5.00; // default base fare; cost-calculation-service can refine this
+      const detourSurcharge = parseFloat((detourMiles * 0.50).toFixed(2));
+      const perRiderSplit = parseFloat((baseFare + detourSurcharge).toFixed(2));
+
+      return {
+        ...trip,
+        detour_miles: parseFloat(detourMiles.toFixed(2)),
+        adjusted_eta_minutes: adjustedEtaMinutes,
+        cost_breakdown: {
+          base_fare:        baseFare,
+          detour_surcharge: detourSurcharge,
+          per_rider_split:  perRiderSplit,
+        },
+      };
+    })
+  );
+
+  return enriched;
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
   createTrip,
   getTripById,
   searchTripsNearby,
+  searchTripsWithRerouting,
   listTrips,
   updateTrip,
   cancelTrip,

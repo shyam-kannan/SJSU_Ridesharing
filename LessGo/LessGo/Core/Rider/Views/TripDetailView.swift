@@ -312,29 +312,46 @@ struct TripDetailView: View {
     private func costSection(trip: TripWithDriver) -> some View {
         VStack(spacing: 12) {
             HStack {
-                Text("Estimated Cost")
+                Text("Cost Breakdown")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text(formatPrice(trip.estimatedCost))
+                Text(formatPrice(trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.brand)
             }
 
             Divider()
 
-            costBreakdownRow(label: "Base fare", value: "$5.00")
-            costBreakdownRow(label: "Distance", value: "$3.50")
-            costBreakdownRow(label: "Service fee", value: "$1.50")
+            if let cb = trip.costBreakdown {
+                costBreakdownRow(label: "Base fare", value: formatPrice(cb.baseFare))
+                if cb.detourSurcharge > 0 {
+                    if let detour = trip.detourMiles {
+                        costBreakdownRow(
+                            label: String(format: "Detour (%.1f mi)", detour),
+                            value: "+\(formatPrice(cb.detourSurcharge))"
+                        )
+                    } else {
+                        costBreakdownRow(label: "Detour surcharge", value: "+\(formatPrice(cb.detourSurcharge))")
+                    }
+                }
+                if let eta = trip.adjustedEtaMinutes {
+                    costBreakdownRow(label: "ETA with detour", value: "\(eta) min")
+                }
+            } else {
+                costBreakdownRow(label: "Base fare", value: "$5.00")
+                costBreakdownRow(label: "Distance", value: "$3.50")
+                costBreakdownRow(label: "Service fee", value: "$1.50")
+            }
 
             Divider()
 
             HStack {
-                Text("Total")
+                Text("Your share")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text(formatPrice(trip.estimatedCost))
+                Text(formatPrice(trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.brand)
             }

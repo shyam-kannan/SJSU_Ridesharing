@@ -542,7 +542,9 @@ struct BookingListView: View {
                             title: "No bookings yet",
                             message: showAsDriver ? "Your passengers will appear here" : "Find a ride and get going!",
                             actionTitle: showAsDriver ? nil : "Find Rides"
-                        ) {}
+                        ) {
+                            NotificationCenter.default.post(name: .navigateToHomeTab, object: nil)
+                        }
                         .padding(.top, 60)
                     }
                     .refreshable { await refreshCurrentTab() }

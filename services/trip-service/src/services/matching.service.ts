@@ -36,7 +36,7 @@ const RHO = 0.1;
 const MAX_PASSENGER_DETOUR_RATIO = 0.30;
 
 // ── Haversine helper ─────────────────────────────────────────────────────────
-function haversineMeters(
+export function haversineMeters(
   lat1: number, lng1: number,
   lat2: number, lng2: number
 ): number {
@@ -52,7 +52,7 @@ function haversineMeters(
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────
-interface TripRequestRow {
+export interface TripRequestRow {
   request_id: string;
   rider_id: string;
   origin_lat: number;
@@ -63,7 +63,7 @@ interface TripRequestRow {
   max_scost: number | null;  // rider-preference ceiling (He et al. §4.2); null = no gate
 }
 
-interface CandidateTrip {
+export interface CandidateTrip {
   trip_id: string;
   driver_id: string;
   origin_lat: number;
@@ -187,7 +187,7 @@ async function fetchCandidates(req: TripRequestRow): Promise<CandidateTrip[]> {
 }
 
 // ── Stage 2: call embedding service for similarity ranking ───────────────────
-async function rankWithEmbedding(
+export async function rankWithEmbedding(
   req: TripRequestRow,
   candidates: CandidateTrip[]
 ): Promise<CandidateTrip[]> {
@@ -252,11 +252,11 @@ async function rankWithEmbedding(
 //   He et al. treats immediate requests (depTime ≈ now) as a valid booking
 //   mode with no advance-time penalty. We zero term4 when the rider's
 //   requested departure is within 5 minutes of the current time.
-interface ScostBreakdown {
+export interface ScostBreakdown {
   travel: number; walk: number; detour: number; advance: number; social: number; total: number;
 }
 
-function computeScost(
+export function computeScost(
   req: TripRequestRow,
   trip: CandidateTrip,
   existingPassengers: number,

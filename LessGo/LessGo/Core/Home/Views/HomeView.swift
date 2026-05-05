@@ -72,7 +72,16 @@ struct HomeView: View {
                 selectedTab = .home
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToHomeTab)) { _ in
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                selectedTab = .home
+            }
+        }
     }
+}
+
+extension Notification.Name {
+    static let navigateToHomeTab = Notification.Name("navigateToHomeTab")
 }
 
 // MARK: - Custom Tab Bar

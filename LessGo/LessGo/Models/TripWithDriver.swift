@@ -16,6 +16,21 @@ struct TripWithDriver: Identifiable, Codable {
     let estimatedCost: Double
     let featured: Bool
     let status: String
+    let detourMiles: Double?
+    let adjustedEtaMinutes: Int?
+    let costBreakdown: CostBreakdown?
+
+    struct CostBreakdown: Codable {
+        let baseFare: Double
+        let detourSurcharge: Double
+        let perRiderSplit: Double
+
+        enum CodingKeys: String, CodingKey {
+            case baseFare = "base_fare"
+            case detourSurcharge = "detour_surcharge"
+            case perRiderSplit = "per_rider_split"
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case id = "trip_id"
@@ -29,6 +44,9 @@ struct TripWithDriver: Identifiable, Codable {
         case seatsAvailable = "seats_available"
         case estimatedCost = "estimated_cost"
         case featured, status
+        case detourMiles = "detour_miles"
+        case adjustedEtaMinutes = "adjusted_eta_minutes"
+        case costBreakdown = "cost_breakdown"
     }
 
     init(
@@ -44,7 +62,10 @@ struct TripWithDriver: Identifiable, Codable {
         seatsAvailable: Int,
         estimatedCost: Double,
         featured: Bool,
-        status: String
+        status: String,
+        detourMiles: Double? = nil,
+        adjustedEtaMinutes: Int? = nil,
+        costBreakdown: CostBreakdown? = nil
     ) {
         self.id = id
         self.driverId = driverId
@@ -59,6 +80,9 @@ struct TripWithDriver: Identifiable, Codable {
         self.estimatedCost = estimatedCost
         self.featured = featured
         self.status = status
+        self.detourMiles = detourMiles
+        self.adjustedEtaMinutes = adjustedEtaMinutes
+        self.costBreakdown = costBreakdown
     }
 
     init(from decoder: Decoder) throws {
@@ -93,6 +117,10 @@ struct TripWithDriver: Identifiable, Codable {
         } else {
             estimatedCost = 0.0
         }
+
+        detourMiles = try container.decodeIfPresent(Double.self, forKey: .detourMiles)
+        adjustedEtaMinutes = try container.decodeIfPresent(Int.self, forKey: .adjustedEtaMinutes)
+        costBreakdown = try container.decodeIfPresent(CostBreakdown.self, forKey: .costBreakdown)
     }
 }
 

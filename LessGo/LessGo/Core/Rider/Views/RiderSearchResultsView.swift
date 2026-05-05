@@ -371,9 +371,19 @@ struct TripCard: View {
                             .foregroundColor(.textSecondary)
                     }
 
+                    if let detour = trip.detourMiles, detour > 0.1 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 10))
+                            Text(String(format: "~%.1f mi detour", detour))
+                                .font(.system(size: 11))
+                        }
+                        .foregroundColor(.brandGold)
+                    }
+
                     Spacer()
 
-                    Text(formatPrice(trip.estimatedCost))
+                    Text(formatPrice(trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.brand)
                 }
