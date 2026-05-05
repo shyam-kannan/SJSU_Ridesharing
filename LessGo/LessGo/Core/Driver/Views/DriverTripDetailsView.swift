@@ -463,6 +463,44 @@ private struct PendingBookingCard: View {
                 Text("\(passenger.seatsBooked) seat\(passenger.seatsBooked > 1 ? "s" : "")")
                     .font(.system(size: 11))
                     .foregroundColor(.textTertiary)
+
+                // Scost breakdown information
+                if let scost = passenger.scostBreakdown {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 12) {
+                            // Fare (derived from total Scost)
+                            HStack(spacing: 4) {
+                                Image(systemName: "dollarsign.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brandGreen)
+                                Text(String(format: "$%.2f", scost.total * 8.50))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+
+                            // Extra distance (walk component)
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.turn.up.right")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brandOrange)
+                                Text(formatDistance(scost.walk))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+
+                            // Added time (advance component)
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brand)
+                                Text(formatTime(scost.advance))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
             }
 
             Spacer()
@@ -535,3 +573,24 @@ private struct PendingBookingCard: View {
         )
     }
 }
+
+// MARK: - Helper Functions
+
+private func formatDistance(_ meters: Double) -> String {
+    if meters < 1000 {
+        return String(format: "%.0fm", meters)
+    } else {
+        return String(format: "%.1fkm", meters / 1000)
+    }
+}
+
+private func formatTime(_ seconds: Double) -> String {
+    if seconds < 60 {
+        return String(format: "%.0fs", seconds)
+    } else if seconds < 3600 {
+        return String(format: "%.0fm", seconds / 60)
+    } else {
+        return String(format: "%.1fh", seconds / 3600)
+    }
+}
+

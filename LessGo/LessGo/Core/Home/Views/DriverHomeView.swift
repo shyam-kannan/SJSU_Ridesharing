@@ -606,7 +606,7 @@ struct DriverHomeView: View {
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(.primary)
                                     .lineLimit(1)
-                                Text(trip.departureTime, style: .time)
+                                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
                                     .font(.system(size: 12))
                                     .foregroundColor(.secondary)
                                 + Text(" · \(trip.seatsAvailable) seat\(trip.seatsAvailable == 1 ? "" : "s") left")

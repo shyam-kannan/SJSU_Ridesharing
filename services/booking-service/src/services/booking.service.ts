@@ -25,7 +25,7 @@ export const createBooking = async (
   riderId: string,
   bookingData: CreateBookingRequest
 ): Promise<{ booking: Booking; quote: Quote }> => {
-  const { trip_id, seats_booked } = bookingData;
+  const { trip_id, seats_booked, scost_breakdown } = bookingData;
   // pickup_location is not in CreateBookingRequest type but may be sent by clients
   // (e.g. dev-tools simulation for detour testing). Store it if present.
   const pickupLocation = (bookingData as any).pickup_location ?? null;
@@ -59,8 +59,8 @@ export const createBooking = async (
 
   // Create booking (store pickup_location if provided for detour-aware settlement)
   const bookingQuery = `
-    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location, scost_breakdown)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *
   `;
   const bookingResult = await pool.query(bookingQuery, [
@@ -70,6 +70,7 @@ export const createBooking = async (
     BookingStatus.Pending,
     'pending',  // booking_state for driver approval flow
     pickupLocation ? JSON.stringify(pickupLocation) : null,
+    scost_breakdown ? JSON.stringify(scost_breakdown) : null,
   ]);
   const booking = bookingResult.rows[0];
 
@@ -542,6 +543,7 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       b.status,
       b.booking_state,
       b.pickup_location,
+      b.scost_breakdown,
       b.created_at,
       u.name as rider_name,
       u.email as rider_email,

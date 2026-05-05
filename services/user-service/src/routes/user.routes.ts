@@ -64,6 +64,11 @@ router.put(
       .withMessage('Seats available is required')
       .isInt({ min: 1, max: 8 })
       .withMessage('Seats available must be between 1 and 8'),
+    body('license_plate')
+      .notEmpty()
+      .withMessage('License plate is required')
+      .trim()
+      .isLength({ min: 2, max: 20 }),
   ],
   validateRequest,
   asyncHandler(userController.setupDriver)

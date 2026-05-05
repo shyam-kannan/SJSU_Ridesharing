@@ -196,6 +196,7 @@ struct BookingWithRider: Codable, Identifiable {
     let bookingState: BookingState
     let pickupLocation: PickupLocation?
     let createdAt: Date
+    let scostBreakdown: ScostBreakdown?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -211,6 +212,7 @@ struct BookingWithRider: Codable, Identifiable {
         case bookingState = "booking_state"
         case pickupLocation = "pickup_location"
         case createdAt = "created_at"
+        case scostBreakdown = "scost_breakdown"
     }
 
     init(from decoder: Decoder) throws {
@@ -227,6 +229,7 @@ struct BookingWithRider: Codable, Identifiable {
         bookingState = try container.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
         pickupLocation = try container.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        scostBreakdown = try container.decodeIfPresent(ScostBreakdown.self, forKey: .scostBreakdown)
 
         // Backend sends rating as String ("0.00") or occasionally as Double
         if let ratingDouble = try? container.decode(Double.self, forKey: .riderRating) {
@@ -244,6 +247,17 @@ struct PickupLocation: Codable {
     let lat: Double
     let lng: Double
     let address: String?
+}
+
+// MARK: - Scost Breakdown Models
+
+struct ScostBreakdown: Codable {
+    let travel: Double
+    let walk: Double
+    let detour: Double
+    let advance: Double
+    let social: Double
+    let total: Double
 }
 
 // Response wrapper for trip bookings endpoint

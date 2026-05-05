@@ -145,6 +145,7 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
       u.rating as driver_rating,
       u.vehicle_info as driver_vehicle_info,
       u.seats_available as driver_seats_available,
+      u.profile_picture_url as driver_profile_picture_url,
       u.created_at as driver_created_at,
       u.updated_at as driver_updated_at
     FROM trips t
@@ -182,6 +183,7 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
       rating: row.driver_rating,
       vehicle_info: row.driver_vehicle_info,
       seats_available: row.driver_seats_available,
+      profile_picture_url: row.driver_profile_picture_url,
       created_at: row.driver_created_at,
       updated_at: row.driver_updated_at,
     },
@@ -231,6 +233,7 @@ export const searchTripsNearby = async (
       u.sjsu_id_status as driver_sjsu_id_status,
       u.rating as driver_rating,
       u.vehicle_info as driver_vehicle_info,
+      u.profile_picture_url as driver_profile_picture_url,
       u.created_at as driver_created_at,
       u.updated_at as driver_updated_at
     FROM trips t
@@ -250,7 +253,7 @@ export const searchTripsNearby = async (
     )
   `;
 
-  const values: any[] = [originLng, originLat, radiusMeters];
+  const values: (string | number | Date | TripStatus)[] = [originLng, originLat, radiusMeters];
   let paramIndex = 4;
 
   // Add filters
@@ -309,6 +312,7 @@ export const searchTripsNearby = async (
       sjsu_id_status: row.driver_sjsu_id_status,
       rating: row.driver_rating,
       vehicle_info: row.driver_vehicle_info,
+      profile_picture_url: row.driver_profile_picture_url,
       created_at: row.driver_created_at,
       updated_at: row.driver_updated_at,
     },
@@ -342,6 +346,7 @@ export const listTrips = async (filters?: {
       u.sjsu_id_status as driver_sjsu_id_status,
       u.rating as driver_rating,
       u.vehicle_info as driver_vehicle_info,
+      u.profile_picture_url as driver_profile_picture_url,
       u.created_at as driver_created_at,
       u.updated_at as driver_updated_at
     FROM trips t
@@ -402,6 +407,7 @@ export const listTrips = async (filters?: {
       sjsu_id_status: row.driver_sjsu_id_status,
       rating: row.driver_rating,
       vehicle_info: row.driver_vehicle_info,
+      profile_picture_url: row.driver_profile_picture_url,
       created_at: row.driver_created_at,
       updated_at: row.driver_updated_at,
     },
@@ -430,7 +436,7 @@ export const updateTrip = async (
   }
 
   const fields: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | Date | TripStatus | undefined)[] = [];
   let paramIndex = 1;
 
   if (updates.departure_time) {

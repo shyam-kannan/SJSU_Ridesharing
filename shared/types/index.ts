@@ -262,6 +262,19 @@ export interface SearchTripsRequest {
 export interface CreateBookingRequest {
   trip_id: string;
   seats_booked: number;
+  scost_breakdown?: ScostBreakdown;
+}
+
+/**
+ * Scost breakdown from ML matching algorithm (He et al. eq 9)
+ */
+export interface ScostBreakdown {
+  travel: number;   // Average detour distance per passenger
+  walk: number;     // Walking distance from rider to driver origin
+  detour: number;   // Extra distance penalty for adding passengers
+  advance: number;  // Waiting time
+  social: number;   // Route compatibility score
+  total: number;    // Sum of all components
 }
 
 /**
