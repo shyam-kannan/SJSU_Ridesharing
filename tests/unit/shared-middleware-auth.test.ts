@@ -149,7 +149,7 @@ describe('shared/middleware/auth > requireVerifiedStudent', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(403);
-    expect((res.body as any).sjsuIdStatus).toBe('pending');
+    expect((res.body as any).errors?.sjsuIdStatus).toBe('pending');
   });
 
   it('returns 403 when user is rejected', async () => {
