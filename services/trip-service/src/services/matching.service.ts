@@ -63,7 +63,7 @@ interface TripRequestRow {
   max_scost: number | null;  // rider-preference ceiling (He et al. §4.2); null = no gate
 }
 
-interface CandidateTrip {
+export interface CandidateTrip {
   trip_id: string;
   driver_id: string;
   origin_lat: number;
@@ -359,17 +359,16 @@ async function notifyDriver(
 
 /**
  * Run the full three-stage matching pipeline for a trip request.
- * Creates a pending_match record and notifies the best available driver.
- *
- * @returns match_id of the created pending_match, or null if no driver found.
+ * Returns the top-5 candidate driver trips ranked by Scost. No pending_match
+ * is created here — the rider selects from this list and the match is
+ * committed via selectDriverForRider().
  */
 export async function matchRider(
   requestId: string,
   attempt: number = 1
-): Promise<string | null> {
+): Promise<CandidateTrip[]> {
   console.log(`[matching] matchRider: attempt=${attempt} requestId=${requestId}`);
 
-  // Load request (including rider's optional Scost ceiling)
   const reqResult = await pool.query<TripRequestRow>(
     `SELECT request_id, rider_id,
             origin_lat, origin_lng, destination_lat, destination_lng,
@@ -387,26 +386,16 @@ export async function matchRider(
   let candidates = await fetchCandidates(req);
   if (candidates.length === 0) {
     console.warn(`[matching] No candidates found. Possible reasons: no drivers with available_for_rides=true, no pending trips within 5km / ±30min.`);
-    return null;
+    return [];
   }
 
   // Stage 2: RShareForm embedding ranking
   candidates = await rankWithEmbedding(req, candidates);
 
-  // Stage 3: Scost ranking (He et al. eq 9).
-  //
-  // Scost is a rider-preference parameter (He et al. §4.2).  The rider may
-  // submit a maxScost ceiling with their request; if they do not, we assign
-  // the candidate with the lowest Scost without any gate (best-effort mode).
-  //
-  // NOTE: The equilibrium test (eq 8 / passesEquilibrium) belongs in
-  // route_merge.service.ts where it checks whether adding a NEW passenger
-  // worsens existing passengers beyond RHO. It does NOT apply here.
+  // Stage 3: Collect all drivers that pass the Scost gate (He et al. eq 9),
+  // sort by Scost ascending, and return the top 5 for rider selection.
   const riderMaxScost: number | null = req.max_scost ?? null;
-
-  let bestTrip: CandidateTrip | null = null;
-  let bestScost = Infinity;
-  let bestBreakdown: ScostBreakdown | null = null;
+  const ranked: Array<{ trip: CandidateTrip; scost: number }> = [];
 
   for (const trip of candidates) {
     const existingPassengersResult = await pool.query<{ count: string }>(
@@ -416,7 +405,6 @@ export async function matchRider(
     );
     const existingPassengers = parseInt(existingPassengersResult.rows[0].count, 10);
 
-    // Check social history: has this rider ever shared a trip with this driver?
     const socialResult = await pool.query<{ count: string }>(
       `SELECT COUNT(*) FROM bookings b
        JOIN trips t ON b.trip_id = t.trip_id
@@ -428,79 +416,30 @@ export async function matchRider(
 
     const bd = computeScost(req, trip, existingPassengers, hasSocialHistory);
 
-    // Gate: only apply if rider submitted a maxScost preference.
     const exceedsRiderCeiling = riderMaxScost !== null && bd.total > riderMaxScost;
     const decision = exceedsRiderCeiling
       ? `SKIP (Scost=${bd.total.toFixed(3)} > rider maxScost=${riderMaxScost})`
-      : bd.total < bestScost
-        ? 'BEST so far'
-        : 'lower-ranked';
+      : !isFinite(bd.total)
+        ? 'SKIP (detour ratio exceeded)'
+        : `ACCEPT Scost=${bd.total.toFixed(3)}`;
 
     console.log(
       `[matching] Candidate ${trip.trip_id} (driver ${trip.driver_id}): ` +
       `travel=${bd.travel.toFixed(3)} walk=${bd.walk.toFixed(3)} ` +
       `detour=${bd.detour.toFixed(3)} advance=${bd.advance.toFixed(3)} ` +
-      `social=${bd.social.toFixed(3)} total=${bd.total.toFixed(3)} | ` +
-      `rider maxScost=${riderMaxScost ?? 'null'} → ${decision}`
+      `social=${bd.social.toFixed(3)} total=${isFinite(bd.total) ? bd.total.toFixed(3) : 'Inf'} | ${decision}`
     );
 
-    if (!exceedsRiderCeiling && bd.total < bestScost) {
-      bestTrip      = trip;
-      bestScost     = bd.total;
-      bestBreakdown = bd;
+    if (!exceedsRiderCeiling && isFinite(bd.total)) {
+      ranked.push({ trip, scost: bd.total });
     }
   }
 
-  if (!bestTrip || bestBreakdown === null) {
-    console.warn(`[matching] No qualifying driver for request ${requestId}. ` +
-      (riderMaxScost !== null
-        ? `All candidates exceeded rider maxScost=${riderMaxScost}.`
-        : `No candidates passed Scost evaluation.`));
-    return null;
-  }
+  ranked.sort((a, b) => a.scost - b.scost);
+  const top5 = ranked.slice(0, 5).map(r => r.trip);
 
-  // Fetch rider info for the driver notification
-  const riderResult = await pool.query<{ name: string; rating: number }>(
-    `SELECT name, COALESCE(rating, 5.0) AS rating FROM users WHERE user_id = $1`,
-    [req.rider_id]
-  );
-  const riderInfo = riderResult.rows[0] ?? { name: 'Rider', rating: 5.0 };
-
-  const tripInfoResult = await pool.query<{ origin: string; destination: string; departure_time: string }>(
-    `SELECT origin, destination, departure_time FROM trips WHERE trip_id = $1`,
-    [bestTrip.trip_id]
-  );
-  const tripInfo = tripInfoResult.rows[0];
-
-  const matchId = await insertPendingMatch(requestId, bestTrip.trip_id, bestTrip.driver_id, bestScost, attempt);
-  await notifyDriver(bestTrip.driver_id, matchId, requestId, bestTrip.trip_id, riderInfo, {
-    origin: tripInfo.origin,
-    destination: tripInfo.destination,
-    departure_time: new Date(tripInfo.departure_time).toISOString(),
-  });
-
-  // DEV_MODE auto-commit: in development the driver's app is never open, so no
-  // explicit accept will arrive.  Immediately mark the trip_request as matched
-  // so the iOS polling loop resolves in one or two polls.
-  //
-  // In production this block is skipped — the driver must tap "Accept" within
-  // the 15-second window, which triggers acceptMatch() and sets status='matched'.
-  if (process.env.NODE_ENV !== 'production') {
-    await pool.query(
-      `UPDATE trip_requests
-       SET status = 'matched', matched_trip_id = $2, updated_at = NOW()
-       WHERE request_id = $1`,
-      [requestId, bestTrip.trip_id]
-    );
-    await pool.query(
-      `UPDATE pending_matches SET status = 'accepted' WHERE match_id = $1`,
-      [matchId]
-    );
-    console.log(`[matching] DEV auto-commit: request ${requestId} → matched (trip ${bestTrip.trip_id}, driver ${bestTrip.driver_id})`);
-  }
-
-  console.log(`[matching] Pending match ${matchId} created for request ${requestId} → driver ${bestTrip.driver_id} (Scost=${bestScost.toFixed(3)})`);
-  return matchId;
+  console.log(`[matching] matchRider: ${top5.length} candidate(s) returned for request ${requestId}`);
+  return top5;
 }
 
 /**
@@ -547,8 +486,19 @@ export async function declineMatch(matchId: string, driverId: string): Promise<v
 
   const { request_id, attempt } = result.rows[0];
   if (attempt < MAX_ATTEMPTS) {
-    // Retry asynchronously
-    setImmediate(() => matchRider(request_id, attempt + 1).catch(console.error));
+    // Re-run pipeline and forward to the next best candidate asynchronously.
+    setImmediate(async () => {
+      try {
+        const candidates = await matchRider(request_id, attempt + 1);
+        if (candidates.length > 0) {
+          // Skip the driver who just declined; fall back to them only if no other option.
+          const next = candidates.find(c => c.driver_id !== driverId) ?? candidates[0];
+          await selectDriverForRider(request_id, next.trip_id, next.driver_id, attempt + 1);
+        }
+      } catch (err) {
+        console.error('[matching] declineMatch retry error:', err);
+      }
+    });
   } else {
     // Exhaust retries: mark request expired
     await pool.query(
@@ -557,4 +507,285 @@ export async function declineMatch(matchId: string, driverId: string): Promise<v
     );
     console.warn(`[matching] Request ${request_id} exhausted ${MAX_ATTEMPTS} match attempts.`);
   }
+}
+
+// ── Driver-initiated pooling ──────────────────────────────────────────────────
+
+/**
+ * Inverted three-stage pipeline triggered when a driver posts a new trip.
+ * Scans the pool of pending rider requests, finds the best match by Scost,
+ * creates a pending_match, and pings the driver so they see the pooled rider.
+ */
+export async function matchDriver(tripId: string): Promise<void> {
+  console.log(`[matching] matchDriver: tripId=${tripId}`);
+
+  // Load the newly posted driver trip
+  const tripResult = await pool.query<{
+    trip_id: string; driver_id: string;
+    origin_lat: number; origin_lng: number;
+    destination_lat: number; destination_lng: number;
+    departure_time: Date; seats_available: number;
+    origin: string; destination: string;
+  }>(
+    `SELECT trip_id, driver_id,
+            ST_Y(origin_point::geometry)      AS origin_lat,
+            ST_X(origin_point::geometry)      AS origin_lng,
+            ST_Y(destination_point::geometry) AS destination_lat,
+            ST_X(destination_point::geometry) AS destination_lng,
+            departure_time, seats_available, origin, destination
+     FROM trips WHERE trip_id = $1`,
+    [tripId]
+  );
+  if (tripResult.rows.length === 0) {
+    console.warn(`[matching] matchDriver: trip ${tripId} not found`);
+    return;
+  }
+  const trip = tripResult.rows[0];
+
+  // Stage 1 (PostGIS Inverted): pending rider requests whose origin is within
+  // 5 000 m of the trip origin OR within 1 500 m of the origin→destination route
+  // line, whose destination is within 8 000 m, and whose departure time is ±30 min.
+  const candidateResult = await pool.query<TripRequestRow>(
+    `SELECT request_id, rider_id,
+            origin_lat, origin_lng, destination_lat, destination_lng,
+            departure_time, max_scost
+     FROM trip_requests
+     WHERE status = 'pending'
+       AND (
+         ST_DWithin(
+           ST_SetSRID(ST_MakePoint(origin_lng, origin_lat), 4326)::geography,
+           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+           5000
+         )
+         OR ST_DWithin(
+           ST_MakeLine(
+             ST_SetSRID(ST_MakePoint($1, $2), 4326),
+             ST_SetSRID(ST_MakePoint($3, $4), 4326)
+           )::geography,
+           ST_SetSRID(ST_MakePoint(origin_lng, origin_lat), 4326)::geography,
+           1500
+         )
+       )
+       AND ST_DWithin(
+         ST_SetSRID(ST_MakePoint(destination_lng, destination_lat), 4326)::geography,
+         ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography,
+         8000
+       )
+       AND departure_time BETWEEN ($5::timestamptz - INTERVAL '30 minutes')
+                              AND ($5::timestamptz + INTERVAL '30 minutes')
+     ORDER BY ST_Distance(
+       ST_SetSRID(ST_MakePoint(origin_lng, origin_lat), 4326)::geography,
+       ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+     ) ASC
+     LIMIT 20`,
+    [trip.origin_lng, trip.origin_lat, trip.destination_lng, trip.destination_lat, trip.departure_time]
+  );
+
+  const candidateRiders = candidateResult.rows;
+  if (candidateRiders.length === 0) {
+    console.log(`[matching] matchDriver: no pending riders near trip ${tripId}`);
+    return;
+  }
+  console.log(`[matching] matchDriver: ${candidateRiders.length} candidate rider(s) for trip ${tripId}`);
+
+  // Stage 2: RShareForm embedding ranking.
+  // Use the driver's route as the query and map each rider request to a
+  // CandidateTrip shape so rankWithEmbedding can score trajectory similarity.
+  const syntheticReq: TripRequestRow = {
+    request_id:      trip.trip_id,
+    rider_id:        trip.driver_id,
+    origin_lat:      trip.origin_lat,
+    origin_lng:      trip.origin_lng,
+    destination_lat: trip.destination_lat,
+    destination_lng: trip.destination_lng,
+    departure_time:  trip.departure_time,
+    max_scost:       null,
+  };
+
+  const ridersAsCandidates: CandidateTrip[] = candidateRiders.map(r => ({
+    trip_id:             r.request_id,
+    driver_id:           r.rider_id,
+    origin_lat:          r.origin_lat,
+    origin_lng:          r.origin_lng,
+    destination_lat:     r.destination_lat,
+    destination_lng:     r.destination_lng,
+    departure_time:      r.departure_time,
+    distance_to_rider_m: 0,
+    seats_available:     1,
+    route_score:         0,
+  }));
+
+  const rankedAsCandidates = await rankWithEmbedding(syntheticReq, ridersAsCandidates);
+
+  // Restore TripRequestRow order from the embedding-ranked list
+  const riderMap = new Map(candidateRiders.map(r => [r.request_id, r]));
+  const rankedRiders = rankedAsCandidates
+    .map(c => riderMap.get(c.trip_id))
+    .filter((r): r is TripRequestRow => r !== undefined);
+
+  // Stage 3: Scost — pick the rider with the lowest valid Scost (He et al. eq 9)
+  const driverAsCandidate: CandidateTrip = {
+    trip_id:             trip.trip_id,
+    driver_id:           trip.driver_id,
+    origin_lat:          trip.origin_lat,
+    origin_lng:          trip.origin_lng,
+    destination_lat:     trip.destination_lat,
+    destination_lng:     trip.destination_lng,
+    departure_time:      trip.departure_time,
+    distance_to_rider_m: 0,
+    seats_available:     trip.seats_available,
+    route_score:         0,
+  };
+
+  const existingPassengersResult = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) FROM bookings WHERE trip_id = $1 AND status NOT IN ('cancelled')`,
+    [tripId]
+  );
+  const existingPassengers = parseInt(existingPassengersResult.rows[0].count, 10);
+
+  let bestRider: TripRequestRow | null = null;
+  let bestScost = Infinity;
+
+  for (const riderReq of rankedRiders) {
+    const socialResult = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) FROM bookings b
+       JOIN trips t ON b.trip_id = t.trip_id
+       WHERE b.rider_id = $1 AND t.driver_id = $2
+         AND b.status NOT IN ('cancelled')`,
+      [riderReq.rider_id, trip.driver_id]
+    );
+    const hasSocialHistory = parseInt(socialResult.rows[0].count, 10) > 0;
+
+    const bd = computeScost(riderReq, driverAsCandidate, existingPassengers, hasSocialHistory);
+    const exceedsRiderCeiling = riderReq.max_scost !== null && bd.total > riderReq.max_scost;
+
+    console.log(
+      `[matching] matchDriver rider ${riderReq.request_id}: ` +
+      `Scost=${isFinite(bd.total) ? bd.total.toFixed(3) : 'Inf'} exceedsCeiling=${exceedsRiderCeiling}`
+    );
+
+    if (!exceedsRiderCeiling && isFinite(bd.total) && bd.total < bestScost) {
+      bestRider = riderReq;
+      bestScost = bd.total;
+    }
+  }
+
+  if (!bestRider) {
+    console.warn(`[matching] matchDriver: no qualifying rider for trip ${tripId}`);
+    return;
+  }
+
+  const riderInfoResult = await pool.query<{ name: string; rating: number }>(
+    `SELECT name, COALESCE(rating, 5.0) AS rating FROM users WHERE user_id = $1`,
+    [bestRider.rider_id]
+  );
+  const riderInfo = riderInfoResult.rows[0] ?? { name: 'Rider', rating: 5.0 };
+
+  const matchId = await insertPendingMatch(bestRider.request_id, tripId, trip.driver_id, bestScost, 1);
+  await notifyDriver(trip.driver_id, matchId, bestRider.request_id, tripId, riderInfo, {
+    origin:         trip.origin,
+    destination:    trip.destination,
+    departure_time: new Date(trip.departure_time).toISOString(),
+  });
+
+  console.log(`[matching] matchDriver: match ${matchId} → rider ${bestRider.rider_id} (Scost=${bestScost.toFixed(3)})`);
+}
+
+// ── Rider-initiated driver selection ─────────────────────────────────────────
+
+/**
+ * Called when a rider taps a specific driver from the ranked list returned by
+ * matchRider(). Computes the final Scost, creates the pending_match row, and
+ * sends the driver a push notification to accept or deny within 15 seconds.
+ *
+ * @returns match_id of the created pending_match
+ */
+export async function selectDriverForRider(
+  requestId: string,
+  tripId: string,
+  driverId: string,
+  attempt: number = 1
+): Promise<string> {
+  console.log(`[matching] selectDriverForRider: requestId=${requestId} tripId=${tripId} driverId=${driverId}`);
+
+  // Validate request is still pending
+  const reqResult = await pool.query<TripRequestRow>(
+    `SELECT request_id, rider_id,
+            origin_lat, origin_lng, destination_lat, destination_lng,
+            departure_time, max_scost
+     FROM trip_requests WHERE request_id = $1 AND status = 'pending'`,
+    [requestId]
+  );
+  if (reqResult.rows.length === 0) {
+    throw new Error(`Trip request ${requestId} not found or not pending`);
+  }
+  const req = reqResult.rows[0];
+
+  // Load the selected driver's trip, including display labels for the notification
+  const tripResult = await pool.query<{
+    trip_id: string; driver_id: string;
+    origin_lat: number; origin_lng: number;
+    destination_lat: number; destination_lng: number;
+    departure_time: Date; seats_available: number;
+    origin: string; destination: string;
+  }>(
+    `SELECT trip_id, driver_id,
+            ST_Y(origin_point::geometry)      AS origin_lat,
+            ST_X(origin_point::geometry)      AS origin_lng,
+            ST_Y(destination_point::geometry) AS destination_lat,
+            ST_X(destination_point::geometry) AS destination_lng,
+            departure_time, seats_available, origin, destination
+     FROM trips WHERE trip_id = $1 AND driver_id = $2`,
+    [tripId, driverId]
+  );
+  if (tripResult.rows.length === 0) {
+    throw new Error(`Trip ${tripId} not found or not owned by driver ${driverId}`);
+  }
+  const tripRow = tripResult.rows[0];
+
+  const trip: CandidateTrip = {
+    trip_id:             tripRow.trip_id,
+    driver_id:           tripRow.driver_id,
+    origin_lat:          tripRow.origin_lat,
+    origin_lng:          tripRow.origin_lng,
+    destination_lat:     tripRow.destination_lat,
+    destination_lng:     tripRow.destination_lng,
+    departure_time:      tripRow.departure_time,
+    seats_available:     tripRow.seats_available,
+    route_score:         0,
+    distance_to_rider_m: 0,
+  };
+
+  const existingResult = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) FROM bookings WHERE trip_id = $1 AND status NOT IN ('cancelled')`,
+    [tripId]
+  );
+  const existingPassengers = parseInt(existingResult.rows[0].count, 10);
+
+  const socialResult = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) FROM bookings b
+     JOIN trips t ON b.trip_id = t.trip_id
+     WHERE b.rider_id = $1 AND t.driver_id = $2
+       AND b.status NOT IN ('cancelled')`,
+    [req.rider_id, driverId]
+  );
+  const hasSocialHistory = parseInt(socialResult.rows[0].count, 10) > 0;
+
+  const bd = computeScost(req, trip, existingPassengers, hasSocialHistory);
+
+  const riderInfoResult = await pool.query<{ name: string; rating: number }>(
+    `SELECT name, COALESCE(rating, 5.0) AS rating FROM users WHERE user_id = $1`,
+    [req.rider_id]
+  );
+  const riderInfo = riderInfoResult.rows[0] ?? { name: 'Rider', rating: 5.0 };
+
+  const matchId = await insertPendingMatch(requestId, tripId, driverId, bd.total, attempt);
+  await notifyDriver(driverId, matchId, requestId, tripId, riderInfo, {
+    origin:         tripRow.origin,
+    destination:    tripRow.destination,
+    departure_time: new Date(tripRow.departure_time).toISOString(),
+  });
+
+  console.log(`[matching] selectDriverForRider: match ${matchId} → driver ${driverId} (Scost=${bd.total.toFixed(3)})`);
+  return matchId;
 }

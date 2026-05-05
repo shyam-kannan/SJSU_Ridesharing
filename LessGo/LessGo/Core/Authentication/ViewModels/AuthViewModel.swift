@@ -8,7 +8,7 @@ class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var showIDVerification = false
+
     @Published var savedLoginProfiles: [SavedLoginProfile] = []
 
     private let authService = AuthService.shared
@@ -248,9 +248,10 @@ class AuthViewModel: ObservableObject {
     // MARK: - Validation Helpers
 
     static func validateEmail(_ email: String) -> String? {
-        let trimmed = email.trimmingCharacters(in: .whitespaces)
+        let trimmed = email.trimmingCharacters(in: .whitespaces).lowercased()
         guard !trimmed.isEmpty else { return "Email is required" }
         guard trimmed.contains("@") && trimmed.contains(".") else { return "Enter a valid email" }
+        guard trimmed.hasSuffix("@sjsu.edu") else { return "An @sjsu.edu email is required" }
         return nil
     }
 

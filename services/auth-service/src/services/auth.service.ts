@@ -42,7 +42,7 @@ export const createUser = async (
     passwordHash,
     role,
     sjsuIdImagePath || null,
-    SJSUIdStatus.Pending, // Default status
+    SJSUIdStatus.Verified, // Automatically verified via email domain validation
   ];
 
   const result = await pool.query(query, values);

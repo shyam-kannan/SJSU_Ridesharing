@@ -16,7 +16,7 @@ struct SignUpView: View {
     @State private var passwordError: String?
     @State private var confirmError:  String?
 
-    @State private var showIDVerification = false
+
     @State private var showDuplicateEmailAlert = false
     @FocusState private var focusedField: Field?
 
@@ -197,10 +197,6 @@ struct SignUpView: View {
             .onChange(of: authVM.isAuthenticated) { loggedIn in
                 if loggedIn {
                     dismiss()
-                    // Prompt ID verification after small delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        authVM.showIDVerification = true
-                    }
                 }
             }
             .alert("Email Already Registered", isPresented: $showDuplicateEmailAlert) {

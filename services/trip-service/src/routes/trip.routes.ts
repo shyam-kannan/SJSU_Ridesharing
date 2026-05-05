@@ -107,6 +107,22 @@ router.post(
  */
 router.get('/request/:id', authenticateToken, asyncHandler(matchingController.getTripRequest));
 
+/**
+ * @route   POST /trips/request/:id/select-driver
+ * @desc    Rider selects a driver from the ranked list; sends the driver an accept/deny notification
+ * @access  Private
+ */
+router.post(
+  '/request/:id/select-driver',
+  authenticateToken,
+  [
+    body('trip_id').notEmpty().withMessage('trip_id required'),
+    body('driver_id').notEmpty().withMessage('driver_id required'),
+  ],
+  validateRequest,
+  asyncHandler(matchingController.selectDriver)
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**

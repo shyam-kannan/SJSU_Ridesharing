@@ -31,6 +31,36 @@ struct User: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 
+    init(
+        id: String,
+        name: String,
+        email: String,
+        role: UserRole,
+        sjsuIdStatus: SJSUIDStatus,
+        rating: Double,
+        vehicleInfo: String? = nil,
+        seatsAvailable: Int? = nil,
+        licensePlate: String? = nil,
+        mpg: Double? = nil,
+        profilePicture: String? = nil,
+        createdAt: Date? = nil,
+        updatedAt: Date? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.role = role
+        self.sjsuIdStatus = sjsuIdStatus
+        self.rating = rating
+        self.vehicleInfo = vehicleInfo
+        self.seatsAvailable = seatsAvailable
+        self.licensePlate = licensePlate
+        self.mpg = mpg
+        self.profilePicture = profilePicture
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id           = try container.decode(String.self, forKey: .id)

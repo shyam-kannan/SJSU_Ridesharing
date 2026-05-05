@@ -212,19 +212,60 @@ struct RiderTripRequest: Codable {
     }
 }
 
+// MARK: - Candidate Driver (two-way marketplace matching result)
+
+struct CandidateDriver: Codable, Identifiable, Equatable {
+    let id: String          // trip_id of the driver's posted trip
+    let driverId: String
+    let originLat: Double
+    let originLng: Double
+    let destinationLat: Double
+    let destinationLng: Double
+    let departureTime: Date
+    let distanceToRiderM: Double
+    let seatsAvailable: Int
+    let routeScore: Double  // >0 when driver has a frequent-route history on this corridor
+
+    // Walking time at a conservative 80 m/min pace
+    var walkingMinutes: Int { max(1, Int(ceil(distanceToRiderM / 80.0))) }
+
+    enum CodingKeys: String, CodingKey {
+        case id = "trip_id"
+        case driverId = "driver_id"
+        case originLat = "origin_lat"
+        case originLng = "origin_lng"
+        case destinationLat = "destination_lat"
+        case destinationLng = "destination_lng"
+        case departureTime = "departure_time"
+        case distanceToRiderM = "distance_to_rider_m"
+        case seatsAvailable = "seats_available"
+        case routeScore = "route_score"
+    }
+}
+
 struct RiderTripRequestResponse: Codable {
     let requestId: String
     let status: String
     let createdAt: Date
+    let availableDrivers: [CandidateDriver]
 
     enum CodingKeys: String, CodingKey {
         case requestId = "request_id"
         case status
         case createdAt = "created_at"
+        case availableDrivers = "available_drivers"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        requestId        = try c.decode(String.self, forKey: .requestId)
+        status           = try c.decode(String.self, forKey: .status)
+        createdAt        = try c.decode(Date.self,   forKey: .createdAt)
+        availableDrivers = try c.decodeIfPresent([CandidateDriver].self, forKey: .availableDrivers) ?? []
     }
 }
 
-struct TripRequestStatus: Codable {
+struct TripRequestStatus: Codable, Equatable {
     let requestId: String
     let riderId: String
     let status: String           // pending | matched | expired | cancelled

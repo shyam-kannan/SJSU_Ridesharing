@@ -237,3 +237,7 @@ private struct StatPill: View {
         .frame(maxWidth: .infinity)
     }
 }
+#Preview {
+    WelcomeView()
+        .environmentObject(AuthViewModel())
+}

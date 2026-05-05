@@ -249,6 +249,17 @@ class TripService {
         return response.routes
     }
 
+    // MARK: - Select Driver (rider-initiated marketplace)
+
+    func selectDriver(requestId: String, tripId: String, driverId: String) async throws {
+        struct Body: Encodable { let trip_id: String; let driver_id: String }
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/trips/request/\(requestId)/select-driver",
+            method: .post,
+            body: Body(trip_id: tripId, driver_id: driverId)
+        )
+    }
+
     // MARK: - Accept / Decline Match (driver)
 
     func acceptMatch(tripId: String, matchId: String) async throws {

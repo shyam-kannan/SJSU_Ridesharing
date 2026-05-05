@@ -8,7 +8,7 @@ struct ProfileView: View {
     @StateObject private var devTools = DevToolsViewModel()
     @State private var showEdit = false
     @State private var showDriverSetup = false
-    @State private var showIDVerification = false
+
     @State private var showLogoutConfirm = false
     @State private var showTripHistory = false
     @State private var showDeleteAccountAlert = false
@@ -92,9 +92,7 @@ struct ProfileView: View {
                 DriverSetupView(vm: vm, userId: authVM.currentUser?.id ?? "")
                     .onDisappear { Task { await authVM.refreshCurrentUser() } }
             }
-            .sheet(isPresented: $showIDVerification) {
-                IDVerificationView().environmentObject(authVM)
-            }
+
             .sheet(isPresented: $showTripHistory) {
                 TripHistoryView()
             }
@@ -386,48 +384,14 @@ struct ProfileView: View {
             }
             Spacer()
             switch status {
-            case .pending:
-                HStack(spacing: 8) {
-                    // Refresh status
-                    Button(action: {
-                        isRefreshingStatus = true
-                        Task {
-                            await authVM.refreshCurrentUser()
-                            isRefreshingStatus = false
-                        }
-                    }) {
-                        if isRefreshingStatus {
-                            ProgressView()
-                                .frame(width: 32, height: 32)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.brand)
-                                .frame(width: 32, height: 32)
-                                .background(Color.brand.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                    }
-                    Button(action: { showIDVerification = true }) {
-                        Text("Verify Now")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.brand)
-                            .cornerRadius(12)
-                    }
-                }
-            case .rejected:
-                Button(action: { showIDVerification = true }) {
-                    Text("Retry")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.brandRed)
-                        .cornerRadius(12)
-                }
+            case .pending, .rejected:
+                Text("Unverified")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.brandRed)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.brandRed.opacity(0.12))
+                    .cornerRadius(12)
             case .verified:
                 Text("Verified ✓")
                     .font(.system(size: 13, weight: .bold))

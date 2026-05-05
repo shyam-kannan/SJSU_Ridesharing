@@ -3,6 +3,7 @@ import { config } from '../config';
 import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
 import { mineFrequentRouteFromTrip } from './frequent_route.service';
+import { matchDriver } from './matching.service';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -114,6 +115,11 @@ export const createTrip = async (
 
   const result = await pool.query(query, values);
   const trip = result.rows[0];
+
+  // Trigger driver-initiated pooling: search for pending rider requests
+  // that fit this new trip. Non-blocking — failure here must not affect the
+  // trip creation response.
+  setImmediate(() => matchDriver(trip.trip_id).catch(console.error));
 
   return {
     ...trip,
@@ -536,6 +542,12 @@ export const updateTripState = async (tripId: string, newStatus: TripStatus): Pr
       break;
     case TripStatus.Completed:
       timestampField = 'completed_at = current_timestamp,';
+      // Cascade: mark all confirmed bookings as completed so riders can rate
+      pool.query(
+        `UPDATE bookings SET status = 'completed', updated_at = current_timestamp
+         WHERE trip_id = $1 AND status = 'confirmed'`,
+        [tripId]
+      ).catch((err) => console.error(`Failed to cascade booking completion for trip ${tripId}:`, err));
       // Fire GPS trajectory mining in the background (non-blocking)
       setImmediate(() => mineFrequentRouteFromTrip(tripId).catch(console.error));
       break;

@@ -128,6 +128,21 @@ struct FindingDriverView: View {
                     )
             }
             .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+            
+            // Dev Tool: Skip to match
+            Button(action: {
+                viewModel.devForceMatch(requestId: requestId)
+            }) {
+                Text("DEV: Skip to Match")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.blue.opacity(0.8))
+                    .cornerRadius(14)
+            }
+            .padding(.horizontal, 24)
             .padding(.bottom, 36)
         }
         .background(Color.cardBackground)
@@ -172,4 +187,13 @@ struct FindingDriverView: View {
                 .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
         )
     }
+}
+#Preview {
+    let viewModel = TripRequestViewModel()
+    viewModel.origin = "SJSU King Library"
+    viewModel.destination = "San Jose Diridon Station"
+    viewModel.state = .searching(requestId: "test-request-id")
+    
+    return FindingDriverView(requestId: "test-request-id", viewModel: viewModel)
+        .environmentObject(AuthViewModel())
 }

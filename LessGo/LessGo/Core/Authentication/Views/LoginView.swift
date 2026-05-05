@@ -378,3 +378,9 @@ struct LoginView: View {
         Task { await authVM.login(email: email, password: password) }
     }
 }
+#Preview {
+    NavigationView {
+        LoginView()
+            .environmentObject(AuthViewModel())
+    }
+}

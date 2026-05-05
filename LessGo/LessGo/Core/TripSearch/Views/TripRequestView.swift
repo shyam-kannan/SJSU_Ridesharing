@@ -188,15 +188,3 @@ private extension TripRequestState {
     }
 }
 
-extension TripRequestState: Equatable {
-    static func == (lhs: TripRequestState, rhs: TripRequestState) -> Bool {
-        switch (lhs, rhs) {
-        case (.idle, .idle): return true
-        case (.submitting, .submitting): return true
-        case (.searching(let a), .searching(let b)): return a == b
-        case (.failed(let a), .failed(let b)): return a == b
-        case (.matched, .matched): return true
-        default: return false
-        }
-    }
-}

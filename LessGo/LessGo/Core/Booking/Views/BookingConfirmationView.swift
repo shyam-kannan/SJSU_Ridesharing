@@ -14,7 +14,7 @@ struct BookingConfirmationView: View {
 
     @State private var showSuccess = false
     @State private var showVerificationAlert = false
-    @State private var showIDVerificationSheet = false
+
     @State private var isBookingComplete = false
 
     private var displayedPrice: Double {
@@ -190,14 +190,9 @@ struct BookingConfirmationView: View {
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.75), value: showSuccess)
         .alert("Verification Required", isPresented: $showVerificationAlert) {
-            Button("Verify Now") { showIDVerificationSheet = true }
-            Button("Cancel", role: .cancel) {}
+            Button("OK", role: .cancel) {}
         } message: {
-            Text("Your SJSU ID must be verified before booking. Please complete verification first.")
-        }
-        .sheet(isPresented: $showIDVerificationSheet) {
-            IDVerificationView().environmentObject(authVM)
-                .onDisappear { Task { await authVM.refreshCurrentUser() } }
+            Text("Your SJSU ID must be verified before booking.")
         }
     }
 

@@ -13,7 +13,7 @@
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { config } from '../config';
-import { matchRider, acceptMatch, declineMatch } from '../services/matching.service';
+import { matchRider, acceptMatch, declineMatch, selectDriverForRider } from '../services/matching.service';
 import { mergeRoute, getAnchorPoints } from '../services/route_merge.service';
 import { mineFrequentRouteFromTrip, getFrequentRoutes } from '../services/frequent_route.service';
 
@@ -56,28 +56,20 @@ export const requestTrip = async (req: Request, res: Response): Promise<void> =>
     );
 
     const row = result.rows[0];
-    console.log(`[matching] Trip request inserted: ${row.request_id}, triggering matchRider…`);
+    console.log(`[matching] Trip request inserted: ${row.request_id}, running matchRider…`);
 
-    // Trigger matching asynchronously — do not await so response is immediate
-    setImmediate(() => {
-      try {
-        matchRider(row.request_id, 1).catch(err => {
-          console.error(`[matching] [TRIGGER ERROR] matchRider promise rejected for ${row.request_id}:`, err);
-          if (err instanceof Error) console.error(`[matching] [TRIGGER ERROR] stack:`, err.stack);
-        });
-      } catch (triggerErr) {
-        console.error(`[matching] [TRIGGER ERROR] setImmediate threw synchronously:`, triggerErr);
-        if (triggerErr instanceof Error) console.error(`[matching] [TRIGGER ERROR] stack:`, triggerErr.stack);
-      }
-    });
+    const availableDrivers = await matchRider(row.request_id, 1);
 
     res.status(201).json({
       status: 'success',
-      message: 'Ride request submitted. Finding your driver…',
+      message: availableDrivers.length > 0
+        ? 'Ride request submitted. Select a driver below, or your request will remain pooled.'
+        : 'Ride request submitted. No drivers available right now — your request has been pooled.',
       data: {
-        request_id:  row.request_id,
-        status:      row.status,
-        created_at:  row.created_at,
+        request_id:       row.request_id,
+        status:           row.status,
+        created_at:       row.created_at,
+        available_drivers: availableDrivers,
       },
     });
   } catch (err) {
@@ -219,6 +211,47 @@ export const getDriverFrequentRoutes = async (req: Request, res: Response): Prom
 
   const routes = await getFrequentRoutes(driverId);
   res.json({ status: 'success', data: { driver_id: driverId, routes } });
+};
+
+// ── POST /trips/request/:id/select-driver ────────────────────────────────────
+/**
+ * Rider selects a specific driver from the ranked list returned by requestTrip.
+ * Body: { trip_id, driver_id }
+ * Params: id = request_id
+ */
+export const selectDriver = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const riderId    = (req as any).user?.userId;
+    const requestId  = req.params.id;
+    const { trip_id, driver_id } = req.body;
+
+    if (!riderId) { res.status(401).json({ status: 'error', message: 'Unauthorized' }); return; }
+    if (!trip_id || !driver_id) {
+      res.status(400).json({ status: 'error', message: 'trip_id and driver_id are required' });
+      return;
+    }
+
+    // Ensure this request belongs to the authenticated rider and is still pending
+    const ownership = await pool.query(
+      `SELECT request_id FROM trip_requests
+       WHERE request_id = $1 AND rider_id = $2 AND status = 'pending'`,
+      [requestId, riderId]
+    );
+    if (ownership.rows.length === 0) {
+      res.status(404).json({ status: 'error', message: 'Request not found, not yours, or not pending' });
+      return;
+    }
+
+    const matchId = await selectDriverForRider(requestId, trip_id, driver_id);
+    res.json({
+      status: 'success',
+      message: 'Driver request sent. Waiting for driver to accept.',
+      data: { match_id: matchId, request_id: requestId, trip_id, driver_id },
+    });
+  } catch (err) {
+    console.error('[matching] [ERROR] selectDriver:', err);
+    res.status(500).json({ status: 'error', message: (err as Error).message });
+  }
 };
 
 // ── POST /trips/debug-seed-history ───────────────────────────────────────────

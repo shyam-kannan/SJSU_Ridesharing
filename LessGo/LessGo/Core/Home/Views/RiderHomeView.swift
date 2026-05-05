@@ -27,6 +27,9 @@ struct RiderHomeView: View {
     @State private var showAccountMenu = false
     @State private var showNotifications = false
     @State private var showFinding = false
+    @State private var showDriverSelection = false
+    @State private var selectionRequestId: String? = nil
+    @State private var candidateDrivers: [CandidateDriver] = []
     @State private var showMatchedRide = false
     @State private var matchedTripStatus: TripRequestStatus? = nil
     @State private var showIDVerificationSheet = false
@@ -118,6 +121,18 @@ struct RiderHomeView: View {
             .sheet(isPresented: $showIDVerificationSheet) {
                 IDVerificationView().environmentObject(authVM)
             }
+            .fullScreenCover(isPresented: $showDriverSelection) {
+                if let requestId = selectionRequestId {
+                    DriverSelectionView(
+                        requestId: requestId,
+                        drivers: candidateDrivers,
+                        origin: requestVM.origin,
+                        destination: requestVM.destination,
+                        viewModel: requestVM
+                    )
+                    .environmentObject(authVM)
+                }
+            }
             .fullScreenCover(isPresented: $showFinding) {
                 if case .searching(let requestId) = requestVM.state {
                     FindingDriverView(requestId: requestId, viewModel: requestVM)
@@ -145,8 +160,21 @@ struct RiderHomeView: View {
             }
             .onChange(of: requestVM.state) { newState in
                 switch newState {
+                case .selectingDriver(let requestId, let drivers):
+                    selectionRequestId = requestId
+                    candidateDrivers = drivers
+                    showDriverSelection = true
                 case .searching:
-                    showFinding = true
+                    // Transition from driver selection → finding screen needs a brief
+                    // pause so SwiftUI can dismiss the first fullScreenCover first.
+                    if showDriverSelection {
+                        showDriverSelection = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            showFinding = true
+                        }
+                    } else {
+                        showFinding = true
+                    }
                 case .matched(let status):
                     showFinding = false
                     matchedTripStatus = status
@@ -155,6 +183,7 @@ struct RiderHomeView: View {
                         showMatchedRide = true
                     }
                 case .failed:
+                    showDriverSelection = false
                     showFinding = false
                 default:
                     break
@@ -1027,4 +1056,20 @@ private struct NotificationChatDestination: Identifiable {
     let otherPartyName: String
     let isDriver: Bool
     var id: String { "\(tripId)-\(isDriver ? "driver" : "rider")" }
+}
+#Preview {
+    let authVM = AuthViewModel()
+    authVM.currentUser = User(
+        id: "test-user",
+        name: "Sammy Spartan",
+        email: "sammy@sjsu.edu",
+        role: .rider,
+        sjsuIdStatus: .verified,
+        rating: 4.8
+    )
+    authVM.isAuthenticated = true
+    
+    return RiderHomeView()
+        .environmentObject(authVM)
+        .environmentObject(LocationManager.shared)
 }

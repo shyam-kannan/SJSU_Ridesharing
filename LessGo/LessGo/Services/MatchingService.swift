@@ -32,6 +32,12 @@ class MatchingService {
         )
     }
 
+    // MARK: - Select Driver (rider-initiated marketplace)
+
+    func selectDriver(requestId: String, tripId: String, driverId: String) async throws {
+        try await tripService.selectDriver(requestId: requestId, tripId: tripId, driverId: driverId)
+    }
+
     // MARK: - Poll for Match (rider-side, polling fallback)
     // Polls every 2 seconds for up to 60 seconds.
 

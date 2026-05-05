@@ -19,9 +19,9 @@ cd "$ROOT/services/payment-service" && npm run dev > /tmp/payment.log 2>&1 &
 cd "$ROOT/services/safety-service" && npm run dev > /tmp/safety.log 2>&1 &
 
 echo "Starting Python services..."
-cd "$ROOT/services/routing-service" && python app/main.py > /tmp/routing.log 2>&1 &
-cd "$ROOT/services/embedding-service" && python app/main.py > /tmp/embedding.log 2>&1 &
-cd "$ROOT/services/grouping-service" && python app/main.py > /tmp/grouping.log 2>&1 &
+cd "$ROOT/services/routing-service" && python3 -m app.main > /tmp/routing.log 2>&1 &
+cd "$ROOT/services/embedding-service" && python3 -m app.main > /tmp/embedding.log 2>&1 &
+cd "$ROOT/services/grouping-service" && python3 -m app.main > /tmp/grouping.log 2>&1 &
 
 sleep 4
 

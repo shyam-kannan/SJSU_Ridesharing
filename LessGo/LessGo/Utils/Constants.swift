@@ -3,40 +3,29 @@ import CoreLocation
 
 // MARK: - API Configuration
 enum APIConfig {
-    /// Read API base URL from build settings (via Info.plist)
-    /// Configured per-environment using .xcconfig files.
-    /// For hosted-only deployments, loopback/localhost values are ignored.
+    /// Read API base URL from build settings (via Info.plist key API_BASE_URL,
+    /// set by Config.Dev.xcconfig / Config.Prod.xcconfig).
+    /// Falls back to localhost if the plist key is missing or malformed.
     static var baseURL: String {
-        // Priority 1: Build config via Info.plist.
+        // Priority 1: xcconfig → Info.plist (API_BASE_URL build setting).
         if let bundleURL = Bundle.main.infoDictionary?["API_BASE_URL"] as? String,
-           let safeBundleURL = sanitizeHostedURL(bundleURL) {
-            return safeBundleURL
+           let safe = sanitizeURL(bundleURL) {
+            return safe
         }
 
-        // Priority 2: Optional scheme override for hosted endpoints only.
+        // Priority 2: Xcode scheme environment variable override.
         if let override = ProcessInfo.processInfo.environment["LESSGO_API_BASE_URL"],
-           let safeOverride = sanitizeHostedURL(override) {
-            return safeOverride
+           let safe = sanitizeURL(override) {
+            return safe
         }
 
-        // Priority 3: Hosted fallback.
-        return "https://lessgo-zeta.vercel.app/api"
+        // Priority 3: Local dev fallback.
+        return "http://127.0.0.1:3000/api"
     }
 
-    private static func sanitizeHostedURL(_ raw: String) -> String? {
+    private static func sanitizeURL(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed), let host = url.host?.lowercased() else {
-            return nil
-        }
-
-        // Reject loopback endpoints outside local development contexts.
-        if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-#if DEBUG || targetEnvironment(simulator)
-            return trimmed
-#else
-            return nil
-#endif
-        }
+        guard !trimmed.isEmpty, URL(string: trimmed) != nil else { return nil }
         return trimmed
     }
 }

@@ -10,6 +10,12 @@ import { RegisterRequest, LoginRequest, AuthResponse, AppError, successResponse,
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const userData: RegisterRequest = req.body;
+    
+    if (!userData.email.toLowerCase().endsWith('@sjsu.edu')) {
+      errorResponse(res, 'Only @sjsu.edu email addresses are allowed to register', 400);
+      return;
+    }
+
     const sjsuIdImage = req.file; // Multer file upload
 
     // Create user (service layer checks for duplicates)

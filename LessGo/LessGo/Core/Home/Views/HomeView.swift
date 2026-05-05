@@ -4,7 +4,7 @@ import UIKit
 struct HomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @State private var selectedTab: Tab = .home
-    @State private var showIDVerification = false
+
 
     enum Tab { case home, bookings, profile }
 
@@ -50,22 +50,6 @@ struct HomeView: View {
             CustomTabBar(selectedTab: $selectedTab)
         }
         .ignoresSafeArea(edges: .bottom)
-        // ── ID Verification prompt after registration ──
-        .sheet(isPresented: $authVM.showIDVerification) {
-            IDVerificationView()
-                .environmentObject(authVM)
-        }
-        // ── Unverified / Rejected banner — drivers only.
-        // Riders handle this banner inside RiderHomeView.searchHeader so it
-        // appears in-flow (above greeting) rather than as a floating overlay.
-        .overlay(alignment: .top) {
-            if authVM.isDriver, let user = authVM.currentUser, user.sjsuIdStatus != .verified {
-                VerifyBannerView(status: user.sjsuIdStatus) {
-                    authVM.showIDVerification = true
-                }
-                .padding(.top, VerifyBannerView.windowTopInset)
-            }
-        }
         .navigationViewStyle(.stack)
         .onChange(of: authVM.currentUser?.id) { _ in
             withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {

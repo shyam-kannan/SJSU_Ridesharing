@@ -3,11 +3,16 @@ import Combine
 import CoreLocation
 
 // MARK: - Trip Request State Machine
-// idle → submitting → searching → matched | failed
+//
+// idle → submitting → selectingDriver  (backend returned ≥1 ranked driver)
+//                   → searching        (no immediate candidates; request is pooled)
+//                                       ↓ (after rider picks a driver or skips)
+//                                    searching → matched | failed
 
-enum TripRequestState {
+enum TripRequestState: Equatable {
     case idle
     case submitting
+    case selectingDriver(requestId: String, drivers: [CandidateDriver])
     case searching(requestId: String)
     case matched(status: TripRequestStatus)
     case failed(message: String)
@@ -50,12 +55,42 @@ class TripRequestViewModel: ObservableObject {
                     destinationCoordinate: destinationCoord,
                     departureTime: departureTime
                 )
-                state = .searching(requestId: response.requestId)
-                startPolling(requestId: response.requestId)
+
+                if response.availableDrivers.isEmpty {
+                    // No immediate candidates — enter pooled waiting state
+                    state = .searching(requestId: response.requestId)
+                    startPolling(requestId: response.requestId)
+                } else {
+                    // Ranked candidates returned — present selection UI
+                    state = .selectingDriver(requestId: response.requestId, drivers: response.availableDrivers)
+                }
             } catch {
                 state = .failed(message: error.localizedDescription)
             }
         }
+    }
+
+    // MARK: - Select Driver (rider-initiated marketplace)
+
+    func selectDriver(requestId: String, tripId: String, driverId: String) {
+        pollTask?.cancel()
+        Task {
+            do {
+                try await matchingService.selectDriver(requestId: requestId, tripId: tripId, driverId: driverId)
+                state = .searching(requestId: requestId)
+                startPolling(requestId: requestId)
+            } catch {
+                state = .failed(message: "Could not send request: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Skip driver selection, enter pool
+
+    func skipToPool(requestId: String) {
+        pollTask?.cancel()
+        state = .searching(requestId: requestId)
+        startPolling(requestId: requestId)
     }
 
     // MARK: - Polling
@@ -93,5 +128,25 @@ class TripRequestViewModel: ObservableObject {
         originCoordinate = nil
         destinationCoordinate = nil
         departureTime = Date().addingTimeInterval(900)
+    }
+
+    // MARK: - Dev Tool
+    
+    func devForceMatch(requestId: String) {
+        pollTask?.cancel()
+        let dummyStatus = TripRequestStatus(
+            requestId: requestId,
+            riderId: "dev_rider_123",
+            status: "matched",
+            origin: self.origin.isEmpty ? "SJSU" : self.origin,
+            destination: self.destination.isEmpty ? "Target" : self.destination,
+            departureTime: self.departureTime,
+            matchedTripId: "dev_trip_123",
+            driverId: "dev_driver_123",
+            driverName: "Sammy Spartan",
+            driverRating: 4.9,
+            driverVehicleInfo: "Tesla Model 3, White"
+        )
+        state = .matched(status: dummyStatus)
     }
 }
