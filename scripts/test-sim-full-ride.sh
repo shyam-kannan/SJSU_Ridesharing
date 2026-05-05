@@ -36,6 +36,11 @@ set -euo pipefail
 # ── Config ────────────────────────────────────────────────────────────────────
 BASE_URL="${BASE_URL:-http://127.0.0.1:3000/api}"
 SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
+LOG_FILE="${LOG_FILE:-test-sim-detailed.log}"
+
+# Initialize log file
+echo "LessGo Simulation Log - $(date)" > "$LOG_FILE"
+echo "═══════════════════════════════════════════════════════════════" >> "$LOG_FILE"
 
 # Test account credentials (use sim- prefix to bypass SJSU ID checks in dev)
 RIDER_EMAIL="sim-rider-test@sjsu.edu"
@@ -47,7 +52,6 @@ DRIVER_NAME="Sim Driver"
 DRIVER_PASS="TestPassword1"
 
 # SJSU campus coordinates — rider is on campus, driver is ~200m away
-# This ensures matching finds the driver
 SJSU_LAT=37.3352
 SJSU_LNG=-121.8811
 
@@ -74,19 +78,85 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+log_api() {
+  local method="$1"
+  local url="$2"
+  local data="$3"
+  local response="$4"
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  
+  echo "[$timestamp] API REQUEST: $method $url" >> "$LOG_FILE"
+  if [[ -n "$data" ]]; then
+    echo "[$timestamp] REQUEST DATA: $data" >> "$LOG_FILE"
+  fi
+  if echo "$response" | jq . > /dev/null 2>&1; then
+    echo "[$timestamp] RESPONSE:" >> "$LOG_FILE"
+    echo "$response" | jq . >> "$LOG_FILE"
+  else
+    echo "[$timestamp] RESPONSE: $response" >> "$LOG_FILE"
+  fi
+  echo "---------------------------------------------------------------" >> "$LOG_FILE"
+}
+
+# curl_json <method> <path> <data> [token]
+curl_json() {
+  local method="$1"
+  local path="$2"
+  local data="$3"
+  local token="${4:-}"
+  local url="${BASE_URL}${path}"
+  local resp
+  
+  local args=("-s" "-X" "$method" "$url" "-H" "Content-Type: application/json")
+  if [[ -n "$token" ]]; then
+    args+=("-H" "Authorization: Bearer $token")
+  fi
+  if [[ -n "$data" ]]; then
+    args+=("-d" "$data")
+  fi
+  
+  resp=$(curl "${args[@]}")
+  log_api "$method" "$url" "$data" "$resp"
+  echo "$resp"
+}
+
 step_num=0
 step() {
   step_num=$((step_num + 1))
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo ""
   echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo -e "${BOLD}  STEP ${step_num}: $1${NC}"
   echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  
+  echo "[$timestamp] === STEP ${step_num}: $1 ===" >> "$LOG_FILE"
 }
 
-ok()   { echo -e "  ${GREEN}✓ $1${NC}"; }
-warn() { echo -e "  ${YELLOW}⚠ $1${NC}"; }
-fail() { echo -e "  ${RED}✗ $1${NC}"; exit 1; }
-info() { echo -e "  ${CYAN}→ $1${NC}"; }
+ok()   { 
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo -e "  ${GREEN}✓ $1${NC}"
+  echo "[$timestamp] SUCCESS: $1" >> "$LOG_FILE"
+}
+
+warn() { 
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo -e "  ${YELLOW}⚠ $1${NC}"
+  echo "[$timestamp] WARNING: $1" >> "$LOG_FILE"
+}
+
+fail() { 
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo -e "  ${RED}✗ $1${NC}"
+  echo "[$timestamp] ERROR: $1" >> "$LOG_FILE"
+  echo "Simulation failed. See $LOG_FILE for details."
+  exit 1
+}
+
+info() { 
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo -e "  ${CYAN}→ $1${NC}"
+  echo "[$timestamp] INFO: $1" >> "$LOG_FILE"
+}
 
 # Extract a JSON field using jq; fail with a clear message if missing
 jget() {
@@ -111,12 +181,13 @@ echo -e "${BOLD}║         LessGo — Full Ride E2E Test Simulation            
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 info "Gateway: ${BASE_URL}"
+info "Log File: ${LOG_FILE}"
 info "Departure: ${DEPARTURE_TIME}"
 echo ""
 
 # Verify gateway is up
 if ! curl -s "${BASE_URL%/api}/health" > /dev/null 2>&1; then
-  fail "Cannot reach API gateway at ${BASE_URL%/api}/health — are services running? (npm run dev:all)"
+  fail "Cannot reach API gateway at ${BASE_URL%/api}/health — are services running? (./scripts/dev-start.sh)"
 fi
 ok "API Gateway is reachable"
 
@@ -125,14 +196,12 @@ ok "API Gateway is reachable"
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Register RIDER account"
-RIDER_REG=$(curl -s -X POST "${BASE_URL}/auth/register" \
-  -H "Content-Type: application/json" \
-  -d "{
+RIDER_REG=$(curl_json POST "/auth/register" "{
     \"name\": \"${RIDER_NAME}\",
     \"email\": \"${RIDER_EMAIL}\",
     \"password\": \"${RIDER_PASS}\",
     \"role\": \"Rider\"
-  }" 2>&1) || true
+  }")
 
 if echo "$RIDER_REG" | jq -e '.data.accessToken' > /dev/null 2>&1; then
   RIDER_TOKEN=$(jget "$RIDER_REG" '.data.accessToken' 'rider accessToken')
@@ -140,14 +209,11 @@ if echo "$RIDER_REG" | jq -e '.data.accessToken' > /dev/null 2>&1; then
   ok "Rider registered: ${RIDER_ID}"
 elif echo "$RIDER_REG" | grep -qi "already exists"; then
   warn "Rider already exists, logging in..."
-  RIDER_LOGIN=$(curl -s -X POST "${BASE_URL}/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\": \"${RIDER_EMAIL}\", \"password\": \"${RIDER_PASS}\"}")
+  RIDER_LOGIN=$(curl_json POST "/auth/login" "{\"email\": \"${RIDER_EMAIL}\", \"password\": \"${RIDER_PASS}\"}")
   RIDER_TOKEN=$(jget "$RIDER_LOGIN" '.data.accessToken' 'rider accessToken')
   RIDER_ID=$(jget "$RIDER_LOGIN" '.data.user.user_id' 'rider user_id')
   ok "Rider logged in: ${RIDER_ID}"
 else
-  echo "$RIDER_REG" | jq . 2>/dev/null || echo "$RIDER_REG"
   fail "Rider registration failed"
 fi
 info "Rider token: ${RIDER_TOKEN:0:20}..."
@@ -155,14 +221,12 @@ info "Rider token: ${RIDER_TOKEN:0:20}..."
 # ──────────────────────────────────────────────────────────────────────────────
 
 step "Register DRIVER account"
-DRIVER_REG=$(curl -s -X POST "${BASE_URL}/auth/register" \
-  -H "Content-Type: application/json" \
-  -d "{
+DRIVER_REG=$(curl_json POST "/auth/register" "{
     \"name\": \"${DRIVER_NAME}\",
     \"email\": \"${DRIVER_EMAIL}\",
     \"password\": \"${DRIVER_PASS}\",
     \"role\": \"Driver\"
-  }" 2>&1) || true
+  }")
 
 if echo "$DRIVER_REG" | jq -e '.data.accessToken' > /dev/null 2>&1; then
   DRIVER_TOKEN=$(jget "$DRIVER_REG" '.data.accessToken' 'driver accessToken')
@@ -170,14 +234,11 @@ if echo "$DRIVER_REG" | jq -e '.data.accessToken' > /dev/null 2>&1; then
   ok "Driver registered: ${DRIVER_ID}"
 elif echo "$DRIVER_REG" | grep -qi "already exists"; then
   warn "Driver already exists, logging in..."
-  DRIVER_LOGIN=$(curl -s -X POST "${BASE_URL}/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\": \"${DRIVER_EMAIL}\", \"password\": \"${DRIVER_PASS}\"}")
+  DRIVER_LOGIN=$(curl_json POST "/auth/login" "{\"email\": \"${DRIVER_EMAIL}\", \"password\": \"${DRIVER_PASS}\"}")
   DRIVER_TOKEN=$(jget "$DRIVER_LOGIN" '.data.accessToken' 'driver accessToken')
   DRIVER_ID=$(jget "$DRIVER_LOGIN" '.data.user.user_id' 'driver user_id')
   ok "Driver logged in: ${DRIVER_ID}"
 else
-  echo "$DRIVER_REG" | jq . 2>/dev/null || echo "$DRIVER_REG"
   fail "Driver registration failed"
 fi
 info "Driver token: ${DRIVER_TOKEN:0:20}..."
@@ -188,18 +249,15 @@ info "Driver token: ${DRIVER_TOKEN:0:20}..."
 
 step "Verify driver (dev bypass)"
 # Use the dev-only debug-verify endpoint to mark the driver as verified + Driver role
-VERIFY_RESP=$(curl -s -X POST "${BASE_URL}/users/${DRIVER_ID}/debug-verify" \
-  -H "Content-Type: application/json" 2>&1) || true
-if echo "$VERIFY_RESP" | jq -e '.status' > /dev/null 2>&1; then
+VERIFY_RESP=$(curl_json POST "/users/${DRIVER_ID}/debug-verify" "" "$DRIVER_TOKEN")
+if echo "$VERIFY_RESP" | jq -e '.status' > /dev/null 2>&1 && ! echo "$VERIFY_RESP" | grep -qi "error"; then
   ok "Driver verified via debug endpoint"
 else
-  warn "Debug verify returned: $(echo "$VERIFY_RESP" | head -c 200)"
+  warn "Debug verify returned an error or unexpected response"
 fi
 
 # Refresh driver token so JWT claims reflect verified status
-DRIVER_REFRESH=$(curl -s -X POST "${BASE_URL}/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"email\": \"${DRIVER_EMAIL}\", \"password\": \"${DRIVER_PASS}\"}")
+DRIVER_REFRESH=$(curl_json POST "/auth/login" "{\"email\": \"${DRIVER_EMAIL}\", \"password\": \"${DRIVER_PASS}\"}")
 DRIVER_TOKEN=$(jget "$DRIVER_REFRESH" '.data.accessToken' 'driver accessToken')
 DRIVER_ID=$(jget "$DRIVER_REFRESH" '.data.user.user_id' 'driver user_id')
 ok "Driver token refreshed"
@@ -207,15 +265,12 @@ ok "Driver token refreshed"
 # ──────────────────────────────────────────────────────────────────────────────
 
 step "Set up driver vehicle profile"
-SETUP_RESP=$(curl -s -X PUT "${BASE_URL}/users/${DRIVER_ID}/driver-setup" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d '{
+SETUP_RESP=$(curl_json PUT "/users/${DRIVER_ID}/driver-setup" '{
     "vehicle_info": "2023 Honda Civic Silver",
     "seats_available": 4,
     "license_plate": "SIM-1234",
     "mpg": 35
-  }')
+  }' "$DRIVER_TOKEN")
 ok "Vehicle profile set: $(echo "$SETUP_RESP" | jq -r '.data.vehicle_info // "set"')"
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -223,17 +278,14 @@ ok "Vehicle profile set: $(echo "$SETUP_RESP" | jq -r '.data.vehicle_info // "se
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Driver posts a 'To SJSU' trip"
-TRIP_RESP=$(curl -s -X POST "${BASE_URL}/trips" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d "{
+TRIP_RESP=$(curl_json POST "/trips" "{
     \"origin\": \"10th & San Fernando, San Jose\",
     \"destination\": \"San Jose State University\",
     \"departure_time\": \"${DEPARTURE_TIME}\",
     \"seats_available\": 4
-  }")
+  }" "$DRIVER_TOKEN")
 
-TRIP_ID=$(jget "$TRIP_RESP" '.data.trip_id' 'trip_id') || fail "Trip creation failed: $TRIP_RESP"
+TRIP_ID=$(jget "$TRIP_RESP" '.data.trip_id' 'trip_id') || fail "Trip creation failed"
 ok "Trip created: ${TRIP_ID}"
 info "Origin: 10th & San Fernando → Destination: SJSU"
 info "Departure: ${DEPARTURE_TIME}"
@@ -243,10 +295,7 @@ info "Departure: ${DEPARTURE_TIME}"
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Rider submits ride request (triggers matching pipeline)"
-REQUEST_RESP=$(curl -s -X POST "${BASE_URL}/trips/request" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" \
-  -d "{
+REQUEST_RESP=$(curl_json POST "/trips/request" "{
     \"origin\": \"SJSU Engineering Building\",
     \"destination\": \"San Jose State University\",
     \"origin_lat\": ${RIDER_ORIGIN_LAT},
@@ -254,9 +303,9 @@ REQUEST_RESP=$(curl -s -X POST "${BASE_URL}/trips/request" \
     \"destination_lat\": ${DEST_LAT},
     \"destination_lng\": ${DEST_LNG},
     \"departure_time\": \"${DEPARTURE_TIME}\"
-  }")
+  }" "$RIDER_TOKEN")
 
-REQUEST_ID=$(jget "$REQUEST_RESP" '.data.request_id' 'request_id') || fail "Ride request failed: $REQUEST_RESP"
+REQUEST_ID=$(jget "$REQUEST_RESP" '.data.request_id' 'request_id') || fail "Ride request failed"
 ok "Ride request created: ${REQUEST_ID}"
 
 # Check for available drivers from the matching response
@@ -279,19 +328,16 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Rider selects driver from ranked list"
-SELECT_RESP=$(curl -s -X POST "${BASE_URL}/trips/request/${REQUEST_ID}/select-driver" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" \
-  -d "{
+SELECT_RESP=$(curl_json POST "/trips/request/${REQUEST_ID}/select-driver" "{
     \"trip_id\": \"${MATCHED_TRIP_ID}\",
     \"driver_id\": \"${MATCHED_DRIVER_ID}\"
-  }")
+  }" "$RIDER_TOKEN")
 
-MATCH_ID=$(jget "$SELECT_RESP" '.data.match_id' 'match_id') || warn "Select driver response: $SELECT_RESP"
+MATCH_ID=$(jget "$SELECT_RESP" '.data.match_id' 'match_id') || warn "Select driver did not return match_id"
 if [[ -n "${MATCH_ID:-}" ]]; then
   ok "Driver selected, match_id: ${MATCH_ID}"
 else
-  warn "select-driver did not return match_id — continuing with direct booking"
+  warn "Continuing with direct booking flow"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -300,10 +346,7 @@ fi
 
 step "Driver accepts the incoming match"
 if [[ -n "${MATCH_ID:-}" ]]; then
-  ACCEPT_RESP=$(curl -s -X POST "${BASE_URL}/trips/${MATCHED_TRIP_ID}/accept-match" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-    -d "{\"match_id\": \"${MATCH_ID}\"}")
+  ACCEPT_RESP=$(curl_json POST "/trips/${MATCHED_TRIP_ID}/accept-match" "{\"match_id\": \"${MATCH_ID}\"}" "$DRIVER_TOKEN")
   ok "Match accepted by driver"
   info "Response: $(echo "$ACCEPT_RESP" | jq -r '.message // .status' 2>/dev/null)"
 else
@@ -315,34 +358,31 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Rider books the trip (1 seat)"
-BOOKING_RESP=$(curl -s -X POST "${BASE_URL}/bookings" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" \
-  -d "{
+BOOKING_RESP=$(curl_json POST "/bookings" "{
     \"trip_id\": \"${MATCHED_TRIP_ID}\",
     \"seats_booked\": 1
-  }")
+  }" "$RIDER_TOKEN")
 
-BOOKING_ID=$(jget "$BOOKING_RESP" '.data.booking_id // .data.booking.booking_id' 'booking_id') || fail "Booking failed: $BOOKING_RESP"
+BOOKING_ID=$(jget "$BOOKING_RESP" '.data.booking_id // .data.booking.booking_id' 'booking_id') || fail "Booking failed"
 ok "Booking created: ${BOOKING_ID}"
 
 # Set pickup location
 info "Setting rider pickup location..."
-curl -s -X PUT "${BASE_URL}/bookings/${BOOKING_ID}/pickup-location" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" \
-  -d "{
+PICKUP_RESP=$(curl_json PUT "/bookings/${BOOKING_ID}/pickup-location" "{
     \"lat\": ${RIDER_ORIGIN_LAT},
     \"lng\": ${RIDER_ORIGIN_LNG},
     \"address\": \"SJSU Engineering Building\"
-  }" > /dev/null 2>&1 && ok "Pickup location set" || warn "Pickup location update skipped"
+  }" "$RIDER_TOKEN")
+if echo "$PICKUP_RESP" | jq -e '.status' > /dev/null 2>&1; then
+  ok "Pickup location set"
+else
+  warn "Pickup location update failed"
+fi
 
 # ──────────────────────────────────────────────────────────────────────────────
 
 step "Driver confirms the booking"
-CONFIRM_RESP=$(curl -s -X PUT "${BASE_URL}/bookings/${BOOKING_ID}/confirm" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}")
+CONFIRM_RESP=$(curl_json PUT "/bookings/${BOOKING_ID}/confirm" "" "$DRIVER_TOKEN")
 ok "Booking confirmed by driver"
 info "Status: $(echo "$CONFIRM_RESP" | jq -r '.data.status // .data.booking.status // "confirmed"' 2>/dev/null)"
 
@@ -351,67 +391,50 @@ info "Status: $(echo "$CONFIRM_RESP" | jq -r '.data.status // .data.booking.stat
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Driver starts trip → EN_ROUTE (heading to pickup)"
-curl -s -X PUT "${BASE_URL}/trips/${MATCHED_TRIP_ID}/state" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d '{"status": "en_route"}' > /dev/null
+curl_json PUT "/trips/${MATCHED_TRIP_ID}/state" '{"status": "en_route"}' "$DRIVER_TOKEN" > /dev/null
 ok "Trip state → en_route"
 
 # Simulate driver location updates
 info "Sending driver location updates..."
-curl -s -X POST "${BASE_URL}/trips/${MATCHED_TRIP_ID}/location" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d "{
+curl_json POST "/trips/${MATCHED_TRIP_ID}/location" "{
     \"latitude\": ${DRIVER_ORIGIN_LAT},
     \"longitude\": ${DRIVER_ORIGIN_LNG},
     \"heading\": 180,
     \"speed\": 25.0
-  }" > /dev/null 2>&1 && ok "Location update sent" || warn "Location update skipped"
+  }" "$DRIVER_TOKEN" > /dev/null
+ok "Location update sent"
 
 sleep 1
 
 # ──────────────────────────────────────────────────────────────────────────────
 
 step "Driver arrives at pickup → ARRIVED"
-curl -s -X PUT "${BASE_URL}/trips/${MATCHED_TRIP_ID}/state" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d '{"status": "arrived"}' > /dev/null
+curl_json PUT "/trips/${MATCHED_TRIP_ID}/state" '{"status": "arrived"}' "$DRIVER_TOKEN" > /dev/null
 ok "Trip state → arrived"
 
 # Update location to rider's pickup point
-curl -s -X POST "${BASE_URL}/trips/${MATCHED_TRIP_ID}/location" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d "{
+curl_json POST "/trips/${MATCHED_TRIP_ID}/location" "{
     \"latitude\": ${RIDER_ORIGIN_LAT},
     \"longitude\": ${RIDER_ORIGIN_LNG},
     \"heading\": 0,
     \"speed\": 0
-  }" > /dev/null 2>&1 || true
+  }" "$DRIVER_TOKEN" > /dev/null
 
 sleep 1
 
 # ──────────────────────────────────────────────────────────────────────────────
 
 step "Rider picked up → RIDE IN PROGRESS"
-curl -s -X PUT "${BASE_URL}/trips/${MATCHED_TRIP_ID}/state" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d '{"status": "in_progress"}' > /dev/null
+curl_json PUT "/trips/${MATCHED_TRIP_ID}/state" '{"status": "in_progress"}' "$DRIVER_TOKEN" > /dev/null
 ok "Trip state → in_progress"
 
 # Simulate mid-ride location
-curl -s -X POST "${BASE_URL}/trips/${MATCHED_TRIP_ID}/location" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d "{
+curl_json POST "/trips/${MATCHED_TRIP_ID}/location" "{
     \"latitude\": 37.3330,
     \"longitude\": -121.8900,
     \"heading\": 270,
     \"speed\": 35.0
-  }" > /dev/null 2>&1 || true
+  }" "$DRIVER_TOKEN" > /dev/null
 
 # Send a chat message from driver
 info "Driver sends chat message..."
@@ -428,10 +451,7 @@ sleep 1
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Ride complete → COMPLETED (triggers settlement)"
-COMPLETE_RESP=$(curl -s -X PUT "${BASE_URL}/trips/${MATCHED_TRIP_ID}/state" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${DRIVER_TOKEN}" \
-  -d '{"status": "completed"}')
+COMPLETE_RESP=$(curl_json PUT "/trips/${MATCHED_TRIP_ID}/state" '{"status": "completed"}' "$DRIVER_TOKEN")
 
 ok "Trip state → completed"
 
@@ -458,13 +478,10 @@ if [[ "$PAYMENT_AMOUNT" == "N/A" || -z "$PAYMENT_AMOUNT" ]]; then
   PAYMENT_AMOUNT="8.50"
 fi
 
-PAYMENT_RESP=$(curl -s -X POST "${BASE_URL}/payments/create-intent" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" \
-  -d "{
+PAYMENT_RESP=$(curl_json POST "/payments/create-intent" "{
     \"booking_id\": \"${BOOKING_ID}\",
     \"amount\": ${PAYMENT_AMOUNT}
-  }" 2>&1) || true
+  }" "$RIDER_TOKEN")
 
 PAYMENT_ID=$(echo "$PAYMENT_RESP" | jq -r '.data.payment_id // .data.id // empty' 2>/dev/null)
 if [[ -n "$PAYMENT_ID" ]]; then
@@ -473,9 +490,7 @@ if [[ -n "$PAYMENT_ID" ]]; then
 
   # Capture the payment
   step "Capture payment"
-  CAPTURE_RESP=$(curl -s -X POST "${BASE_URL}/payments/${PAYMENT_ID}/capture" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${RIDER_TOKEN}" 2>&1) || true
+  CAPTURE_RESP=$(curl_json POST "/payments/${PAYMENT_ID}/capture" "" "$RIDER_TOKEN")
   if echo "$CAPTURE_RESP" | jq -e '.status' > /dev/null 2>&1; then
     ok "Payment captured successfully"
   else
@@ -483,7 +498,6 @@ if [[ -n "$PAYMENT_ID" ]]; then
   fi
 else
   warn "Payment service may be offline or Stripe not configured"
-  info "Response: $(echo "$PAYMENT_RESP" | head -c 200)"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -491,15 +505,12 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 
 step "Rider rates the driver (5 stars)"
-RATE_RESP=$(curl -s -X POST "${BASE_URL}/bookings/${BOOKING_ID}/rate" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" \
-  -d '{"score": 5, "comment": "Great ride! Very smooth and on time."}' 2>&1) || true
+RATE_RESP=$(curl_json POST "/bookings/${BOOKING_ID}/rate" '{"score": 5, "comment": "Great ride! Very smooth and on time."}' "$RIDER_TOKEN")
 
 if echo "$RATE_RESP" | jq -e '.data' > /dev/null 2>&1; then
   ok "Rating submitted: 5 ★"
 else
-  warn "Rating response: $(echo "$RATE_RESP" | head -c 200)"
+  warn "Rating failed"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -508,13 +519,12 @@ fi
 
 step "Verify final state"
 info "Fetching trip details..."
-FINAL_TRIP=$(curl -s "${BASE_URL}/trips/${MATCHED_TRIP_ID}" 2>/dev/null)
+FINAL_TRIP=$(curl_json GET "/trips/${MATCHED_TRIP_ID}" "" "$RIDER_TOKEN")
 FINAL_STATUS=$(echo "$FINAL_TRIP" | jq -r '.data.status // "unknown"' 2>/dev/null)
 ok "Trip final status: ${FINAL_STATUS}"
 
 info "Fetching rider bookings..."
-RIDER_BOOKINGS=$(curl -s "${BASE_URL}/bookings" \
-  -H "Authorization: Bearer ${RIDER_TOKEN}" 2>/dev/null)
+RIDER_BOOKINGS=$(curl_json GET "/bookings" "" "$RIDER_TOKEN")
 BOOKING_COUNT=$(echo "$RIDER_BOOKINGS" | jq '.data.total // 0' 2>/dev/null)
 ok "Rider has ${BOOKING_COUNT} booking(s)"
 
@@ -529,10 +539,10 @@ if [[ "$SKIP_CLEANUP" == "1" ]]; then
   info "  Driver: ${DRIVER_ID} (${DRIVER_EMAIL})"
 else
   step "Cleanup: delete test accounts"
-  curl -s -X DELETE "${BASE_URL}/users/${RIDER_ID}/debug-delete" > /dev/null 2>&1 \
-    && ok "Rider account deleted" || warn "Rider cleanup skipped"
-  curl -s -X DELETE "${BASE_URL}/users/${DRIVER_ID}/debug-delete" > /dev/null 2>&1 \
-    && ok "Driver account deleted" || warn "Driver cleanup skipped"
+  curl_json DELETE "/users/${RIDER_ID}/debug-delete" "" "$RIDER_TOKEN" > /dev/null
+  ok "Rider account deleted"
+  curl_json DELETE "/users/${DRIVER_ID}/debug-delete" "" "$DRIVER_TOKEN" > /dev/null
+  ok "Driver account deleted"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════

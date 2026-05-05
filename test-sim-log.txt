@@ -1,0 +1,155 @@
+
+[1m╔══════════════════════════════════════════════════════════════╗[0m
+[1m║         LessGo — Full Ride E2E Test Simulation              ║[0m
+[1m╚══════════════════════════════════════════════════════════════╝[0m
+
+  [0;36m→ Gateway: http://127.0.0.1:3000/api[0m
+  [0;36m→ Departure: 2026-05-05T23:37:56Z[0m
+
+  [0;32m✓ API Gateway is reachable[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 1: Register RIDER account[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [1;33m⚠ Rider already exists, logging in...[0m
+  [0;32m✓ Rider logged in: f9b2b776-5527-48ff-aa90-9e9fe25b175c[0m
+  [0;36m→ Rider token: eyJhbGciOiJIUzI1NiIs...[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 2: Register DRIVER account[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [1;33m⚠ Driver already exists, logging in...[0m
+  [0;32m✓ Driver logged in: dad3dc95-56c0-4066-8d8b-534a8ce97562[0m
+  [0;36m→ Driver token: eyJhbGciOiJIUzI1NiIs...[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 3: Verify driver (dev bypass)[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Driver verified via debug endpoint[0m
+  [0;32m✓ Driver token refreshed[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 4: Set up driver vehicle profile[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Vehicle profile set: 2023 Honda Civic Silver[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 5: Driver posts a 'To SJSU' trip[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Trip created: ea7e59f9-d015-42c1-814f-27a3d5fcd52e[0m
+  [0;36m→ Origin: 10th & San Fernando → Destination: SJSU[0m
+  [0;36m→ Departure: 2026-05-05T23:37:56Z[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 6: Rider submits ride request (triggers matching pipeline)[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Ride request created: 4a605704-5b64-4e75-9e25-65de8d55605c[0m
+  [0;36m→ Matching returned 0 candidate driver(s)[0m
+  [1;33m⚠ No drivers matched automatically. Using the trip we created.[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 7: Rider selects driver from ranked list[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Driver selected, match_id: fbfbce75-e114-4f68-ba53-1ddd74a0db42[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 8: Driver accepts the incoming match[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Match accepted by driver[0m
+  [0;36m→ Response: Match accepted[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 9: Rider books the trip (1 seat)[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Booking created: a2175b44-07b9-4c66-897d-169ea42da600[0m
+  [0;36m→ Setting rider pickup location...[0m
+  [0;32m✓ Pickup location set[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 10: Driver confirms the booking[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Booking confirmed by driver[0m
+  [0;36m→ Status: confirmed[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 11: Driver starts trip → EN_ROUTE (heading to pickup)[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Trip state → en_route[0m
+  [0;36m→ Sending driver location updates...[0m
+  [0;32m✓ Location update sent[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 12: Driver arrives at pickup → ARRIVED[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Trip state → arrived[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 13: Rider picked up → RIDE IN PROGRESS[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Trip state → in_progress[0m
+  [0;36m→ Driver sends chat message...[0m
+  [0;32m✓ Chat message sent[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 14: Ride complete → COMPLETED (triggers settlement)[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Trip state → completed[0m
+  [0;32m✓ Settlement calculated![0m
+  [0;36m→   Driver earnings: $5.16[0m
+  [0;36m→   Cost per rider:  $5.09[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 15: Create payment intent for the booking[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Payment intent created: f4ab6fcf-7e89-4f48-9824-7fcca0abd430[0m
+  [0;36m→ Amount: $5.09[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 16: Capture payment[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Payment captured successfully[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 17: Rider rates the driver (5 stars)[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [1;33m⚠ Rating response: {"status":"error","message":"Can only rate completed bookings"}[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 18: Verify final state[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→ Fetching trip details...[0m
+  [0;32m✓ Trip final status: completed[0m
+  [0;36m→ Fetching rider bookings...[0m
+  [0;32m✓ Rider has 5 booking(s)[0m
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1m  STEP 19: Cleanup: delete test accounts[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓ Rider account deleted[0m
+  [0;32m✓ Driver account deleted[0m
+
+[0;32m╔══════════════════════════════════════════════════════════════╗[0m
+[0;32m║              ✓  SIMULATION COMPLETE                         ║[0m
+[0;32m╚══════════════════════════════════════════════════════════════╝[0m
+
+  [1mSummary:[0m
+    Rider:    Sim Rider (sim-rider-test@sjsu.edu)
+    Driver:   Sim Driver (sim-driver-test@sjsu.edu)
+    Trip:     ea7e59f9-d015-42c1-814f-27a3d5fcd52e
+    Booking:  a2175b44-07b9-4c66-897d-169ea42da600
+    Payment:  f4ab6fcf-7e89-4f48-9824-7fcca0abd430
+    Rating:   5 ★
+
+  [1mFlow Completed:[0m
+    1. ✓ Account creation (Rider + Driver)
+    2. ✓ Driver vehicle setup
+    3. ✓ Driver posted trip
+    4. ✓ Rider submitted ride request → matched
+    5. ✓ Rider selected driver
+    6. ✓ Driver accepted match
+    7. ✓ Rider booked trip → confirmed
+    8. ✓ Trip lifecycle: en_route → arrived → in_progress → completed
+    9. ✓ Settlement calculated
+   10. ✓ Payment created & captured
+   11. ✓ Rider rated driver
+
