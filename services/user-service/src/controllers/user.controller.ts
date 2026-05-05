@@ -437,7 +437,7 @@ export const updateUserRole = async (req: AuthRequest, res: Response): Promise<v
     // If switching to Driver, validate vehicle info exists
     if (role === 'Driver') {
       const currentUser = await userService.getUserById(userId);
-      if (!currentUser.vehicle_info || !currentUser.license_plate) {
+      if (!currentUser || !currentUser.vehicle_info || !currentUser.license_plate) {
         errorResponse(res, 'Complete driver setup (vehicle info and license plate) before switching to driver mode', 400);
         return;
       }

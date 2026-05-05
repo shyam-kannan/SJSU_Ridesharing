@@ -24,9 +24,9 @@ struct TripDetailsView: View {
     var body: some View {
         ZStack(alignment: .top) {
             ZStack {
-                Color(hex: "F4F6F2").ignoresSafeArea()
+                Color.appBackground.ignoresSafeArea()
                 Circle()
-                    .fill(Color(hex: "A3E635").opacity(0.10))
+                    .fill(DesignSystem.Colors.accentLime.opacity(0.10))
                     .frame(width: 260)
                     .offset(x: 150, y: 540)
                     .ignoresSafeArea()
@@ -40,7 +40,7 @@ struct TripDetailsView: View {
 
                     VStack(spacing: 14) {
                         Capsule()
-                            .fill(Color.black.opacity(0.12))
+                            .fill(Color.textSecondary.opacity(0.18))
                             .frame(width: 44, height: 5)
                             .padding(.top, 10)
 
@@ -54,10 +54,10 @@ struct TripDetailsView: View {
                     .padding(.horizontal, AppConstants.pagePadding)
                     .background(
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .fill(Color.white.opacity(0.98))
+                            .fill(Color.cardBackground)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                     )
                     .offset(y: -36)
@@ -97,7 +97,7 @@ struct TripDetailsView: View {
                 origin: trip.originPoint?.clLocationCoordinate2D,
                 destination: trip.destinationPoint?.clLocationCoordinate2D,
                 driver: nil,
-                showsUserLocation: false,
+                showsUserLocation: true,
                 onRouteUpdated: { info in
                     routeInfo = info
                 }
@@ -112,7 +112,7 @@ struct TripDetailsView: View {
             .frame(maxHeight: .infinity, alignment: .top)
 
             LinearGradient(
-                colors: [.clear, Color(hex: "F4F6F2")],
+                colors: [.clear, Color.appBackground],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -129,9 +129,9 @@ struct TripDetailsView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.12))
+                    .background(Color.cardBackground.opacity(0.88))
                     .overlay(
-                        Capsule().strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+                        Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
                     .clipShape(Capsule())
                     Spacer()
@@ -140,10 +140,10 @@ struct TripDetailsView: View {
                         Label(estimatedDriveTimeText, systemImage: "clock")
                     }
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(Color.black.opacity(0.28))
+                    .background(Color.sheetBackground.opacity(0.92))
                     .clipShape(Capsule())
                 }
                 .padding(.top, 58)
@@ -171,7 +171,7 @@ struct TripDetailsView: View {
 
             HStack(spacing: 8) {
                 routeMetricChip(icon: "point.topleft.down.curvedto.point.bottomright.up", text: routeDistanceText, color: .brand)
-                routeMetricChip(icon: "clock", text: estimatedDriveTimeText, color: Color(hex: "84CC16"))
+                routeMetricChip(icon: "clock", text: estimatedDriveTimeText, color: DesignSystem.Colors.accentLime)
                 Spacer()
             }
 
@@ -201,10 +201,10 @@ struct TripDetailsView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
                 .overlay(alignment: .top) {
                     LinearGradient(
@@ -269,7 +269,7 @@ struct TripDetailsView: View {
 
                 HStack(spacing: 6) {
                     StarRatingView(rating: trip.driver?.rating ?? 0, size: 13)
-                    Text(String(format: "%.1f", trip.driver?.rating ?? 0))
+                    Text(String(format: "%.1f", Double(trip.driver?.rating ?? 0)))
                         .font(.system(size: 13, weight: .semibold)).foregroundColor(.white.opacity(0.78))
                 }
 
@@ -285,10 +285,10 @@ struct TripDetailsView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(hex: "17191E"))
+                .fill(DesignSystem.Colors.darkBrandSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.onDark.opacity(0.08), lineWidth: 1)
                 )
         )
         .overlay(alignment: .topTrailing) {
@@ -327,8 +327,8 @@ struct TripDetailsView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                .fill(Color.cardBackground)
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
         )
     }
 
@@ -380,8 +380,8 @@ struct TripDetailsView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                .fill(Color.cardBackground)
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
         )
     }
 
@@ -432,10 +432,10 @@ struct TripDetailsView: View {
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.white.opacity(0.95))
+                    .fill(Color.cardBackground.opacity(0.95))
                     .overlay(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
             .overlay(alignment: .top) { Divider().opacity(0.3) }

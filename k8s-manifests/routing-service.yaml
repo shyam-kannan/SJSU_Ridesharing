@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: routing-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: routing-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: routing-service
+  namespace: lessgo
+  labels:
+    app: routing-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: routing-service
+  template:
+    metadata:
+      labels:
+        app: routing-service
+        tier: backend
+    spec:
+      serviceAccountName: routing-service-ksa
+      enableServiceLinks: false
+      containers:
+        - name: routing-service
+          image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/routing-service:${COMMIT_SHA}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8002
+              name: http
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          envFrom:
+            - configMapRef:
+                name: lessgo-config
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: lessgo-secrets-provider
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: routing-service
+  namespace: lessgo
+  labels:
+    app: routing-service
+spec:
+  selector:
+    app: routing-service
+  ports:
+    - protocol: TCP
+      port: 8002
+      targetPort: 8002
+      name: http
+  type: ClusterIP

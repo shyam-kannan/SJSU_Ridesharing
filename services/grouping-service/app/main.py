@@ -5,8 +5,11 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 from typing import List
+from app.secret_loader import load_mounted_secrets
 
+# K8s manifest update - port fix (8001)
 load_dotenv()
+load_mounted_secrets()
 
 app = FastAPI(title="Grouping Service", version="1.0.0")
 

@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: safety-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: safety-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: safety-service
+  namespace: lessgo
+  labels:
+    app: safety-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: safety-service
+  template:
+    metadata:
+      labels:
+        app: safety-service
+        tier: backend
+    spec:
+      serviceAccountName: safety-service-ksa
+      enableServiceLinks: false
+      containers:
+        - name: safety-service
+          image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/safety-service:${COMMIT_SHA}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8005
+              name: http
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          envFrom:
+            - configMapRef:
+                name: lessgo-config
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: lessgo-secrets-provider
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: safety-service
+  namespace: lessgo
+  labels:
+    app: safety-service
+spec:
+  selector:
+    app: safety-service
+  ports:
+    - protocol: TCP
+      port: 8005
+      targetPort: 8005
+      name: http
+  type: ClusterIP

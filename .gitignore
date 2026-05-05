@@ -51,6 +51,9 @@ htmlcov/
 logs/
 *.log
 
+# Test coverage artifacts
+coverage/
+
 # Docker
 docker-compose.override.yml
 
@@ -58,9 +61,18 @@ docker-compose.override.yml
 *.db
 *.sqlite
 
+# Kubernetes secrets
+k8s-manifests/lessgo-secrets.yaml
+
 # OS
 Thumbs.db
+.vercel
+.env*.local
 
 # Embedding service data and trained models
 services/embedding-service/data/
 services/embedding-service/models/
+
+# Grouping service (deprecated - not in use)
+services/grouping-service/
+k8s-manifests/grouping-service.yaml

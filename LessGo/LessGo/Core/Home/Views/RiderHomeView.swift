@@ -22,6 +22,8 @@ struct RiderHomeView: View {
         center: AppConstants.sjsuCoordinate,
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
+    @State private var trackingMode: MapUserTrackingMode = .follow
+    @State private var hasInitiallyCentered = false
     @State private var showAccountMenu = false
     @State private var showNotifications = false
     @State private var showFinding = false
@@ -64,7 +66,12 @@ struct RiderHomeView: View {
         NavigationView {
             ZStack(alignment: .bottom) {
                 // Full-screen map
-                Map(coordinateRegion: $region, showsUserLocation: true)
+                Map(
+                    coordinateRegion: $region,
+                    interactionModes: .all,
+                    showsUserLocation: true,
+                    userTrackingMode: $trackingMode
+                )
                     .ignoresSafeArea()
 
                 // Floating header
@@ -153,10 +160,21 @@ struct RiderHomeView: View {
                     break
                 }
             }
+            .onChange(of: locationManager.currentLocation) { newLocation in
+                guard !hasInitiallyCentered, let coord = newLocation?.coordinate else { return }
+                hasInitiallyCentered = true
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                    region = MKCoordinateRegion(
+                        center: coord,
+                        span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+                    )
+                }
+            }
             .onReceive(notificationBadgeTimer) { _ in
                 Task { await refreshNotificationBadge() }
             }
             .onAppear {
+                locationManager.requestPermission()
                 Task {
                     await refreshNotificationBadge()
                     prefillOriginFromLocation()
@@ -251,7 +269,7 @@ struct RiderHomeView: View {
             }
         }
         .frame(height: currentSheetHeight)
-        .background(Color.white)
+        .background(Color.cardBackground)
         .cornerRadius(28, corners: [.topLeft, .topRight])
         .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: -4)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: currentSheetHeight)
@@ -395,7 +413,7 @@ struct RiderHomeView: View {
             .cornerRadius(18)
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -669,7 +687,7 @@ struct RiderHomeView: View {
         .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
         )
     }
 
@@ -818,10 +836,10 @@ private struct RiderNotificationsSheet: View {
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
+                        .fill(Color.cardBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                         )
                 )
 
@@ -890,7 +908,7 @@ private struct RiderNotificationsSheet: View {
                         .foregroundColor(.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color(hex: "F8FAFC"))
+                        .background(Color.sheetBackground)
                         .cornerRadius(12)
 
                     Button(action: { onRefresh(); dismiss() }) {
@@ -899,13 +917,13 @@ private struct RiderNotificationsSheet: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color(hex: "0F172A"))
+                            .background(DesignSystem.Colors.actionDarkSurface)
                             .cornerRadius(12)
                     }
                 }
             }
             .padding(16)
-            .background(Color(hex: "F4F6F2").ignoresSafeArea())
+            .background(Color.appBackground.ignoresSafeArea())
             .navigationBarHidden(true)
             .task { await loadNotifications() }
         }
@@ -933,10 +951,10 @@ private struct RiderNotificationsSheet: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(item.isUnread ? Color.white : Color.white.opacity(0.9))
+                .fill(item.isUnread ? Color.cardBackground : Color.sheetBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
     }

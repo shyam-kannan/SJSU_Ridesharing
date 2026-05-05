@@ -1,0 +1,4 @@
+// Development environment configuration
+#include "Config.xcconfig"
+
+API_BASE_URL = https://lessgo-zeta.vercel.app/api

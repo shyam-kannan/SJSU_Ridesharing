@@ -98,7 +98,7 @@ struct IncomingRideRequestView: View {
                         Image(systemName: "star.fill")
                             .font(.system(size: 11))
                             .foregroundColor(.brandGold)
-                        Text(String(format: "%.1f", payload.riderRating))
+                        Text(String(format: "%.1f", Double(payload.riderRating)))
                             .font(.system(size: 13))
                             .foregroundColor(.textSecondary)
                     }
@@ -157,7 +157,7 @@ struct IncomingRideRequestView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 36)
         }
-        .background(Color.white)
+        .background(Color.cardBackground)
         .cornerRadius(24, corners: [.topLeft, .topRight])
         .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: -4)
         .onReceive(countdownTimer) { _ in

@@ -23,7 +23,7 @@ This project uses a microservices architecture with the following services:
 - **Database**: PostgreSQL with PostGIS
 - **Cache**: Redis
 - **Message Queue**: Kafka (optional)
-- **API Gateway**: To be implemented
+- **API Gateway**: Node.js/Express service
 - **Authentication**: JWT
 
 ## Getting Started
@@ -31,7 +31,7 @@ This project uses a microservices architecture with the following services:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node.js 18+ or Python 3.10+
+- Node.js 22+ and Python 3.10+
 - Git
 
 ### Setup
@@ -49,19 +49,21 @@ cp .env.example .env
 
 3. Update the `.env` file with your actual configuration values.
 
-4. Start the infrastructure services:
+4. Start Redis locally:
 ```bash
-# Start PostgreSQL and Redis
-docker-compose up -d
-
-# Start with Kafka (optional)
-docker-compose --profile kafka up -d
+docker compose up -d
 ```
 
-5. Set up the database:
+5. Set up the database through the bootstrap script:
 ```bash
-# Database migrations will be added later
+# Migrations only
+npm run bootstrap:db
+
+# Fresh database only: migrations + seed demo data
+npm run bootstrap:db -- --fresh
 ```
+
+If your Supabase database has already been seeded once, skip the `--fresh` run.
 
 ## Project Structure
 
@@ -91,6 +93,8 @@ lessgo-backend/
     └── load/                 # Load tests
 ```
 
+> Legacy cleanup note: the top-level [db/migrations/](db/migrations/) SQL snapshots are not used by the current npm migration workflow (`shared/database/migrations/` is the source of truth) and can be taken down after you confirm you no longer need the older SQL history.
+
 ## Development
 
 Each service is independent and can be developed separately. See individual service README files for specific development instructions.
@@ -104,6 +108,70 @@ npm run test:integration
 # Run load tests
 npm run test:load
 ```
+
+## CI/CD Image Publishing and Deployment
+
+The workflow [`.github/workflows/cd-autopilot.yml`](.github/workflows/cd-autopilot.yml) now:
+
+1. Builds all service images (API gateway + 10 microservices)
+2. Pushes images to Google Artifact Registry
+3. Tags each image with both the commit SHA and `latest`
+
+Configure these GitHub repository variables:
+
+- `GCP_PROJECT_ID`
+- `AR_REPO_NAME`
+- `AR_LOCATION`
+
+Configure these GitHub repository secrets:
+
+- `GCP_WIF_PROVIDER`
+- `GCP_DEPLOYER_SA`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `GOOGLE_MAPS_API_KEY`
+- `STRIPE_SECRET_KEY`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `FROM_EMAIL`
+
+Image naming format:
+
+- `${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/api-gateway:${GITHUB_SHA}`
+- `${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/auth-service:${GITHUB_SHA}`
+- ...and so on for each service.
+
+If you later deploy these images to Kubernetes, create an image pull secret in the target namespace if the repository is private.
+
+## GKE Deployment
+
+The manifests in [k8s-manifests/](k8s-manifests/) now point to the Artifact Registry images and keep service-to-service traffic on Kubernetes DNS names such as `http://auth-service:3001`.
+
+Recommended rollout order:
+
+1. Create the namespace, config map, and secret resources.
+2. Apply the service deployments.
+3. Expose `api-gateway` through a `LoadBalancer` service and use the assigned external IP directly.
+
+Example:
+
+```bash
+kubectl apply -f k8s-manifests/namespace.yaml
+kubectl apply -f k8s-manifests/configmap.yaml
+# Apply your secret manifest here if you keep one outside the repo
+kubectl apply -f k8s-manifests/
+kubectl -n lessgo get svc api-gateway -o wide
+```
+
+For the iOS app, the default API base URL is `https://lessgo-zeta.vercel.app/api` (via xcconfig).
+
+If you want to test against a local API gateway, set this Xcode Scheme environment variable:
+
+- `LESSGO_API_BASE_URL=http://127.0.0.1:3000/api`
+
+Then keep the gateway running locally (for example, `npm run dev:gateway`) while testing.
 
 ## Contributing
 

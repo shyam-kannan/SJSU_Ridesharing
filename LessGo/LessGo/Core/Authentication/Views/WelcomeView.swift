@@ -18,17 +18,17 @@ struct WelcomeView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: "F5F7F2").ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             GeometryReader { geo in
                 ZStack {
                     Circle()
-                        .fill(Color(hex: "A3E635").opacity(0.20))
+                        .fill(DesignSystem.Colors.accentLime.opacity(0.20))
                         .frame(width: geo.size.width * 1.05)
                         .offset(x: geo.size.width * 0.45, y: geo.size.height * 0.72)
 
                     Circle()
-                        .fill(Color.black.opacity(0.03))
+                        .fill(DesignSystem.Colors.textPrimary.opacity(0.03))
                         .frame(width: geo.size.width * 1.15)
                         .offset(x: geo.size.width * 0.55, y: -geo.size.height * 0.22)
 
@@ -49,32 +49,32 @@ struct WelcomeView: View {
                     // Icon with ring animation
                     ZStack {
                         Circle()
-                            .stroke(Color(hex: "A3E635").opacity(glowOpacity), lineWidth: 2)
+                            .stroke(DesignSystem.Colors.accentLime.opacity(glowOpacity), lineWidth: 2)
                             .frame(width: 120, height: 120)
                             .scaleEffect(glowScale)
 
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(Color.white)
+                            .fill(Color.cardBackground)
                             .frame(width: 100, height: 100)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 28)
-                                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                             .shadow(color: .black.opacity(0.10), radius: 20, x: 0, y: 10)
 
                         Image(systemName: "car.2.fill")
                             .font(.system(size: 44))
-                            .foregroundColor(.black.opacity(0.85))
+                            .foregroundColor(.textPrimary)
                     }
 
                     VStack(spacing: 12) {
                         Text("LessGo")
                             .font(.system(size: 54, weight: .black, design: .rounded))
-                            .foregroundColor(.black.opacity(0.9))
+                            .foregroundColor(.textPrimary)
 
                         Text("Carpooling Made Easy\nfor Spartans")
                             .font(.system(size: 19, weight: .semibold))
-                            .foregroundColor(.black.opacity(0.75))
+                            .foregroundColor(.textSecondary)
                             .multilineTextAlignment(.center)
                             .lineSpacing(6)
                             .opacity(taglineOpacity)
@@ -85,12 +85,12 @@ struct WelcomeView: View {
                             Text("Official SJSU Student Platform")
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundColor(Color(hex: "6B7280"))
+                        .foregroundColor(.textSecondary)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.85))
+                        .background(Color.cardBackground.opacity(0.85))
                         .overlay(
-                            Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                         )
                         .cornerRadius(12)
                         .opacity(taglineOpacity)
@@ -105,18 +105,18 @@ struct WelcomeView: View {
                 HStack(spacing: 0) {
                     StatPill(value: "3,200+", label: "Rides", icon: "car.fill")
                         .staggeredAppear(index: 0)
-                    Divider().frame(height: 36).overlay(Color.black.opacity(0.08))
+                    Divider().frame(height: 36).overlay(DesignSystem.Colors.border.opacity(0.8))
                     StatPill(value: "100%", label: "SJSU", icon: "checkmark.shield.fill")
                         .staggeredAppear(index: 1)
-                    Divider().frame(height: 36).overlay(Color.black.opacity(0.08))
+                    Divider().frame(height: 36).overlay(DesignSystem.Colors.border.opacity(0.8))
                     StatPill(value: "4.9★", label: "Rated", icon: "star.fill")
                         .staggeredAppear(index: 2)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
                 .background(
-                    Color.white
-                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                    Color.cardBackground
+                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                 )
                 .cornerRadius(20)
                 .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
@@ -139,10 +139,10 @@ struct WelcomeView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: DesignSystem.Layout.buttonHeightLarge)
-                        .background(Color(hex: "A3E635"))
-                        .foregroundColor(.black.opacity(0.88))
+                        .background(DesignSystem.Colors.accentLime)
+                        .foregroundColor(DesignSystem.Colors.onAccentLime)
                         .cornerRadius(28)
-                        .shadow(color: Color(hex: "A3E635").opacity(0.35), radius: 18, x: 0, y: 10)
+                        .shadow(color: DesignSystem.Colors.accentLime.opacity(0.35), radius: 18, x: 0, y: 10)
                     }
 
                     // Login button
@@ -154,7 +154,7 @@ struct WelcomeView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .background(Color.black.opacity(0.85))
+                            .background(DesignSystem.Colors.darkBrandSurface)
                             .foregroundColor(.white)
                             .cornerRadius(26)
                     }
@@ -174,11 +174,11 @@ struct WelcomeView: View {
                         Text("Safe & Secure")
                             .font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundColor(.black.opacity(0.58))
+                    .foregroundColor(.textSecondary)
 
                     Text("Powered by SJSU Students")
                         .font(.system(size: 12))
-                        .foregroundColor(.black.opacity(0.42))
+                        .foregroundColor(.textTertiary)
                 }
                 .padding(.top, 24)
                 .padding(.bottom, 40)
@@ -226,13 +226,13 @@ private struct StatPill: View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(Color(hex: "84CC16"))
+                .foregroundColor(DesignSystem.Colors.accentLime)
             Text(value)
                 .font(.system(size: 17, weight: .bold))
-                .foregroundColor(.black.opacity(0.88))
+                .foregroundColor(.textPrimary)
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.black.opacity(0.52))
+                .foregroundColor(.textSecondary)
         }
         .frame(maxWidth: .infinity)
     }

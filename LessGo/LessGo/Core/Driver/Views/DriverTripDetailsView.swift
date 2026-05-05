@@ -24,13 +24,13 @@ struct DriverTripDetailsView: View {
                         origin: trip.originPoint?.clLocationCoordinate2D,
                         destination: trip.destinationPoint?.clLocationCoordinate2D,
                         driver: nil,
-                        showsUserLocation: false
+                        showsUserLocation: true
                     )
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
                     .overlay(alignment: .topLeading) {
                         HStack(spacing: 6) {
@@ -97,10 +97,10 @@ struct DriverTripDetailsView: View {
                         .padding(14)
                         .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(hex: "F8FAFC"))
+                                .fill(Color.sheetBackground)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                                 )
                         )
 
@@ -128,8 +128,8 @@ struct DriverTripDetailsView: View {
                     .padding(18)
                     .background(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.white)
-                            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                            .fill(Color.cardBackground)
+                            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                     )
                     .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
                     .padding(.horizontal, 24)
@@ -146,8 +146,8 @@ struct DriverTripDetailsView: View {
                                 .foregroundColor(.textPrimary)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(Color.white)
-                                .overlay(Capsule().strokeBorder(Color.black.opacity(0.06), lineWidth: 1))
+                                .background(Color.cardBackground)
+                                .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                                 .clipShape(Capsule())
                         }
                         .padding(.horizontal, 24)
@@ -158,10 +158,10 @@ struct DriverTripDetailsView: View {
                                 .padding(48)
                                 .background(
                                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(Color.white)
+                                        .fill(Color.cardBackground)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                                         )
                                 )
                                 .padding(.horizontal, 24)
@@ -178,10 +178,10 @@ struct DriverTripDetailsView: View {
                             .padding(44)
                             .background(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.white)
+                                    .fill(Color.cardBackground)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                                         )
                             )
                             .padding(.horizontal, 24)
@@ -200,10 +200,10 @@ struct DriverTripDetailsView: View {
                             .padding(44)
                             .background(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.white)
+                                    .fill(Color.cardBackground)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                                         )
                             )
                             .padding(.horizontal, 24)
@@ -222,9 +222,9 @@ struct DriverTripDetailsView: View {
             }
             .background(
                 ZStack {
-                    Color(hex: "F4F6F2").ignoresSafeArea()
+                    Color.appBackground.ignoresSafeArea()
                     Circle()
-                        .fill(Color(hex: "A3E635").opacity(0.10))
+                        .fill(DesignSystem.Colors.accentLime.opacity(0.10))
                         .frame(width: 260)
                         .offset(x: 140, y: 580)
                         .ignoresSafeArea()
@@ -238,16 +238,16 @@ struct DriverTripDetailsView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.textSecondary)
                             .padding(8)
-                            .background(Color.white)
+                            .background(Color.cardBackground)
                             .clipShape(Circle())
-                            .overlay(Circle().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+                            .overlay(Circle().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
                     }
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text("Trip Passengers")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.black.opacity(0.88))
+                        .foregroundColor(.textPrimary)
                 }
             }
         }
@@ -267,21 +267,21 @@ struct DriverTripDetailsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.white)
-            .overlay(Capsule().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+            .background(Color.cardBackground)
+            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
             .clipShape(Capsule())
 
             HStack(spacing: 8) {
                 Image(systemName: "dollarsign.circle.fill")
-                    .foregroundColor(Color(hex: "84CC16"))
+                    .foregroundColor(DesignSystem.Colors.accentLime)
                 Text(String(format: "$%.2f est.", totalEarnings))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.textPrimary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.white)
-            .overlay(Capsule().strokeBorder(Color.black.opacity(0.05), lineWidth: 1))
+            .background(Color.cardBackground)
+            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
             .clipShape(Capsule())
 
             Spacer()

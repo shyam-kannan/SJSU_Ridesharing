@@ -1,0 +1,71 @@
+name: CI - Unit Tests
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run all unit tests
+        run: npm run test:unit
+
+      - name: Verify key service test coverage mapping
+        run: npm run test:service-coverage
+
+#  smoke-tests:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: read
+#      id-token: write
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v4
+#
+#      - name: Authenticate to Google Cloud
+#        uses: google-github-actions/auth@v2
+#        with:
+#          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+#          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+#
+#      - name: Setup gcloud
+#        uses: google-github-actions/setup-gcloud@v2
+#
+#      - name: Get GKE credentials
+#        run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$GCP_PROJECT_ID"
+#
+#      - name: Port-forward services for smoke tests
+#        run: |
+#          kubectl -n lessgo port-forward svc/api-gateway 3000:3000 >/tmp/api-gateway.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/auth-service 3001:3001 >/tmp/auth-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/user-service 3002:3002 >/tmp/user-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/trip-service 3003:3003 >/tmp/trip-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/booking-service 3004:3004 >/tmp/booking-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/payment-service 3005:3005 >/tmp/payment-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/notification-service 3006:3006 >/tmp/notification-service.log 2>&1 &
+#          kubectl -n lessgo port-forward svc/cost-calculation-service 3009:3009 >/tmp/cost-service.log 2>&1 &
+#          sleep 15
+#
+#      - name: Run smoke tests
+#        run: bash tests/run-all-tests.sh --all
+#
+#      - name: Stop port-forwards
+#        if: always()
+#        run: pkill -f "kubectl -n lessgo port-forward" || true

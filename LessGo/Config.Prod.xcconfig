@@ -1,0 +1,5 @@
+// Production environment configuration
+#include "Config.xcconfig"
+
+// Vercel HTTPS front door that proxies to the GKE gateway
+API_BASE_URL = https://lessgo-zeta.vercel.app/api

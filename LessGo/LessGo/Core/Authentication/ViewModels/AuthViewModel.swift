@@ -31,15 +31,56 @@ class AuthViewModel: ObservableObject {
 
     func checkAuthentication() async {
         refreshSavedLoginProfiles()
-        guard authService.isLoggedIn else { isAuthenticated = false; return }
+        guard authService.isLoggedIn else {
+            currentUser = nil
+            isAuthenticated = false
+            return
+        }
         do {
             currentUser = try await authService.getCurrentUser()
             // Keep JWT claims (role / verification status) in sync with current DB user.
             _ = try? await authService.refreshAccessToken()
             isAuthenticated = true
+        } catch let error as NetworkError {
+            if shouldInvalidateSession(for: error) {
+                currentUser = nil
+                isAuthenticated = false
+                KeychainManager.shared.clearActiveSession()
+            } else {
+                // Keep user logged in for transient failures (offline/cancelled/timeouts).
+                isAuthenticated = true
+            }
+        } catch is CancellationError {
+            isAuthenticated = authService.isLoggedIn
         } catch {
-            isAuthenticated = false
-            KeychainManager.shared.clearAll()
+            if let urlError = error as? URLError, urlError.code == .cancelled {
+                isAuthenticated = authService.isLoggedIn
+            } else {
+                currentUser = nil
+                isAuthenticated = false
+                KeychainManager.shared.clearActiveSession()
+            }
+        }
+    }
+
+    private func shouldInvalidateSession(for error: NetworkError) -> Bool {
+        switch error {
+        case .unauthorized, .forbidden:
+            return true
+        case .noConnection, .timeout:
+            return false
+        case .unknown(let underlying):
+            if let urlError = underlying as? URLError {
+                switch urlError.code {
+                case .cancelled, .notConnectedToInternet, .networkConnectionLost, .timedOut:
+                    return false
+                default:
+                    return true
+                }
+            }
+            return true
+        default:
+            return false
         }
     }
 

@@ -54,10 +54,10 @@ struct SignUpView: View {
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.white.opacity(0.88))
+                            .fill(Color.cardBackground.opacity(0.88))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                     )
                     .padding(.horizontal, AppConstants.pagePadding)
@@ -127,10 +127,10 @@ struct SignUpView: View {
                     .padding(.bottom, 18)
                     .background(
                         RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .fill(Color.white.opacity(0.97))
+                            .fill(Color.cardBackground.opacity(0.97))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                     )
                     .padding(.horizontal, AppConstants.pagePadding)
@@ -167,14 +167,14 @@ struct SignUpView: View {
             }
             .background(
                 ZStack {
-                    Color(hex: "F5F7F2").ignoresSafeArea()
+                    Color.appBackground.ignoresSafeArea()
                     Circle()
-                        .fill(Color(hex: "A3E635").opacity(0.12))
+                        .fill(DesignSystem.Colors.accentLime.opacity(0.12))
                         .frame(width: 280)
                         .offset(x: 140, y: 520)
                         .ignoresSafeArea()
                     Circle()
-                        .fill(Color.black.opacity(0.03))
+                        .fill(DesignSystem.Colors.textPrimary.opacity(0.03))
                         .frame(width: 340)
                         .offset(x: -140, y: 60)
                         .ignoresSafeArea()
@@ -250,17 +250,17 @@ struct SignUpView: View {
             HStack {
                 Text("Create account")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundColor(.black.opacity(0.9))
+                    .foregroundColor(.white)
                 Spacer()
                 HStack(spacing: 6) {
                     Image(systemName: "graduationcap.fill")
                     Text("SJSU")
                 }
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.black.opacity(0.8))
+                .foregroundColor(DesignSystem.Colors.onAccentLime)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color(hex: "A3E635"))
+                .background(DesignSystem.Colors.accentLime)
                 .clipShape(Capsule())
             }
 
@@ -277,10 +277,10 @@ struct SignUpView: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(hex: "17191E"))
+                .fill(DesignSystem.Colors.darkBrandSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.onDark.opacity(0.08), lineWidth: 1)
                 )
         )
     }
@@ -292,10 +292,10 @@ struct SignUpView: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
         }
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(DesignSystem.Colors.onDark.opacity(0.8))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.07))
+        .background(DesignSystem.Colors.onDark.opacity(0.07))
         .clipShape(Capsule())
     }
 }
@@ -318,14 +318,14 @@ private struct RolePill: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(isSelected ? Color(hex: "A3E635") : Color.white)
-            .foregroundColor(isSelected ? .black.opacity(0.9) : .textSecondary)
+            .background(isSelected ? DesignSystem.Colors.accentLime : Color.cardBackground)
+            .foregroundColor(isSelected ? DesignSystem.Colors.onAccentLime : .textSecondary)
             .cornerRadius(18)
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(isSelected ? Color.clear : Color.black.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(isSelected ? Color.clear : DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
             )
-            .shadow(color: isSelected ? Color(hex: "A3E635").opacity(0.25) : .black.opacity(0.04), radius: 8, x: 0, y: 4)
+            .shadow(color: isSelected ? DesignSystem.Colors.accentLime.opacity(0.25) : .black.opacity(0.04), radius: 8, x: 0, y: 4)
         }
     }
 }

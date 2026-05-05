@@ -50,7 +50,7 @@ struct ChatView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 8)
                 }
-                .background(Color(hex: "F4F6F2"))
+                .background(Color.appBackground)
                 .onAppear {
                     scrollToBottom(proxy: proxy)
                 }
@@ -61,7 +61,7 @@ struct ChatView: View {
 
         }
         .navigationBarHidden(true)
-        .background(Color(hex: "F4F6F2"))
+        .background(Color.appBackground)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
@@ -74,7 +74,7 @@ struct ChatView: View {
                     Color.clear.frame(height: 86)
                 }
             }
-            .background(Color(hex: "F4F6F2"))
+            .background(Color.appBackground)
         }
         .task {
             await loadMessages()
@@ -101,33 +101,33 @@ struct ChatView: View {
                 Button(action: { dismiss() }) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.white)
+                            .fill(Color.cardBackground)
                             .frame(width: 38, height: 38)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                             )
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.black.opacity(0.85))
+                            .foregroundColor(.textPrimary)
                     }
                 }
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(hex: "17191E"))
+                        .fill(DesignSystem.Colors.darkBrandSurface)
                         .frame(width: 42, height: 42)
                     Text(otherPartyName.prefix(1).uppercased())
                         .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundColor(Color(hex: "A3E635"))
+                        .foregroundColor(DesignSystem.Colors.accentLime)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(otherPartyName)
                         .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundColor(.black.opacity(0.9))
+                        .foregroundColor(.textPrimary)
                     HStack(spacing: 6) {
-                        Circle().fill(Color(hex: "84CC16")).frame(width: 6, height: 6)
+                        Circle().fill(DesignSystem.Colors.accentLime).frame(width: 6, height: 6)
                         Text(isDriver ? "Rider conversation" : "Driver conversation")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.textSecondary)
@@ -142,10 +142,10 @@ struct ChatView: View {
         .padding(.bottom, 12)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white.opacity(0.94))
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .padding(.horizontal, 10)
@@ -186,7 +186,7 @@ struct ChatView: View {
                         .foregroundColor(.brand)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color(hex: "A3E635").opacity(0.20))
+                        .background(DesignSystem.Colors.accentLime.opacity(0.20))
                         .cornerRadius(20)
                     }
                 }
@@ -196,10 +196,10 @@ struct ChatView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white)
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .padding(.horizontal, 10)
@@ -231,10 +231,10 @@ struct ChatView: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white)
+                    .fill(Color.sheetBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                     )
             )
 
@@ -247,11 +247,11 @@ struct ChatView: View {
                 } else {
                     ZStack {
                         Circle()
-                            .fill(canSendMessage ? Color(hex: "17191E") : Color.gray.opacity(0.3))
+                            .fill(canSendMessage ? DesignSystem.Colors.darkBrandSurface : Color.gray.opacity(0.3))
                             .frame(width: 36, height: 36)
                         Image(systemName: "arrow.up")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(canSendMessage ? Color(hex: "A3E635") : .white)
+                            .foregroundColor(canSendMessage ? DesignSystem.Colors.accentLime : .white)
                     }
                 }
             }
@@ -261,10 +261,10 @@ struct ChatView: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white.opacity(0.96))
+                .fill(Color.cardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                 )
         )
         .padding(.horizontal, 8)
@@ -391,13 +391,13 @@ struct MessageBubble: View {
                         Group {
                             if isFromCurrentUser {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color(hex: "17191E"))
+                                    .fill(DesignSystem.Colors.darkBrandSurface)
                             } else {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.white)
+                                    .fill(Color.cardBackground)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
                                     )
                             }
                         }

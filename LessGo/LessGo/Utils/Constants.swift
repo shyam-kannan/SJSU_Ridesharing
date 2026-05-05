@@ -3,11 +3,42 @@ import CoreLocation
 
 // MARK: - API Configuration
 enum APIConfig {
-    // For iOS Simulator → 127.0.0.1
-    static let baseURL = "http://127.0.0.1:3000/api"
+    /// Read API base URL from build settings (via Info.plist)
+    /// Configured per-environment using .xcconfig files.
+    /// For hosted-only deployments, loopback/localhost values are ignored.
+    static var baseURL: String {
+        // Priority 1: Build config via Info.plist.
+        if let bundleURL = Bundle.main.infoDictionary?["API_BASE_URL"] as? String,
+           let safeBundleURL = sanitizeHostedURL(bundleURL) {
+            return safeBundleURL
+        }
 
-    // For physical device → replace with your machine's local IP:
-    // static let baseURL = "http://192.168.1.X:3000/api"
+        // Priority 2: Optional scheme override for hosted endpoints only.
+        if let override = ProcessInfo.processInfo.environment["LESSGO_API_BASE_URL"],
+           let safeOverride = sanitizeHostedURL(override) {
+            return safeOverride
+        }
+
+        // Priority 3: Hosted fallback.
+        return "https://lessgo-zeta.vercel.app/api"
+    }
+
+    private static func sanitizeHostedURL(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed), let host = url.host?.lowercased() else {
+            return nil
+        }
+
+        // Reject loopback endpoints outside local development contexts.
+        if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+#if DEBUG || targetEnvironment(simulator)
+            return trimmed
+#else
+            return nil
+#endif
+        }
+        return trimmed
+    }
 }
 
 // MARK: - Stripe Configuration
