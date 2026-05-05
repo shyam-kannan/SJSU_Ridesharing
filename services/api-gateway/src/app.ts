@@ -65,7 +65,7 @@ app.use((req, res, next) => {
 const jwtMiddleware = (req: Request, res: Response, next: Function) => {
   // NOTE: mounted at app.use('/api', ...) so req.path is WITHOUT the /api prefix.
   // A request to /api/auth/register arrives here as /auth/register.
-  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh', '/vehicles'];
+  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh', '/vehicles', '/users/login', '/users/register'];
 
   console.log(`[JWT] path="${req.path}" | isPublic=${publicPaths.some(p => req.path.startsWith(p))}`);
 

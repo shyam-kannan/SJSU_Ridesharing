@@ -18,6 +18,7 @@ struct DriverHomeView: View {
 
     // ── Posted rides navigation ────────────────────────────────────────────────
     @State private var showCreateTrip = false
+    @State private var selectedTripForDetail: Trip? = nil
 
     // ── Notifications ──────────────────────────────────────────────────────────
     @State private var showAccountMenu = false
@@ -65,6 +66,9 @@ struct DriverHomeView: View {
 
                     // Post a Ride button
                     postRideButton
+                        .padding(.horizontal, AppConstants.pagePadding)
+
+                    postedRidesSection
                         .padding(.horizontal, AppConstants.pagePadding)
 
                     if let user = authVM.currentUser {
@@ -215,6 +219,10 @@ struct DriverHomeView: View {
                 Task { await refreshDashboardData() }
             }) {
                 CreateTripView()
+            }
+            .sheet(item: $selectedTripForDetail) { trip in
+                DriverTripDetailsView(trip: trip)
+                    .environmentObject(authVM)
             }
         }
     }
@@ -555,6 +563,71 @@ struct DriverHomeView: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 4)
         .luxuryCard(cornerRadius: 22)
+    }
+
+    // MARK: - Your Posted Rides Section
+
+    private var scheduledTrips: [Trip] {
+        profileVM.driverTrips.filter { $0.status == .pending }
+    }
+
+    private var postedRidesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Posted Rides")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.textPrimary)
+
+            if scheduledTrips.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "car.rear.road.lane.dashed")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color.brand.opacity(0.5))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No posted rides yet")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text("Tap 'Post a Ride' to get started")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.cardBackground)
+                )
+            } else {
+                ForEach(scheduledTrips) { trip in
+                    Button(action: { selectedTripForDetail = trip }) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(trip.origin) → \(trip.destination)")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                Text(trip.departureTime, style: .time)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                + Text(" · \(trip.seatsAvailable) seat\(trip.seatsAvailable == 1 ? "" : "s") left")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.cardBackground)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     // MARK: - Post Ride Button

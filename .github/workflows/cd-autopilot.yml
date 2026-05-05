@@ -1,9 +1,10 @@
 name: CD - Build and Push Images
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["CI - Unit Tests"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,7 @@ env:
 
 jobs:
   build-and-push:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
