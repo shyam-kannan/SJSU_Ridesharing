@@ -231,7 +231,7 @@ export const listUserBookings = async (
 ): Promise<BookingWithDetails[]> => {
   const query = asDriver
     ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 ORDER BY b.created_at DESC`
-    : `SELECT booking_id FROM bookings WHERE rider_id = $1 ORDER BY created_at DESC`;
+    : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 ORDER BY created_at DESC`;
 
   const result = await pool.query(query, [userId]);
 

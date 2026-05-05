@@ -34,6 +34,10 @@ struct RiderHomeView: View {
     @State private var notificationChatDestination: NotificationChatDestination?
     @State private var useLeaveNow = true
 
+    // Posted rides search flow
+    @State private var showSearchResults = false
+    @State private var searchCriteria: SearchCriteria?
+
     // Direction-first flow
     @State private var directionChoice: DirectionChoice = .none
     @State private var editableQuery = ""
@@ -118,6 +122,11 @@ struct RiderHomeView: View {
             .sheet(isPresented: $showIDVerificationSheet) {
                 IDVerificationView().environmentObject(authVM)
             }
+            .fullScreenCover(isPresented: $showSearchResults) {
+                if let criteria = searchCriteria {
+                    RiderSearchResultsView(criteria: criteria)
+                }
+            }
             .fullScreenCover(isPresented: $showFinding) {
                 if case .searching(let requestId) = requestVM.state {
                     FindingDriverView(requestId: requestId, viewModel: requestVM)
@@ -163,18 +172,18 @@ struct RiderHomeView: View {
             .onChange(of: locationManager.currentLocation) { newLocation in
                 guard !hasInitiallyCentered, let coord = newLocation?.coordinate else { return }
                 hasInitiallyCentered = true
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                    region = MKCoordinateRegion(
-                        center: coord,
-                        span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
-                    )
-                }
+                centerMap(on: coord)
             }
             .onReceive(notificationBadgeTimer) { _ in
                 Task { await refreshNotificationBadge() }
             }
             .onAppear {
                 locationManager.requestPermission()
+                locationManager.startLocationUpdates()
+                if !hasInitiallyCentered, let coord = locationManager.currentLocation?.coordinate {
+                    hasInitiallyCentered = true
+                    centerMap(on: coord)
+                }
                 Task {
                     await refreshNotificationBadge()
                     prefillOriginFromLocation()
@@ -544,15 +553,40 @@ struct RiderHomeView: View {
             Button(action: {
                 if useLeaveNow { requestVM.departureTime = Date().addingTimeInterval(300) }
                 editableFieldFocused = false
-                requestVM.submit()
+
+                // Create search criteria and navigate to search results
+                let direction: SearchCriteria.TripDirection
+                let location: String
+                let coordinate: CLLocationCoordinate2D
+
+                switch directionChoice {
+                case .toSJSU:
+                    direction = .toSJSU
+                    location = requestVM.origin
+                    coordinate = requestVM.originCoordinate ?? AppConstants.sjsuCoordinate
+                case .fromSJSU:
+                    direction = .fromSJSU
+                    location = requestVM.destination
+                    coordinate = requestVM.destinationCoordinate ?? AppConstants.sjsuCoordinate
+                case .none:
+                    return
+                }
+
+                searchCriteria = SearchCriteria(
+                    direction: direction,
+                    location: location,
+                    coordinate: coordinate,
+                    departureTime: requestVM.departureTime
+                )
+                showSearchResults = true
             }) {
                 HStack(spacing: 10) {
                     if case .submitting = requestVM.state {
                         ProgressView().tint(.white)
                     } else {
-                        Image(systemName: "car.fill")
+                        Image(systemName: "magnifyingglass")
                     }
-                    Text(isSubmitting ? "Searching…" : "Request Ride")
+                    Text(isSubmitting ? "Searching..." : "Search Rides")
                 }
                 .font(.system(size: 17, weight: .bold))
                 .foregroundColor(.white)
@@ -719,6 +753,15 @@ struct RiderHomeView: View {
         requestVM.originCoordinate = nil
         requestVM.destination = ""
         requestVM.destinationCoordinate = nil
+    }
+
+    private func centerMap(on coordinate: CLLocationCoordinate2D) {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            region = MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+            )
+        }
     }
 
     private func selectPlace(_ place: DestinationPlace) {

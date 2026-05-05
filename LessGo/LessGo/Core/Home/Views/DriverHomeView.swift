@@ -16,6 +16,9 @@ struct DriverHomeView: View {
     @State private var acceptedActiveTrip: Trip? = nil
     @State private var showAcceptedTripNav = false
 
+    // ── Posted rides navigation ────────────────────────────────────────────────
+    @State private var showCreateTrip = false
+
     // ── Notifications ──────────────────────────────────────────────────────────
     @State private var showAccountMenu = false
     @State private var showNotifications = false
@@ -58,6 +61,10 @@ struct DriverHomeView: View {
                         .padding(.top, 14)
 
                     availabilityToggleCard
+                        .padding(.horizontal, AppConstants.pagePadding)
+
+                    // Post a Ride button
+                    postRideButton
                         .padding(.horizontal, AppConstants.pagePadding)
 
                     if let user = authVM.currentUser {
@@ -202,6 +209,12 @@ struct DriverHomeView: View {
                 if let trip = currentActiveTrip {
                     activeRideBanner(trip: trip)
                 }
+            }
+            // ── Navigation Modifiers ─────────────────────────────────────────────
+            .fullScreenCover(isPresented: $showCreateTrip, onDismiss: {
+                Task { await refreshDashboardData() }
+            }) {
+                CreateTripView()
             }
         }
     }
@@ -543,6 +556,49 @@ struct DriverHomeView: View {
         .padding(.vertical, 4)
         .luxuryCard(cornerRadius: 22)
     }
+
+    // MARK: - Post Ride Button
+
+    private var postRideButton: some View {
+        Button(action: { showCreateTrip = true }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Post a Ride")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Create a scheduled trip for riders to book")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.75))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.brand, Color.brand.opacity(0.85)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: Color.brand.opacity(0.35), radius: 12, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 // MARK: - Driver Notifications Sheet
@@ -772,12 +828,6 @@ private struct DriverNotificationsSheet: View {
         default:                   return .brand
         }
     }
-}
-
-private struct DriverNotificationChatDestination: Identifiable {
-    let tripId: String
-    let otherPartyName: String
-    var id: String { tripId }
 }
 
 // MARK: - Driver Stat Card

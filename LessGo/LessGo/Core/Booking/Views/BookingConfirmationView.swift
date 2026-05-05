@@ -488,15 +488,34 @@ struct BookingSuccessView: View {
 
 // MARK: - Booking List View
 
+private enum DriverTab { case passengers, postedTrips }
+
 struct BookingListView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var vm = BookingViewModel()
     @State private var showAsDriver = false
+    @State private var driverTab: DriverTab = .passengers
+    @State private var editingTrip: Trip? = nil
     @State private var showAccountMenu = false
     @State private var showReportUser = false
     @State private var reportedUserId: String?
     @State private var reportedUserName: String?
     @State private var reportTripId: String?
+
+    private var filteredBookings: [Booking] {
+        let cutoff = Date().addingTimeInterval(-24 * 3600)
+        return vm.bookings.filter { booking in
+            // Hide bookings whose trip departed more than 24 hours ago
+            if let departure = booking.trip?.departureTime, departure < cutoff {
+                return false
+            }
+            // Hide completed bookings older than 24 hours
+            if booking.status == .completed {
+                return booking.updatedAt >= cutoff
+            }
+            return true
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -506,6 +525,8 @@ struct BookingListView: View {
                 if vm.isLoading {
                     SkeletonTripList().padding(.top, 12)
                     Spacer()
+                } else if showAsDriver && driverTab == .postedTrips {
+                    postedTripsContent
                 } else if let kind = vm.errorKind {
                     // Contextual error state with pull-to-refresh
                     ScrollView {
@@ -513,8 +534,8 @@ struct BookingListView: View {
                             .padding(.top, 60)
                             .padding(.horizontal, AppConstants.pagePadding)
                     }
-                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
-                } else if vm.bookings.isEmpty {
+                    .refreshable { await refreshCurrentTab() }
+                } else if filteredBookings.isEmpty {
                     ScrollView {
                         EmptyStateView(
                             icon: "calendar.badge.plus",
@@ -524,11 +545,11 @@ struct BookingListView: View {
                         ) {}
                         .padding(.top, 60)
                     }
-                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
+                    .refreshable { await refreshCurrentTab() }
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 14) {
-                            ForEach(vm.bookings) { booking in
+                            ForEach(filteredBookings) { booking in
                                 BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
                                     reportedUserId = userId
                                     reportedUserName = userName
@@ -541,7 +562,7 @@ struct BookingListView: View {
                         .padding(.top, 14)
                         .padding(.bottom, 100)
                     }
-                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
+                    .refreshable { await refreshCurrentTab() }
                 }
             }
             .background(
@@ -558,24 +579,26 @@ struct BookingListView: View {
             .navigationBarHidden(true)
             .task {
                 if authVM.isDriver { showAsDriver = true }
-                await vm.loadBookings(asDriver: showAsDriver)
+                await refreshCurrentTab()
             }
             .onAppear {
                 Task {
                     if authVM.isDriver, !showAsDriver {
                         showAsDriver = true
-                    } else {
-                        await vm.loadBookings(asDriver: showAsDriver)
                     }
+                    await refreshCurrentTab()
                 }
             }
-            .onChange(of: showAsDriver) { newVal in
-                Task { await vm.loadBookings(asDriver: newVal) }
+            .onChange(of: showAsDriver) { _ in
+                Task { await refreshCurrentTab() }
+            }
+            .onChange(of: driverTab) { _ in
+                Task { await refreshCurrentTab() }
             }
             .onChange(of: authVM.currentUser?.id) { _ in
                 Task {
                     showAsDriver = authVM.isDriver
-                    await vm.loadBookings(asDriver: showAsDriver)
+                    await refreshCurrentTab()
                 }
             }
             .sheet(isPresented: $showReportUser) {
@@ -587,6 +610,54 @@ struct BookingListView: View {
             .sheet(isPresented: $showAccountMenu) {
                 InAppAccountMenuView()
                     .environmentObject(authVM)
+            }
+            .sheet(item: $editingTrip) { trip in
+                EditPostedTripSheet(trip: trip, vm: vm)
+            }
+        }
+    }
+
+    private func refreshCurrentTab() async {
+        if showAsDriver && driverTab == .postedTrips {
+            if let id = authVM.currentUser?.id {
+                await vm.loadPostedTrips(driverId: id)
+            }
+        } else {
+            await vm.loadBookings(asDriver: showAsDriver)
+        }
+    }
+
+    @ViewBuilder
+    private var postedTripsContent: some View {
+        if vm.postedTrips.isEmpty {
+            ScrollView {
+                EmptyStateView(
+                    icon: "car.fill",
+                    title: "No posted trips",
+                    message: "Trips you post will appear here"
+                ) {}
+                .padding(.top, 60)
+            }
+            .refreshable {
+                if let id = authVM.currentUser?.id { await vm.loadPostedTrips(driverId: id) }
+            }
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(vm.postedTrips) { trip in
+                        PostedTripRow(
+                            trip: trip,
+                            onEdit: { editingTrip = trip },
+                            onDelete: { Task { await vm.cancelPostedTrip(id: trip.id) } }
+                        )
+                        .padding(.horizontal, AppConstants.pagePadding)
+                    }
+                }
+                .padding(.top, 14)
+                .padding(.bottom, 100)
+            }
+            .refreshable {
+                if let id = authVM.currentUser?.id { await vm.loadPostedTrips(driverId: id) }
             }
         }
     }
@@ -623,21 +694,41 @@ struct BookingListView: View {
             .padding(.top, 14)
 
             if authVM.isDriver {
-                Picker("View", selection: $showAsDriver) {
-                    Text("As Rider").tag(false)
-                    Text("As Driver").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .padding(4)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.cardBackground)
-                        .overlay(
+                VStack(spacing: 8) {
+                    Picker("View", selection: $showAsDriver) {
+                        Text("As Rider").tag(false)
+                        Text("As Driver").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.cardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                            )
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showAsDriver)
+
+                    if showAsDriver {
+                        Picker("Driver Tab", selection: $driverTab) {
+                            Text("Passengers").tag(DriverTab.passengers)
+                            Text("Posted Trips").tag(DriverTab.postedTrips)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(4)
+                        .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                                .fill(Color.cardBackground)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                                )
                         )
-                )
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showAsDriver)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: driverTab)
+                    }
+                }
                 .padding(.horizontal, AppConstants.pagePadding)
             }
 
@@ -719,6 +810,162 @@ struct BookingListView: View {
         .padding(.vertical, 6)
         .background(DesignSystem.Colors.onDark.opacity(0.08))
         .clipShape(Capsule())
+    }
+}
+
+// MARK: - Posted Trip Row
+
+private struct PostedTripRow: View {
+    let trip: Trip
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showDeleteConfirm = false
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(trip.origin)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    Text("→ \(trip.destination)")
+                        .font(.system(size: 13))
+                        .foregroundColor(.textSecondary)
+                }
+                Spacer()
+                Text(trip.status.displayName)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(statusColor(trip.status))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(statusColor(trip.status).opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            HStack(spacing: 16) {
+                Label(Self.dateFormatter.string(from: trip.departureTime), systemImage: "clock")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textTertiary)
+                Label("\(trip.seatsAvailable) seat\(trip.seatsAvailable == 1 ? "" : "s")", systemImage: "person.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textTertiary)
+            }
+            HStack(spacing: 10) {
+                Spacer()
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.cardBackground)
+                        .overlay(
+                            Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                        )
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: { showDeleteConfirm = true }) {
+                    Label("Cancel", systemImage: "xmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.08))
+                        .overlay(
+                            Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
+                        )
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(AppConstants.cardPadding)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.5), lineWidth: 1)
+        )
+        .confirmationDialog("Cancel this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Cancel Trip", role: .destructive, action: onDelete)
+            Button("Keep Trip", role: .cancel) {}
+        } message: {
+            Text("This will cancel the trip and notify any passengers.")
+        }
+    }
+
+    private func statusColor(_ status: TripStatus) -> Color {
+        switch status {
+        case .pending:   return .orange
+        case .enRoute, .inProgress, .arrived: return .blue
+        case .completed: return .gray
+        case .cancelled: return .red
+        }
+    }
+}
+
+// MARK: - Edit Posted Trip Sheet
+
+private struct EditPostedTripSheet: View {
+    let trip: Trip
+    @ObservedObject var vm: BookingViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var departureTime: Date
+    @State private var seats: Int
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(trip: Trip, vm: BookingViewModel) {
+        self.trip = trip
+        self.vm = vm
+        _departureTime = State(initialValue: trip.departureTime)
+        _seats = State(initialValue: trip.seatsAvailable)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Departure Time") {
+                    DatePicker("Departure", selection: $departureTime, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                        .datePickerStyle(.graphical)
+                }
+                Section("Seats Available") {
+                    Stepper("\(seats) seat\(seats == 1 ? "" : "s")", value: $seats, in: 1...8)
+                }
+                if let error = errorMessage {
+                    Section {
+                        Text(error).foregroundColor(.red).font(.system(size: 13))
+                    }
+                }
+            }
+            .navigationTitle("Edit Trip")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        Task {
+                            isSaving = true
+                            let ok = await vm.updatePostedTrip(id: trip.id, departureTime: departureTime, seatsAvailable: seats)
+                            isSaving = false
+                            if ok { dismiss() } else { errorMessage = "Failed to update trip. Please try again." }
+                        }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
     }
 }
 
@@ -925,9 +1172,18 @@ private struct BookingRow: View {
                 }
             }
 
-            // Cancel button for pending bookings
-            if booking.status == .pending {
-                Button(action: { Task { await vm.cancelBooking(id: booking.id) } }) {
+            // Cancel button for pending bookings (riders only)
+            if !showAsDriver && booking.status == .pending {
+                Button(action: {
+                    Task {
+                        let success = await vm.cancelBooking(id: booking.id)
+                        if success {
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            // Reload bookings to refresh the list
+                            await vm.loadBookings(asDriver: showAsDriver)
+                        }
+                    }
+                }) {
                     Text("Cancel Booking")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.brandRed)
@@ -1002,6 +1258,7 @@ private struct BookingRow: View {
 
 private struct BookingRideDetailView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
     let booking: Booking
     @ObservedObject var vm: BookingViewModel
     let showAsDriver: Bool
@@ -1243,8 +1500,55 @@ private struct BookingRideDetailView: View {
                 }
             }
 
+            // Driver approves/rejects pending bookings (using bookingState)
+            if showAsDriver && booking.bookingState == .pending {
+                HStack(spacing: 10) {
+                    Button(action: {
+                        Task {
+                            _ = await vm.rejectBooking(id: booking.id)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                dismiss()
+                            }
+                        }
+                    }) {
+                        actionPill(title: "Decline", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
+                    }
+                    Button(action: {
+                        Task {
+                            _ = await vm.approveBooking(id: booking.id)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                dismiss()
+                            }
+                        }
+                    }) {
+                        actionPill(title: "Approve", icon: "checkmark.circle.fill", fill: Color.brandGreen.opacity(0.08), fg: .brandGreen)
+                    }
+                }
+            }
+
             if !showAsDriver && booking.status == .pending {
-                Button(action: { Task { await vm.cancelBooking(id: booking.id) } }) {
+                Button(action: {
+                    Task {
+                        _ = await vm.cancelBooking(id: booking.id)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dismiss()
+                        }
+                    }
+                }) {
+                    actionPill(title: "Cancel Booking", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
+                }
+            }
+
+            // Driver can cancel any booking on their posted trips (except completed)
+            if showAsDriver && booking.status != .completed && booking.status != .cancelled {
+                Button(action: {
+                    Task {
+                        _ = await vm.cancelBooking(id: booking.id)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dismiss()
+                        }
+                    }
+                }) {
                     actionPill(title: "Cancel Booking", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
                 }
             }

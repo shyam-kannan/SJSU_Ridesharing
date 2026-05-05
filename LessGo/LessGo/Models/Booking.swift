@@ -8,6 +8,7 @@ struct Booking: Codable, Identifiable {
     let riderId: String
     let seatsBooked: Int
     let status: BookingStatus
+    let bookingState: BookingState
     let createdAt: Date
     let updatedAt: Date
     let trip: Trip?
@@ -22,11 +23,30 @@ struct Booking: Codable, Identifiable {
         case riderId = "rider_id"
         case seatsBooked = "seats_booked"
         case status
+        case bookingState = "booking_state"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case trip, rider
         case pickupLocation = "pickup_location"
         case quote, payment
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        tripId = try c.decode(String.self, forKey: .tripId)
+        riderId = try c.decode(String.self, forKey: .riderId)
+        seatsBooked = try c.decode(Int.self, forKey: .seatsBooked)
+        status = try c.decode(BookingStatus.self, forKey: .status)
+        // backend may omit booking_state for older endpoints — default to .pending
+        bookingState = try c.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        trip = try c.decodeIfPresent(Trip.self, forKey: .trip)
+        rider = try c.decodeIfPresent(User.self, forKey: .rider)
+        pickupLocation = try c.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
+        quote = try c.decodeIfPresent(Quote.self, forKey: .quote)
+        payment = try c.decodeIfPresent(Payment.self, forKey: .payment)
     }
 }
 
@@ -35,6 +55,46 @@ enum BookingStatus: String, Codable {
     case confirmed
     case cancelled
     case completed
+}
+
+// MARK: - Booking State (for driver approval flow)
+
+enum BookingState: String, Codable {
+    case pending = "pending"
+    case approved = "approved"
+    case rejected = "rejected"
+    case cancelled = "cancelled"
+    case completed = "completed"
+
+    var displayName: String {
+        switch self {
+        case .pending: return "Awaiting Approval"
+        case .approved: return "Confirmed"
+        case .rejected: return "Declined"
+        case .cancelled: return "Cancelled"
+        case .completed: return "Completed"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .pending: return "clock.fill"
+        case .approved: return "checkmark.circle.fill"
+        case .rejected: return "xmark.circle.fill"
+        case .cancelled: return "xmark.circle"
+        case .completed: return "checkmark.seal.fill"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .pending: return "brandGold"
+        case .approved: return "brandGreen"
+        case .rejected: return "brandRed"
+        case .cancelled: return "brandRed"
+        case .completed: return "brandGreen"
+        }
+    }
 }
 
 struct Quote: Codable {
@@ -133,6 +193,7 @@ struct BookingWithRider: Codable, Identifiable {
     let riderPicture: String?
     let seatsBooked: Int
     let status: BookingStatus
+    let bookingState: BookingState
     let pickupLocation: PickupLocation?
     let createdAt: Date
 
@@ -147,6 +208,7 @@ struct BookingWithRider: Codable, Identifiable {
         case riderPicture = "rider_picture"
         case seatsBooked = "seats_booked"
         case status
+        case bookingState = "booking_state"
         case pickupLocation = "pickup_location"
         case createdAt = "created_at"
     }
@@ -162,6 +224,7 @@ struct BookingWithRider: Codable, Identifiable {
         riderPicture = try container.decodeIfPresent(String.self, forKey: .riderPicture)
         seatsBooked = try container.decode(Int.self, forKey: .seatsBooked)
         status = try container.decode(BookingStatus.self, forKey: .status)
+        bookingState = try container.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
         pickupLocation = try container.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
 

@@ -102,4 +102,34 @@ class BookingService {
 
         return booking
     }
+
+    // MARK: - Approve Booking (Driver Only)
+
+    func approveBooking(id: String) async throws -> Booking {
+        let booking: Booking = try await network.request(
+            endpoint: "/bookings/\(id)/approve",
+            method: .patch
+        )
+        return booking
+    }
+
+    // MARK: - Reject Booking (Driver Only)
+
+    func rejectBooking(id: String) async throws -> Booking {
+        let booking: Booking = try await network.request(
+            endpoint: "/bookings/\(id)/reject",
+            method: .patch
+        )
+        return booking
+    }
+
+    // MARK: - Get Booking for Trip
+
+    func getBookingForTrip(tripId: String) async throws -> Booking? {
+        let response: BookingListResponse = try await network.request(
+            endpoint: "/bookings/trip/\(tripId)",
+            method: .get
+        )
+        return response.bookings.first
+    }
 }

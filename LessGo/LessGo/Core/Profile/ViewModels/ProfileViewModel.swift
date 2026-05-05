@@ -143,8 +143,6 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile updated!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-        } catch let error as NetworkError {
-            errorMessage = error.userMessage
         } catch {
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
@@ -293,6 +291,11 @@ class ProfileViewModel: ObservableObject {
             #if DEBUG
             print("[ProfileViewModel] Failed to load driver trips: \(error)")
             #endif
+            // Surface a user-friendly message so the driver dashboard can show
+            // an empty/error state instructing the user to pull-to-refresh.
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Pull down to refresh"
+            // Clear trips to ensure UI shows empty state
+            driverTrips = []
         }
     }
 

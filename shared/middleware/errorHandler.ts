@@ -1,14 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
+import { ValidationError } from '../types';
 
 /**
  * Custom Application Error class
+ * Extends Error with additional properties for API error handling
  */
 export class AppError extends Error {
   statusCode: number;
   isOperational: boolean;
-  errors?: any;
+  errors?: ValidationError[] | Record<string, string>;
 
-  constructor(message: string, statusCode: number = 500, errors?: any) {
+  constructor(
+    message: string,
+    statusCode: number = 500,
+    errors?: ValidationError[] | Record<string, string>
+  ) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
@@ -20,6 +26,10 @@ export class AppError extends Error {
 /**
  * Global error handling middleware
  * Catches all errors and returns standardized error responses
+ * @param err Error object (can be AppError or generic Error)
+ * @param req Express request object
+ * @param res Express response object
+ * @param next Express next function
  */
 export const errorHandler = (
   err: Error | AppError,
@@ -60,7 +70,10 @@ export const errorHandler = (
 
 /**
  * 404 Not Found handler
- * Should be placed after all routes
+ * Should be placed after all routes to catch unmatched routes
+ * @param req Express request object
+ * @param res Express response object
+ * @param next Express next function
  */
 export const notFoundHandler = (
   req: Request,
@@ -76,8 +89,19 @@ export const notFoundHandler = (
 /**
  * Async route handler wrapper
  * Automatically catches errors in async route handlers and passes to error middleware
+ * @param fn Async route handler function
+ * @returns Wrapped function that catches errors
+ * @example
+ * ```ts
+ * app.get('/users', asyncHandler(async (req, res) => {
+ *   const users = await getUsers();
+ *   res.json(users);
+ * }));
+ * ```
  */
-export const asyncHandler = (fn: Function) => {
+export const asyncHandler = (
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

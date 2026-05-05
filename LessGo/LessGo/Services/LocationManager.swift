@@ -15,6 +15,7 @@ class LocationManager: NSObject, ObservableObject {
             if isTrackingEnabled { startTracking() } else { stopUpdating() }
         }
     }
+    @Published var errorMessage: String?
 
     private let locationManager = CLLocationManager()
 
@@ -32,6 +33,19 @@ class LocationManager: NSObject, ObservableObject {
         locationManager.requestWhenInUseAuthorization()
     }
 
+    func startLocationUpdates() {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            locationManager.startUpdatingLocation()
+        case .denied, .restricted:
+            errorMessage = "Location permission denied. Please enable in Settings."
+        @unknown default:
+            break
+        }
+    }
+
     func startTracking() {
         switch locationManager.authorizationStatus {
         case .notDetermined:
@@ -39,7 +53,7 @@ class LocationManager: NSObject, ObservableObject {
         case .authorizedWhenInUse, .authorizedAlways:
             locationManager.startUpdatingLocation()
         case .denied, .restricted:
-            print("[LocationManager] Permission denied — tracking not started")
+            errorMessage = "Location permission denied. Please enable in Settings."
             isTrackingEnabled = false
         @unknown default:
             break
@@ -79,7 +93,10 @@ extension LocationManager: CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        #if DEBUG
         print("[LocationManager] Error: \(error.localizedDescription)")
+        #endif
+        errorMessage = "Failed to get location. Please try again."
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

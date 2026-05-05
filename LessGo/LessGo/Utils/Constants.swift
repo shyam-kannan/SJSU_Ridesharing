@@ -7,6 +7,9 @@ enum APIConfig {
     /// Configured per-environment using .xcconfig files.
     /// For hosted-only deployments, loopback/localhost values are ignored.
     static var baseURL: String {
+#if DEBUG
+        return "http://192.168.68.78:3000/api"
+#else
         // Priority 1: Build config via Info.plist.
         if let bundleURL = Bundle.main.infoDictionary?["API_BASE_URL"] as? String,
            let safeBundleURL = sanitizeHostedURL(bundleURL) {
@@ -21,6 +24,7 @@ enum APIConfig {
 
         // Priority 3: Hosted fallback.
         return "https://lessgo-zeta.vercel.app/api"
+#endif
     }
 
     private static func sanitizeHostedURL(_ raw: String) -> String? {
@@ -53,7 +57,7 @@ enum AppConstants {
     static let minPasswordLength = 8
 
     // SJSU Campus coordinates
-    static let sjsuCoordinate = CLLocationCoordinate2D(latitude: 37.3352, longitude: -121.8811)
+    static let sjsuCoordinate = CLLocationCoordinate2D(latitude: 37.3352, longitude: -122.8811)
 
     // Animation durations
     static let animationFast:   Double = 0.2

@@ -3,10 +3,12 @@ import SwiftUI
 struct DriverTripDetailsView: View {
     let trip: Trip
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var authVM: AuthViewModel
 
     @State private var passengers: [BookingWithRider] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var chatDestination: DriverNotificationChatDestination?
 
     private var totalSeatsBooked: Int {
         passengers.reduce(0) { $0 + $1.seatsBooked }
@@ -14,6 +16,14 @@ struct DriverTripDetailsView: View {
 
     private var totalEarnings: Double {
         Double(totalSeatsBooked) * 8.50
+    }
+
+    private var pendingBookings: [BookingWithRider] {
+        passengers.filter { $0.bookingState == .pending }
+    }
+
+    private var approvedBookings: [BookingWithRider] {
+        passengers.filter { $0.bookingState == .approved }
     }
 
     var body: some View {
@@ -141,14 +151,24 @@ struct DriverTripDetailsView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.textPrimary)
                             Spacer()
-                            Text("\(passengers.count)")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.textPrimary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.cardBackground)
-                                .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-                                .clipShape(Capsule())
+                            HStack(spacing: 6) {
+                                Text("\(passengers.count)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.textPrimary)
+                                if !pendingBookings.isEmpty {
+                                    Circle()
+                                        .fill(Color.brandRed)
+                                        .frame(width: 6, height: 6)
+                                    Text("\(pendingBookings.count) pending")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.brandRed)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.cardBackground)
+                            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
+                            .clipShape(Capsule())
                         }
                         .padding(.horizontal, 24)
 
@@ -209,8 +229,43 @@ struct DriverTripDetailsView: View {
                             .padding(.horizontal, 24)
                         } else {
                             VStack(spacing: 12) {
-                                ForEach(passengers) { passenger in
-                                    PassengerCard(passenger: passenger)
+                                // Pending bookings first
+                                if !pendingBookings.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Pending Requests")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.brandRed)
+                                            .padding(.horizontal, 2)
+                                        ForEach(pendingBookings) { passenger in
+                                            PendingBookingCard(
+                                                passenger: passenger,
+                                                onApprove: { await approveBooking(passenger) },
+                                                onReject: { await rejectBooking(passenger) },
+                                                onChat: { openChat(with: passenger) }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Approved bookings
+                                if !approvedBookings.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Confirmed Passengers")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.brandGreen)
+                                            .padding(.horizontal, 2)
+                                        ForEach(approvedBookings) { passenger in
+                                            PassengerCard(passenger: passenger, onChat: { openChat(with: passenger) })
+                                        }
+                                    }
+                                }
+
+                                // Other bookings (completed, cancelled, etc.)
+                                let otherBookings = passengers.filter { $0.bookingState != .pending && $0.bookingState != .approved }
+                                if !otherBookings.isEmpty {
+                                    ForEach(otherBookings) { passenger in
+                                        PassengerCard(passenger: passenger, onChat: { openChat(with: passenger) })
+                                    }
                                 }
                             }
                             .padding(.horizontal, 24)
@@ -253,6 +308,15 @@ struct DriverTripDetailsView: View {
         }
         .task {
             await loadPassengers()
+        }
+        .sheet(item: $chatDestination) { destination in
+            ChatView(
+                tripId: trip.id,
+                otherPartyName: destination.otherPartyName,
+                isDriver: true,
+                includesTabBarClearance: false
+            )
+            .environmentObject(authVM)
         }
     }
 
@@ -303,6 +367,35 @@ struct DriverTripDetailsView: View {
             print("Error loading passengers: \(error)")
         }
     }
+
+    private func approveBooking(_ passenger: BookingWithRider) async {
+        do {
+            _ = try await BookingService.shared.approveBooking(id: passenger.id)
+            await loadPassengers()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            print("Error approving booking: \(error)")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    private func rejectBooking(_ passenger: BookingWithRider) async {
+        do {
+            _ = try await BookingService.shared.rejectBooking(id: passenger.id)
+            await loadPassengers()
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            print("Error rejecting booking: \(error)")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    private func openChat(with passenger: BookingWithRider) {
+        chatDestination = DriverNotificationChatDestination(
+            tripId: trip.id,
+            otherPartyName: passenger.riderName
+        )
+    }
 }
 
 // MARK: - Stat Item Component
@@ -328,5 +421,117 @@ private struct StatItem: View {
                 .foregroundColor(.textSecondary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Pending Booking Card
+
+private struct PendingBookingCard: View {
+    let passenger: BookingWithRider
+    let onApprove: () async -> Void
+    let onReject: () async -> Void
+    let onChat: () -> Void
+
+    @State private var isApproving = false
+    @State private var isRejecting = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Rider avatar
+            AsyncImage(url: URL(string: passenger.riderPicture ?? "")) { image in
+                image.resizable()
+            } placeholder: {
+                Circle()
+                    .fill(Color.brand.opacity(0.15))
+            }
+            .frame(width: 48, height: 48)
+            .clipShape(Circle())
+
+            // Rider info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(passenger.riderName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                HStack(spacing: 6) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.brandOrange)
+                    Text(String(format: "%.1f", passenger.riderRating))
+                        .font(.system(size: 12))
+                        .foregroundColor(.textSecondary)
+                }
+                Text("\(passenger.seatsBooked) seat\(passenger.seatsBooked > 1 ? "s" : "")")
+                    .font(.system(size: 11))
+                    .foregroundColor(.textTertiary)
+            }
+
+            Spacer()
+
+            // Action buttons
+            HStack(spacing: 8) {
+                Button(action: onChat) {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.brand)
+                        .frame(width: 36, height: 36)
+                        .background(Color.brand.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    Task {
+                        isRejecting = true
+                        await onReject()
+                        isRejecting = false
+                    }
+                }) {
+                    if isRejecting {
+                        ProgressView()
+                            .frame(width: 36, height: 36)
+                    } else {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.brandRed)
+                            .frame(width: 36, height: 36)
+                            .background(Color.brandRed.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isRejecting)
+
+                Button(action: {
+                    Task {
+                        isApproving = true
+                        await onApprove()
+                        isApproving = false
+                    }
+                }) {
+                    if isApproving {
+                        ProgressView()
+                            .frame(width: 36, height: 36)
+                    } else {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.brandGreen)
+                            .frame(width: 36, height: 36)
+                            .background(Color.brandGreen.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isApproving)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.brandRed.opacity(0.5), lineWidth: 1)
+                )
+        )
     }
 }

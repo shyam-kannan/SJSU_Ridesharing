@@ -19,6 +19,7 @@ class CreateTripViewModel: ObservableObject {
     @Published var seatsAvailable = 2
     @Published var isRecurring = false
     @Published var recurrenceDays: Set<Int> = []  // 1=Mon ... 7=Sun
+    @Published var recurrenceEndDate: Date? = nil
 
     // MARK: - Step
     @Published var currentStep = 0
@@ -86,16 +87,28 @@ class CreateTripViewModel: ObservableObject {
 
     var recurrenceString: String? {
         guard isRecurring, !recurrenceDays.isEmpty else { return nil }
+        var parts: [String] = []
+
         if recurrenceDays.count == 5 && !recurrenceDays.contains(1) && !recurrenceDays.contains(7) {
-            return "weekdays"
+            parts.append("weekdays")
+        } else if recurrenceDays.count == 7 {
+            parts.append("daily")
+        } else {
+            let sortedDays = recurrenceDays.sorted()
+            let names = sortedDays.compactMap { day -> String? in
+                guard let idx = dayNumbers.firstIndex(of: day) else { return nil }
+                return dayNames[idx]
+            }
+            parts.append(names.joined(separator: ",").lowercased())
         }
-        if recurrenceDays.count == 7 { return "daily" }
-        let sortedDays = recurrenceDays.sorted()
-        let names = sortedDays.compactMap { day -> String? in
-            guard let idx = dayNumbers.firstIndex(of: day) else { return nil }
-            return dayNames[idx]
+
+        if let endDate = recurrenceEndDate {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            parts.append("until \(formatter.string(from: endDate))")
         }
-        return names.joined(separator: ",").lowercased()
+
+        return parts.joined(separator: " ")
     }
 
     // MARK: - Submit
@@ -137,6 +150,7 @@ class CreateTripViewModel: ObservableObject {
         seatsAvailable = 2
         isRecurring = false
         recurrenceDays = []
+        recurrenceEndDate = nil
         currentStep = 0
         isSuccess = false
         createdTrip = nil

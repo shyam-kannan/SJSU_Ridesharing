@@ -4,6 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 /**
  * Request logging middleware
  * Logs all incoming requests with correlation ID for tracking
+ * @param req Express request object
+ * @param res Express response object
+ * @param next Express next function
  */
 export const requestLogger = (
   req: Request,
@@ -50,6 +53,9 @@ export const requestLogger = (
 /**
  * Development mode detailed logger
  * Logs request body and query params (only for development)
+ * @param req Express request object
+ * @param res Express response object
+ * @param next Express next function
  */
 export const devLogger = (
   req: Request,

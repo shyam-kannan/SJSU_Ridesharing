@@ -14,6 +14,7 @@ struct TripRequestView: View {
 
     @State private var showFinding = false
     @State private var matchedStatus: TripRequestStatus?
+    @State private var hasPrefilledOrigin = false
 
     var body: some View {
         NavigationView {
@@ -54,19 +55,12 @@ struct TripRequestView: View {
             }
         }
         .onAppear {
-            // Pre-fill origin from current location
-            if let loc = locationManager.currentLocation {
-                let geocoder = CLGeocoder()
-                geocoder.reverseGeocodeLocation(loc) { placemarks, _ in
-                    if let pm = placemarks?.first {
-                        let addr = [pm.name, pm.locality].compactMap { $0 }.joined(separator: ", ")
-                        Task { @MainActor in
-                            viewModel.origin = addr
-                            viewModel.originCoordinate = loc.coordinate
-                        }
-                    }
-                }
-            }
+            locationManager.requestPermission()
+            locationManager.startLocationUpdates()
+            prefillOriginFromCurrentLocation()
+        }
+        .onChange(of: locationManager.currentLocation) { _ in
+            prefillOriginFromCurrentLocation()
         }
     }
 
@@ -178,6 +172,22 @@ struct TripRequestView: View {
         !viewModel.origin.isEmpty &&
         !viewModel.destination.isEmpty &&
         !(viewModel.state == .submitting)
+    }
+
+    private func prefillOriginFromCurrentLocation() {
+        guard !hasPrefilledOrigin, let loc = locationManager.currentLocation else { return }
+        hasPrefilledOrigin = true
+
+        let geocoder = CLGeocoder()
+        geocoder.reverseGeocodeLocation(loc) { placemarks, _ in
+            if let pm = placemarks?.first {
+                let addr = [pm.name, pm.locality].compactMap { $0 }.joined(separator: ", ")
+                Task { @MainActor in
+                    viewModel.origin = addr
+                    viewModel.originCoordinate = loc.coordinate
+                }
+            }
+        }
     }
 }
 

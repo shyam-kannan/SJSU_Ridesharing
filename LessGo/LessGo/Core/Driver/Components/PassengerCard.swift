@@ -2,7 +2,8 @@ import SwiftUI
 
 struct PassengerCard: View {
     let passenger: BookingWithRider
-    private var hasActions: Bool { (passenger.riderPhone?.isEmpty == false) || passenger.pickupLocation != nil }
+    var onChat: (() -> Void)? = nil
+    private var hasActions: Bool { (passenger.riderPhone?.isEmpty == false) || passenger.pickupLocation != nil || onChat != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -97,6 +98,23 @@ struct PassengerCard: View {
             // Action Buttons
             if hasActions {
                 HStack(spacing: 10) {
+                // Chat Button
+                if let onChat = onChat {
+                    Button(action: onChat) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 12))
+                            Text("Chat")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.brand.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+
                 // Call Button
                 if let phone = passenger.riderPhone, !phone.isEmpty {
                     Button(action: {

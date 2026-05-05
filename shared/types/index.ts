@@ -229,6 +229,8 @@ export interface JWTPayload {
   role: UserRole;
   sjsuIdStatus: SJSUIdStatus;
   type: 'access' | 'refresh';
+  iat?: number;
+  exp?: number;
 }
 
 /**
@@ -283,9 +285,17 @@ export interface DriverSetupRequest {
 // ========== API RESPONSE TYPES ==========
 
 /**
+ * Validation error structure
+ */
+export interface ValidationError {
+  field?: string;
+  message: string;
+}
+
+/**
  * Standard API success response
  */
-export interface APISuccessResponse<T = any> {
+export interface APISuccessResponse<T = unknown> {
   status: 'success';
   message: string;
   data: T;
@@ -297,13 +307,13 @@ export interface APISuccessResponse<T = any> {
 export interface APIErrorResponse {
   status: 'error';
   message: string;
-  errors?: any;
+  errors?: ValidationError[] | Record<string, string>;
 }
 
 /**
  * Paginated response
  */
-export interface PaginatedResponse<T = any> {
+export interface PaginatedResponse<T = unknown> {
   status: 'success';
   message: string;
   data: T[];
