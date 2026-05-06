@@ -149,9 +149,6 @@ class ProfileViewModel: ObservableObject {
                 self.successMessage = nil
             }
         } catch {
-            #if DEBUG
-            print("[ProfileVM] saveProfile error: \(error)")
-            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
@@ -185,14 +182,8 @@ class ProfileViewModel: ObservableObject {
                 self.successMessage = nil
             }
         } catch let error as NetworkError {
-            #if DEBUG
-            print("[ProfileViewModel] Failed to setup driver: \(error)")
-            #endif
             errorMessage = error.userMessage
         } catch {
-            #if DEBUG
-            print("[ProfileViewModel] Failed to setup driver: \(error)")
-            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }

@@ -27,7 +27,6 @@ app.get('/health', (req, res) => {
     message: 'Auth Service is running',
     service: 'auth-service',
     timestamp: new Date().toISOString(),
-    jwtAccessExpiry: config.jwtAccessExpiry,
   });
 });
 

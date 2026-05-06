@@ -81,13 +81,10 @@ class NetworkManager {
         // Add auth token if required
         if requiresAuth {
             restoreSavedSessionIfNeeded()
-            
+
             if let accessToken = KeychainManager.shared.getAccessToken() {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             } else {
-                // No token in keychain — attempt a silent refresh before giving up.
-                // This handles the case where the access token was cleared but a
-                // refresh token still exists (e.g. app restart, token eviction).
                 if let refreshed = try? await refreshAccessToken() {
                     request.setValue("Bearer \(refreshed)", forHTTPHeaderField: "Authorization")
                 } else {
@@ -334,9 +331,6 @@ class NetworkManager {
     private func refreshAccessToken() async throws -> String {
         restoreSavedSessionIfNeeded()
         guard let refreshToken = KeychainManager.shared.getRefreshToken() else {
-            #if DEBUG
-            print("[NetworkManager] refreshAccessToken: no refresh token in keychain")
-            #endif
             throw NetworkError.unauthorized
         }
 

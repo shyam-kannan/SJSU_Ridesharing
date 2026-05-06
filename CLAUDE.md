@@ -12,7 +12,7 @@ This file provides context for Claude Code to understand the project quickly wit
 - PostgreSQL database hosted on Supabase (project: bdefyxdpojqxxvaybfwk)
 - ML matching pipeline using RShareForm embeddings
 
-**Current Work:** Posted Rides Feature (Phase 1 Complete ✅)
+**Current Work:** Posted Rides Feature (Phase 2 Complete ✅)
 
 ## Memory System
 
@@ -43,19 +43,23 @@ The project has a memory system at `memory/` that stores important context. When
 - **Notification Service:** Port 3006
 - **Cost Calculation Service:** Port 3009
 
-### New Features (Phase 1)
+### New Features (Phase 1 & 2)
 - **BookingState enum:** pending, approved, rejected, cancelled, completed
 - **New API endpoints:**
   - `PATCH /api/bookings/:id/approve` - Driver approves booking
   - `PATCH /api/bookings/:id/reject` - Driver rejects booking
 - **Enhanced search:** Pagination with limit/offset parameters
 - **SJSU validation:** Trips must connect to SJSU (37.3352, -122.8811, ~0.5 mile radius)
+- **iOS Rider UI:** RiderSearchResultsView and TripDetailView for posted rides search
+- **Booking polling:** Auto-refresh booking state every 3 seconds
 
 ### iOS App Structure
-- **RiderHomeView:** Map with TO/FROM SJSU selection, search button
+- **RiderHomeView:** Map with TO/FROM SJSU selection, "Search Rides" button
+- **RiderSearchResultsView:** List of matching posted trips with pagination (NEW - Phase 2)
+- **TripDetailView:** Trip details with booking functionality and status polling (NEW - Phase 2)
 - **DriverHomeView:** Availability toggle, posted rides list
 - **CreateTripView:** Multi-step trip creation (already exists)
-- **DriverTripDetailView:** Already exists in Lists tab (needs updates)
+- **DriverTripDetailView:** Already exists in Lists tab (needs updates for Phase 3)
 
 ### Testing
 - **Run tests:** `npm run test`

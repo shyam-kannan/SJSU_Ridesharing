@@ -44,8 +44,8 @@ services:
   # RShareForm embedding service (Python / FastAPI)
   embedding-service:
     build:
-      context: ./services/embedding-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/embedding-service/Dockerfile
     container_name: lessgo-embedding-service
     ports:
       - "3010:3010"

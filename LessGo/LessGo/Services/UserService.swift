@@ -15,7 +15,7 @@ class UserService {
         let user: User = try await network.request(
             endpoint: "/users/\(id)",
             method: .get,
-            requiresAuth: false
+            requiresAuth: true
         )
         return user
     }
