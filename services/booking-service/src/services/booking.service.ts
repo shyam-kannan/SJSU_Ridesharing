@@ -189,7 +189,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       r.user_id as rider_user_id, r.name as rider_name, r.email as rider_email,
       r.role as rider_role, r.sjsu_id_status as rider_sjsu_id_status, r.rating as rider_rating,
       r.created_at as rider_created_at, r.updated_at as rider_updated_at,
-      q.quote_id, q.max_price, q.final_price, q.created_at as quote_created_at,
+      q.quote_id, q.max_price, q.max_price AS fare, q.final_price, q.created_at as quote_created_at,
       p.payment_id, p.stripe_payment_intent_id, p.amount, p.status as payment_status,
       p.created_at as payment_created_at, p.updated_at as payment_updated_at
     FROM bookings b
@@ -251,6 +251,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     status: row.status,
     booking_state: row.booking_state || 'pending',
     seats_booked: row.seats_booked,
+    fare: row.fare != null ? parseFloat(row.fare) : undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
     trip: {
