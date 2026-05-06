@@ -197,7 +197,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     JOIN users r ON b.rider_id = r.user_id
     LEFT JOIN quotes q ON b.booking_id = q.booking_id
     LEFT JOIN payments p ON b.booking_id = p.booking_id
-    WHERE b.booking_id = $1
+    WHERE b.booking_id = $1 AND b.deleted_at IS NULL
   `;
 
   const result = await pool.query(query, [bookingId]);
@@ -318,8 +318,8 @@ export const listUserBookings = async (
   asDriver: boolean = false
 ): Promise<BookingWithDetails[]> => {
   const query = asDriver
-    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 ORDER BY b.created_at DESC`
-    : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 ORDER BY created_at DESC`;
+    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 AND b.deleted_at IS NULL ORDER BY b.created_at DESC`
+    : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`;
 
   const result = await pool.query(query, [userId]);
 
@@ -627,7 +627,7 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       u.profile_picture_url as rider_profile_picture_url
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
-    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending')
+    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending') AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `;
 
@@ -748,6 +748,36 @@ export const rejectBooking = async (
   return updatedBooking!;
 };
 
+/**
+ * Soft delete a booking (set deleted_at = NOW())
+ * Only allowed if booking_state IN ('cancelled', 'rejected') and requester is the rider
+ * @param bookingId Booking's UUID
+ * @param userId Requesting user's UUID
+ */
+export const deleteBooking = async (bookingId: string, userId: string): Promise<void> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new Error('Booking not found');
+  }
+
+  if (bookingData.rider_id !== userId) {
+    const err: any = new Error('Forbidden: You are not the rider of this booking');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (!['cancelled', 'rejected'].includes(bookingData.booking_state || '')) {
+    const err: any = new Error('Booking can only be deleted when cancelled or rejected');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await pool.query(
+    'UPDATE bookings SET deleted_at = NOW() WHERE booking_id = $1',
+    [bookingId]
+  );
+};
+
 export default {
   createBooking,
   getBookingById,
@@ -759,4 +789,5 @@ export default {
   getBookingsByTripId,
   approveBooking,
   rejectBooking,
+  deleteBooking,
 };

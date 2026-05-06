@@ -52,6 +52,7 @@ const checkTripOverlap = async (
     FROM trips
     WHERE driver_id = $1
       AND status = 'pending'
+      AND deleted_at IS NULL
       AND (
         (departure_time BETWEEN $2 AND ($2 + INTERVAL '${estimatedDurationMinutes} minutes'))
         OR
@@ -158,7 +159,7 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE t.trip_id = $1
+    WHERE t.trip_id = $1 AND t.deleted_at IS NULL
   `;
 
   const result = await pool.query(query, [tripId]);
@@ -246,7 +247,7 @@ export const searchTripsNearby = async (
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE (
+    WHERE t.deleted_at IS NULL AND (
       ST_DWithin(
         t.origin_point::geography,
         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
@@ -360,7 +361,7 @@ export const listTrips = async (filters?: {
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE 1=1
+    WHERE t.deleted_at IS NULL
   `;
 
   const values: any[] = [];
@@ -909,6 +910,36 @@ export const searchTripsWithRerouting = async (
   return enriched;
 };
 
+/**
+ * Soft delete a trip (set deleted_at = NOW())
+ * Only allowed if status = 'cancelled' and requester is the driver
+ * @param tripId Trip's UUID
+ * @param driverId Requesting user's UUID
+ */
+export const deleteTrip = async (tripId: string, driverId: string): Promise<void> => {
+  const trip = await getTripById(tripId);
+  if (!trip) {
+    throw new Error('Trip not found');
+  }
+
+  if (trip.driver_id !== driverId) {
+    const err: any = new Error('Forbidden: You are not the driver of this trip');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (trip.status !== TripStatus.Cancelled) {
+    const err: any = new Error('Trip can only be deleted when cancelled');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await pool.query(
+    'UPDATE trips SET deleted_at = NOW() WHERE trip_id = $1',
+    [tripId]
+  );
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
@@ -919,6 +950,7 @@ export default {
   listTrips,
   updateTrip,
   cancelTrip,
+  deleteTrip,
   updateTripState,
   sendMessage,
   getTripMessages,

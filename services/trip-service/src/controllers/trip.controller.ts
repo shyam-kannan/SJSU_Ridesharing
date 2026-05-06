@@ -327,6 +327,44 @@ export const cancelTrip = async (req: AuthRequest, res: Response): Promise<void>
 };
 
 /**
+ * Soft delete a trip (driver only, only when cancelled)
+ * DELETE /trips/:id/delete
+ */
+export const deleteTrip = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    await tripService.deleteTrip(id, req.user.userId);
+
+    successResponse(res, null, 'Trip deleted successfully');
+  } catch (error) {
+    if (error instanceof Error) {
+      const statusCode = (error as any).statusCode;
+      if (statusCode === 403) {
+        errorResponse(res, error.message, 403);
+        return;
+      }
+      if (statusCode === 400) {
+        errorResponse(res, error.message, 400);
+        return;
+      }
+      if (error.message === 'Trip not found') {
+        errorResponse(res, 'Trip not found', 404);
+        return;
+      }
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to delete trip', 500);
+  }
+};
+
+/**
  * Get all bookings for a trip (passengers list)
  * GET /trips/:id/bookings
  */

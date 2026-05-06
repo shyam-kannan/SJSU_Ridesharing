@@ -368,6 +368,40 @@ export const approveBooking = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
+ * Soft delete a booking (rider only, only when cancelled or rejected)
+ * DELETE /api/bookings/:id
+ */
+export const deleteBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    await bookingService.deleteBooking(id, req.user.userId);
+
+    successResponse(res, null, 'Booking deleted successfully');
+  } catch (error) {
+    if (error instanceof Error) {
+      const statusCode = (error as any).statusCode;
+      if (statusCode === 403) {
+        errorResponse(res, error.message, 403);
+        return;
+      }
+      if (statusCode === 400) {
+        errorResponse(res, error.message, 400);
+        return;
+      }
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to delete booking', 500);
+  }
+};
+
+/**
  * Reject a booking (driver only)
  * PATCH /api/bookings/:id/reject
  */

@@ -155,10 +155,17 @@ router.put(
 
 /**
  * @route   DELETE /trips/:id
- * @desc    Cancel trip
+ * @desc    Cancel trip (set status to cancelled)
  * @access  Private (Own trip only)
  */
 router.delete('/:id', authenticateToken, asyncHandler(tripController.cancelTrip));
+
+/**
+ * @route   DELETE /trips/:id/delete
+ * @desc    Soft delete a cancelled trip (set deleted_at)
+ * @access  Private (Own trip only, trip must be cancelled)
+ */
+router.delete('/:id/delete', authenticateToken, asyncHandler(tripController.deleteTrip));
 
 
 
