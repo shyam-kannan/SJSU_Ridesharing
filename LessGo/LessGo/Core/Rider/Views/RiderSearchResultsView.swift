@@ -51,7 +51,7 @@ struct RiderSearchResultsView: View {
                 await viewModel.refresh()
             }
             .sheet(item: $selectedTrip) { trip in
-                TripDetailView(trip: trip)
+                TripDetailView(trip: trip, riderCoordinate: criteria.originCoordinate)
             }
         }
         .navigationViewStyle(.stack)

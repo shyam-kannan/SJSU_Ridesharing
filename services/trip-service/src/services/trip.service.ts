@@ -770,8 +770,12 @@ export interface CostBreakdown {
 }
 
 export interface EnrichedTripWithDriver extends TripWithDriver {
+  origin_lat?: number;
+  origin_lng?: number;
   detour_miles?: number;
   adjusted_eta_minutes?: number;
+  original_eta_minutes?: number;
+  detour_time_minutes?: number;
   cost_breakdown?: CostBreakdown;
 }
 
@@ -855,6 +859,8 @@ export const searchTripsWithRerouting = async (
       const detourMiles = detourMeters / 1609.34;
 
       let adjustedEtaMinutes: number | undefined;
+      let originalEtaMinutes: number | undefined;
+      let detourTimeMinutes: number | undefined;
       try {
         // Two-leg ETA: driver_origin → rider_pickup + rider_pickup → destination
         const [leg1, leg2] = await Promise.all([
@@ -867,8 +873,9 @@ export const searchTripsWithRerouting = async (
             destination: `${destinationLat},${destinationLng}`,
           }, { timeout: 4000 }),
         ]);
-        const totalSec = (leg1.data?.duration_seconds ?? 0) + (leg2.data?.duration_seconds ?? 0);
-        adjustedEtaMinutes = Math.round(totalSec / 60);
+        detourTimeMinutes   = Math.round((leg1.data?.duration_seconds ?? 0) / 60);
+        originalEtaMinutes  = Math.round((leg2.data?.duration_seconds ?? 0) / 60);
+        adjustedEtaMinutes  = detourTimeMinutes + originalEtaMinutes;
       } catch {
         // Routing service unavailable — omit ETA
       }
@@ -884,8 +891,12 @@ export const searchTripsWithRerouting = async (
         vehicle_info: trip.driver.vehicle_info,
         driver_photo_url: trip.driver.profile_picture_url,
         estimated_cost: perRiderSplit,
+        origin_lat: candidate.origin_lat,
+        origin_lng: candidate.origin_lng,
         detour_miles: parseFloat(detourMiles.toFixed(2)),
         adjusted_eta_minutes: adjustedEtaMinutes,
+        original_eta_minutes: originalEtaMinutes,
+        detour_time_minutes: detourTimeMinutes,
         cost_breakdown: {
           base_fare: baseFare,
           detour_surcharge: detourSurcharge,

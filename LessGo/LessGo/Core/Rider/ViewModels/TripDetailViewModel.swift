@@ -129,7 +129,7 @@ class TripDetailViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-    private func checkExistingBooking() async {
+    func checkExistingBooking() async {
         do {
             let existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
             booking = existingBooking

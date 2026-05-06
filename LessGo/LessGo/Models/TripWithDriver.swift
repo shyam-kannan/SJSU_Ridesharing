@@ -16,8 +16,12 @@ struct TripWithDriver: Identifiable, Codable {
     let estimatedCost: Double
     let featured: Bool
     let status: String
+    let originLat: Double?
+    let originLng: Double?
     let detourMiles: Double?
     let adjustedEtaMinutes: Int?
+    let originalEtaMinutes: Int?
+    let detourTimeMinutes: Int?
     let costBreakdown: CostBreakdown?
 
     struct CostBreakdown: Codable {
@@ -44,8 +48,12 @@ struct TripWithDriver: Identifiable, Codable {
         case seatsAvailable = "seats_available"
         case estimatedCost = "estimated_cost"
         case featured, status
+        case originLat = "origin_lat"
+        case originLng = "origin_lng"
         case detourMiles = "detour_miles"
         case adjustedEtaMinutes = "adjusted_eta_minutes"
+        case originalEtaMinutes = "original_eta_minutes"
+        case detourTimeMinutes = "detour_time_minutes"
         case costBreakdown = "cost_breakdown"
     }
 
@@ -63,8 +71,12 @@ struct TripWithDriver: Identifiable, Codable {
         estimatedCost: Double,
         featured: Bool,
         status: String,
+        originLat: Double? = nil,
+        originLng: Double? = nil,
         detourMiles: Double? = nil,
         adjustedEtaMinutes: Int? = nil,
+        originalEtaMinutes: Int? = nil,
+        detourTimeMinutes: Int? = nil,
         costBreakdown: CostBreakdown? = nil
     ) {
         self.id = id
@@ -80,8 +92,12 @@ struct TripWithDriver: Identifiable, Codable {
         self.estimatedCost = estimatedCost
         self.featured = featured
         self.status = status
+        self.originLat = originLat
+        self.originLng = originLng
         self.detourMiles = detourMiles
         self.adjustedEtaMinutes = adjustedEtaMinutes
+        self.originalEtaMinutes = originalEtaMinutes
+        self.detourTimeMinutes = detourTimeMinutes
         self.costBreakdown = costBreakdown
     }
 
@@ -118,8 +134,12 @@ struct TripWithDriver: Identifiable, Codable {
             estimatedCost = 0.0
         }
 
+        originLat = try container.decodeIfPresent(Double.self, forKey: .originLat)
+        originLng = try container.decodeIfPresent(Double.self, forKey: .originLng)
         detourMiles = try container.decodeIfPresent(Double.self, forKey: .detourMiles)
         adjustedEtaMinutes = try container.decodeIfPresent(Int.self, forKey: .adjustedEtaMinutes)
+        originalEtaMinutes = try container.decodeIfPresent(Int.self, forKey: .originalEtaMinutes)
+        detourTimeMinutes = try container.decodeIfPresent(Int.self, forKey: .detourTimeMinutes)
         costBreakdown = try container.decodeIfPresent(CostBreakdown.self, forKey: .costBreakdown)
     }
 }
