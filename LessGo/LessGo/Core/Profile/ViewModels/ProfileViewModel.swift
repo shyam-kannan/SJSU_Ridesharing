@@ -143,6 +143,11 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile updated!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            // Auto-dismiss success message after 2.5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch {
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
@@ -171,6 +176,11 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Driver profile saved!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            // Auto-dismiss success message after 2.5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch let error as NetworkError {
             #if DEBUG
             print("[ProfileViewModel] Failed to setup driver: \(error)")
@@ -325,6 +335,10 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile picture updated!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch let error as NetworkError {
             #if DEBUG
             print("[ProfileViewModel] Failed to upload profile picture: \(error)")
@@ -348,6 +362,10 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile picture removed!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch let error as NetworkError {
             #if DEBUG
             print("[ProfileViewModel] Failed to remove profile picture: \(error)")

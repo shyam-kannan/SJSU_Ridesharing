@@ -10,6 +10,8 @@ class NetworkManager {
     // Reads the API base URL from configuration so the app can target
     // localhost in development and GKE in production/testing.
     private let baseURL = APIConfig.baseURL
+    
+
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -79,6 +81,7 @@ class NetworkManager {
         // Add auth token if required
         if requiresAuth {
             restoreSavedSessionIfNeeded()
+            
             if let accessToken = KeychainManager.shared.getAccessToken() {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             } else {

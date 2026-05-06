@@ -1728,6 +1728,12 @@ extension View {
                         .padding(.top, 8)
                         .padding(.bottom, 8)
                         .transition(.move(edge: .top).combined(with: .opacity))
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                                // Message will auto-dismiss after 2.5 seconds
+                                // This is handled by the view model clearing the message
+                            }
+                        }
                 }
             }
         }
