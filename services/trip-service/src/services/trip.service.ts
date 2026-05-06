@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import axios from 'axios';
 import { config } from '../config';
-import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
+import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint, AppError } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
 import { mineFrequentRouteFromTrip } from './frequent_route.service';
 import {
@@ -923,15 +923,11 @@ export const deleteTrip = async (tripId: string, driverId: string): Promise<void
   }
 
   if (trip.driver_id !== driverId) {
-    const err: any = new Error('Forbidden: You are not the driver of this trip');
-    err.statusCode = 403;
-    throw err;
+    throw new AppError('Forbidden: You are not the driver of this trip', 403);
   }
 
   if (trip.status !== TripStatus.Cancelled) {
-    const err: any = new Error('Trip can only be deleted when cancelled');
-    err.statusCode = 400;
-    throw err;
+    throw new AppError('Trip can only be deleted when cancelled', 400);
   }
 
   await pool.query(

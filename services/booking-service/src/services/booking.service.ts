@@ -9,6 +9,7 @@ import {
   Rating,
   CreateBookingRequest,
   CreateRatingRequest,
+  AppError,
 } from '@lessgo/shared';
 
 const pool = new Pool({
@@ -761,15 +762,11 @@ export const deleteBooking = async (bookingId: string, userId: string): Promise<
   }
 
   if (bookingData.rider_id !== userId) {
-    const err: any = new Error('Forbidden: You are not the rider of this booking');
-    err.statusCode = 403;
-    throw err;
+    throw new AppError('Forbidden: You are not the rider of this booking', 403);
   }
 
   if (!['cancelled', 'rejected'].includes(bookingData.booking_state || '')) {
-    const err: any = new Error('Booking can only be deleted when cancelled or rejected');
-    err.statusCode = 400;
-    throw err;
+    throw new AppError('Booking can only be deleted when cancelled or rejected', 400);
   }
 
   await pool.query(

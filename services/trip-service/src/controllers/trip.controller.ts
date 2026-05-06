@@ -343,16 +343,11 @@ export const deleteTrip = async (req: AuthRequest, res: Response): Promise<void>
 
     successResponse(res, null, 'Trip deleted successfully');
   } catch (error) {
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
     if (error instanceof Error) {
-      const statusCode = (error as any).statusCode;
-      if (statusCode === 403) {
-        errorResponse(res, error.message, 403);
-        return;
-      }
-      if (statusCode === 400) {
-        errorResponse(res, error.message, 400);
-        return;
-      }
       if (error.message === 'Trip not found') {
         errorResponse(res, 'Trip not found', 404);
         return;

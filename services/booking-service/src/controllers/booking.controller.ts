@@ -384,14 +384,13 @@ export const deleteBooking = async (req: AuthRequest, res: Response): Promise<vo
 
     successResponse(res, null, 'Booking deleted successfully');
   } catch (error) {
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
     if (error instanceof Error) {
-      const statusCode = (error as any).statusCode;
-      if (statusCode === 403) {
-        errorResponse(res, error.message, 403);
-        return;
-      }
-      if (statusCode === 400) {
-        errorResponse(res, error.message, 400);
+      if (error.message === 'Booking not found') {
+        errorResponse(res, error.message, 404);
         return;
       }
       errorResponse(res, error.message, 400);
