@@ -196,6 +196,86 @@ router.get('/models', rateLimiter, async (req: Request, res: Response) => {
   }
 });
 
+// ── Error categorization ─────────────────────────────────────────────────────
+
+enum VehicleLookupErrorType {
+  timeout = 'timeout',
+  not_found = 'not_found',
+  rate_limited = 'rate_limited',
+  network_error = 'network_error',
+  parsing_error = 'parsing_error',
+  unknown = 'unknown'
+}
+
+interface VehicleLookupError {
+  type: VehicleLookupErrorType;
+  message: string;
+  suggestion: string;
+  isTransient: boolean; // Can be retried
+}
+
+function categorizeError(error: unknown, context: { make: string; model: string; year: number }): VehicleLookupError {
+  const err = error as Error & { code?: string; response?: { status?: number } };
+
+  // Timeout errors
+  if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+    return {
+      type: VehicleLookupErrorType.timeout,
+      message: 'Fuel economy lookup timed out',
+      suggestion: 'Try again or enter manually',
+      isTransient: true
+    };
+  }
+
+  // Rate limiting
+  if (err.response?.status === 429) {
+    return {
+      type: VehicleLookupErrorType.rate_limited,
+      message: 'Too many lookups',
+      suggestion: 'Wait a moment and try again',
+      isTransient: true
+    };
+  }
+
+  // Network errors
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+    return {
+      type: VehicleLookupErrorType.network_error,
+      message: 'Connection issue',
+      suggestion: 'Check internet and retry',
+      isTransient: true
+    };
+  }
+
+  // Not found (empty results from DOE API)
+  if (err.message?.includes('no results') || err.message?.includes('not found')) {
+    return {
+      type: VehicleLookupErrorType.not_found,
+      message: `MPG data not available for ${context.year} ${context.make} ${context.model}`,
+      suggestion: 'Enter manually',
+      isTransient: false
+    };
+  }
+
+  // Parsing errors
+  if (err.message?.includes('parse') || err.message?.includes('JSON')) {
+    return {
+      type: VehicleLookupErrorType.parsing_error,
+      message: 'Invalid response from fuel economy database',
+      suggestion: 'Try again or enter manually',
+      isTransient: true
+    };
+  }
+
+  // Unknown errors
+  return {
+    type: VehicleLookupErrorType.unknown,
+    message: 'Unable to fetch fuel economy data',
+    suggestion: 'Try again or enter manually',
+    isTransient: true
+  };
+}
+
 // ── GET /vehicles/specs?make=Toyota&model=Camry&year=2022 ─────────────────────
 // Fetches MPG data from DOE Fuel Economy API and infers seating from lookup table.
 // Returns trim list with city/highway/combined MPG plus default values.
@@ -228,12 +308,16 @@ router.get('/specs', rateLimiter, async (req: Request, res: Response) => {
     combined_mpg: number | null;
   }> = [];
   let mpg_source: 'doe' | 'unavailable' = 'unavailable';
+  let lookupError: VehicleLookupError | null = null;
 
   try {
     // DOE API expects title-case make ("Honda", not "HONDA" or "honda")
     const doeMake = toTitleCase(make);
     const doeModel = toTitleCase(model);
     const optionsUrl = `${DOE_BASE}/vehicle/menu/options?year=${yearNum}&make=${encodeURIComponent(doeMake)}&model=${encodeURIComponent(doeModel)}`;
+
+    console.log('[vehicles/specs] Fetching DOE options:', { make: doeMake, model: doeModel, year: yearNum, url: optionsUrl });
+
     const optionsResp = await axios.get(optionsUrl, {
       timeout: 10_000,
       headers: { Accept: 'application/json' },
@@ -247,6 +331,8 @@ router.get('/specs', rateLimiter, async (req: Request, res: Response) => {
     }
 
     if (items.length > 0) {
+      console.log('[vehicles/specs] Found', items.length, 'trim options for', doeMake, doeModel, yearNum);
+
       // ── Step 2: Fetch MPG details for each trim (parallel, max 6) ─────────────
       const limited = items.slice(0, 6);
       const detailResults = await Promise.allSettled(
@@ -272,10 +358,46 @@ router.get('/specs', rateLimiter, async (req: Request, res: Response) => {
         .map((r) => r.value)
         .filter((t) => t.combined_mpg !== null);
 
-      if (trims.length > 0) mpg_source = 'doe';
+      if (trims.length > 0) {
+        mpg_source = 'doe';
+        console.log('[vehicles/specs] Successfully fetched MPG data:', {
+          make: doeMake,
+          model: doeModel,
+          year: yearNum,
+          trimsFound: trims.length,
+          avgMpg: Math.round(trims.reduce((sum, t) => sum + (t.combined_mpg ?? 0), 0) / trims.length)
+        });
+      } else {
+        console.warn('[vehicles/specs] No valid MPG data found in trim results');
+        lookupError = {
+          type: VehicleLookupErrorType.not_found,
+          message: `MPG data not available for ${yearNum} ${doeMake} ${doeModel}`,
+          suggestion: 'Enter manually',
+          isTransient: false
+        };
+      }
+    } else {
+      console.warn('[vehicles/specs] No trim options found for', doeMake, doeModel, yearNum);
+      lookupError = {
+        type: VehicleLookupErrorType.not_found,
+        message: `MPG data not available for ${yearNum} ${doeMake} ${doeModel}`,
+        suggestion: 'Enter manually',
+        isTransient: false
+      };
     }
   } catch (err) {
-    console.warn('[vehicles/specs] DOE API error:', (err as Error).message);
+    const errorContext = { make: toTitleCase(make), model: toTitleCase(model), year: yearNum };
+    lookupError = categorizeError(err, errorContext);
+    console.error('[vehicles/specs] DOE API error:', {
+      type: lookupError.type,
+      message: lookupError.message,
+      suggestion: lookupError.suggestion,
+      isTransient: lookupError.isTransient,
+      error: (err as Error).message,
+      make: errorContext.make,
+      model: errorContext.model,
+      year: errorContext.year
+    });
   }
 
   // ── Step 3: Compute default_mpg as average across trims ──────────────────────
@@ -298,6 +420,13 @@ router.get('/specs', rateLimiter, async (req: Request, res: Response) => {
     default_mpg,
     default_seats: seating_capacity,
     mpg_source,
+    // Include error information if lookup failed
+    ...(lookupError && {
+      error_type: lookupError.type,
+      error_message: lookupError.message,
+      suggestion: lookupError.suggestion,
+      is_transient: lookupError.isTransient
+    })
   };
 
   // Cache only if we have good data (don't cache empty/error states)

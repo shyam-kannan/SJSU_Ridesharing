@@ -236,6 +236,17 @@ class ProfileViewModel: ObservableObject {
         }
     }
 
+    func retrySpecsLookup() async {
+        // Only retry if we have make, model, and year values
+        guard !pickerMake.isEmpty, !pickerModel.isEmpty, pickerYear > 0 else {
+            return
+        }
+
+        // Clear error state and retry
+        vehicleLookupFailed = false
+        await loadSpecs(make: pickerMake, model: pickerModel, year: pickerYear)
+    }
+
     func loadPhoto(make: String, model: String, year: Int) async {
         isLoadingPhoto = true
         vehiclePhotoURL = nil

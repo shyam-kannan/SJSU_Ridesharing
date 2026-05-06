@@ -43,6 +43,10 @@ struct VehicleSpecs: Decodable {
     let defaultMpg: Int?
     let defaultSeats: Int
     let mpgSource: MpgSource
+    let errorType: String?
+    let errorMessage: String?
+    let suggestion: String?
+    let isTransient: Bool?
 
     enum MpgSource: String, Decodable {
         case doe
@@ -55,5 +59,9 @@ struct VehicleSpecs: Decodable {
         case defaultMpg      = "default_mpg"
         case defaultSeats    = "default_seats"
         case mpgSource       = "mpg_source"
+        case errorType       = "error_type"
+        case errorMessage    = "error_message"
+        case suggestion
+        case isTransient     = "is_transient"
     }
 }
