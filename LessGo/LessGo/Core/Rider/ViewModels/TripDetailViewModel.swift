@@ -16,6 +16,7 @@ class TripDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var bookingState: BookingState? = nil
     @Published var cancellationSuccess = false
+    @Published var bookingSucceeded = false
 
     // MARK: - Private State
 
@@ -92,6 +93,12 @@ class TripDetailViewModel: ObservableObject {
             startPolling()
 
             NotificationCenter.default.post(name: .navigateToBookingsTab, object: nil)
+            NotificationCenter.default.post(
+                name: .openBookingDetail,
+                object: nil,
+                userInfo: ["bookingId": response.booking.id]
+            )
+            bookingSucceeded = true
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
             errorMessage = error.userMessage
@@ -135,11 +142,17 @@ class TripDetailViewModel: ObservableObject {
     func checkExistingBooking() async {
         do {
             let existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
-            booking = existingBooking
-            if let bookingState = existingBooking?.bookingState {
-                self.bookingState = bookingState
-                if bookingState == .pending {
-                    startPolling()
+            if let existingBooking = existingBooking,
+               existingBooking.bookingState == .cancelled || existingBooking.bookingState == .rejected {
+                booking = nil
+                bookingState = nil
+            } else {
+                booking = existingBooking
+                if let bookingState = existingBooking?.bookingState {
+                    self.bookingState = bookingState
+                    if bookingState == .pending {
+                        startPolling()
+                    }
                 }
             }
         } catch {

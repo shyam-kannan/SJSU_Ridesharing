@@ -38,16 +38,38 @@ struct PassengerCard: View {
 
                     StarRatingView(rating: passenger.riderRating, size: 12)
 
-                    if let scost = passenger.scostBreakdown {
+                    if let fare = passenger.fare {
                         HStack(spacing: 10) {
                             HStack(spacing: 4) {
                                 Image(systemName: "dollarsign.circle.fill")
                                     .font(.system(size: 11))
                                     .foregroundColor(.brandGreen)
-                                Text(String(format: "$%.2f", scost.total * 8.50))
+                                Text(String(format: "$%.2f", fare))
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.textPrimary)
                             }
+                            if let scost = passenger.scostBreakdown {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.turn.up.right")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.brandOrange)
+                                    Text(formatScostDistance(scost.walk))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.textPrimary)
+                                }
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.brand)
+                                    Text(formatScostTime(scost.advance))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.textPrimary)
+                                }
+                            }
+                        }
+                        .padding(.top, 2)
+                    } else if let scost = passenger.scostBreakdown {
+                        HStack(spacing: 10) {
                             HStack(spacing: 4) {
                                 Image(systemName: "arrow.triangle.turn.up.right")
                                     .font(.system(size: 11))

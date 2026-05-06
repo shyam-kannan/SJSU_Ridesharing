@@ -123,6 +123,15 @@ class BookingService {
         return booking
     }
 
+    // MARK: - Delete Booking
+
+    func deleteBooking(bookingId: String) async throws {
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/bookings/\(bookingId)",
+            method: .delete
+        )
+    }
+
     // MARK: - Get Booking for Trip
 
     func getBookingForTrip(tripId: String) async throws -> Booking? {

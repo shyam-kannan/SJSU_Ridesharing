@@ -501,6 +501,7 @@ struct BookingListView: View {
     @State private var reportedUserId: String?
     @State private var reportedUserName: String?
     @State private var reportTripId: String?
+    @State private var deepLinkedBooking: Booking? = nil
 
     private var filteredBookings: [Booking] {
         let cutoff = Date().addingTimeInterval(-24 * 3600)
@@ -615,6 +616,30 @@ struct BookingListView: View {
             }
             .sheet(item: $editingTrip) { trip in
                 EditPostedTripSheet(trip: trip, vm: vm)
+            }
+            .background(
+                NavigationLink(
+                    destination: Group {
+                        if let booking = deepLinkedBooking {
+                            BookingRideDetailView(booking: booking, vm: vm, showAsDriver: false)
+                        }
+                    },
+                    isActive: Binding(
+                        get: { deepLinkedBooking != nil },
+                        set: { if !$0 { deepLinkedBooking = nil } }
+                    )
+                ) { EmptyView() }
+                .hidden()
+            )
+            .onReceive(NotificationCenter.default.publisher(for: .openBookingDetail)) { notification in
+                guard let bookingId = notification.userInfo?["bookingId"] as? String else { return }
+                // Wait briefly to allow the tab switch animation to complete, then reload and open
+                Task {
+                    await vm.loadBookings(asDriver: false)
+                    if let matched = vm.bookings.first(where: { $0.id == bookingId }) {
+                        deepLinkedBooking = matched
+                    }
+                }
             }
         }
     }
@@ -979,6 +1004,8 @@ private struct BookingRow: View {
     let showAsDriver: Bool
     var onReport: ((String, String, String?) -> Void)?
 
+    @State private var showDeleteConfirm = false
+
     var statusColor: Color {
         switch booking.status {
         case .pending:   return .brandOrange
@@ -1065,7 +1092,7 @@ private struct BookingRow: View {
                     }
                     .foregroundColor(.textSecondary)
                     Spacer()
-                    if let amount = booking.quote?.maxPrice {
+                    if let amount = booking.fare ?? booking.quote?.maxPrice {
                         HStack(spacing: 6) {
                             Text(String(format: "$%.2f", amount))
                                 .font(.system(size: 14, weight: .bold))
@@ -1233,6 +1260,26 @@ private struct BookingRow: View {
                 }
         )
         .shadow(color: .black.opacity(0.045), radius: 10, x: 0, y: 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if booking.bookingState == .cancelled || booking.bookingState == .rejected {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .confirmationDialog("Delete this booking?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    try? await BookingService.shared.deleteBooking(bookingId: booking.id)
+                    await vm.loadBookings(asDriver: showAsDriver)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the booking from your history.")
+        }
     }
 
     private var paymentStatusLabel: String {

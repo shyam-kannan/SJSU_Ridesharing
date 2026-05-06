@@ -30,6 +30,10 @@ struct DriverHomeView: View {
     @State private var todayTripCount = 0
     @AppStorage("hasCompletedFirstTrip") private var hasCompletedFirstTrip = false
 
+    // ── Delete cancelled trip ──────────────────────────────────────────────────
+    @State private var tripPendingDelete: Trip? = nil
+    @State private var showDeleteTripConfirm = false
+
     // ── Timers ─────────────────────────────────────────────────────────────────
     private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
     private let matchPollingTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
@@ -524,6 +528,10 @@ struct DriverHomeView: View {
         profileVM.driverTrips.filter { $0.status == .pending }
     }
 
+    private var cancelledTrips: [Trip] {
+        profileVM.driverTrips.filter { $0.status == .cancelled }
+    }
+
     private var tripsWithPassengers: [Trip] {
         scheduledTrips.filter { trip in
             guard let maxRiders = trip.maxRiders else { return false }
@@ -548,6 +556,19 @@ struct DriverHomeView: View {
             } else {
                 postedTripsTabContent
             }
+        }
+        .confirmationDialog("Delete this cancelled trip?", isPresented: $showDeleteTripConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                guard let trip = tripPendingDelete else { return }
+                Task {
+                    try? await TripService.shared.deleteTrip(tripId: trip.id)
+                    tripPendingDelete = nil
+                    await refreshDashboardData()
+                }
+            }
+            Button("Cancel", role: .cancel) { tripPendingDelete = nil }
+        } message: {
+            Text("This will permanently remove the cancelled trip from your history.")
         }
     }
 
@@ -619,7 +640,7 @@ struct DriverHomeView: View {
 
     private var postedTripsTabContent: some View {
         Group {
-            if scheduledTrips.isEmpty {
+            if scheduledTrips.isEmpty && cancelledTrips.isEmpty {
                 HStack(spacing: 12) {
                     Image(systemName: "car.rear.road.lane.dashed")
                         .font(.system(size: 24))
@@ -667,6 +688,53 @@ struct DriverHomeView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                }
+
+                if !cancelledTrips.isEmpty {
+                    Text("Cancelled Trips")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    ForEach(cancelledTrips) { trip in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(trip.origin) → \(trip.destination)")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text("Cancelled")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.red)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.red.opacity(0.10))
+                                .clipShape(Capsule())
+                            Button(action: {
+                                tripPendingDelete = trip
+                                showDeleteTripConfirm = true
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.red)
+                                    .padding(8)
+                                    .background(Color.red.opacity(0.08))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.cardBackground)
+                        )
+                    }
                 }
             }
         }

@@ -300,9 +300,9 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
     }
 
     // Get all bookings for this trip
-    const bookings = await bookingService.getBookingsByTripId(tripId);
+    const { bookings, totalFare } = await bookingService.getBookingsByTripId(tripId);
 
-    successResponse(res, bookings, 'Trip bookings retrieved successfully');
+    successResponse(res, { bookings, totalFare }, 'Trip bookings retrieved successfully');
   } catch (error) {
     console.error('Get trip bookings error:', error);
     if (error instanceof Error) {
@@ -364,6 +364,39 @@ export const approveBooking = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
     throw new AppError('Failed to approve booking', 500);
+  }
+};
+
+/**
+ * Soft delete a booking (rider only, only when cancelled or rejected)
+ * DELETE /api/bookings/:id
+ */
+export const deleteBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    await bookingService.deleteBooking(id, req.user.userId);
+
+    successResponse(res, null, 'Booking deleted successfully');
+  } catch (error) {
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      if (error.message === 'Booking not found') {
+        errorResponse(res, error.message, 404);
+        return;
+      }
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to delete booking', 500);
   }
 };
 

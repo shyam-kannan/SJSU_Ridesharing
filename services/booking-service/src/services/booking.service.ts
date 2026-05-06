@@ -9,6 +9,7 @@ import {
   Rating,
   CreateBookingRequest,
   CreateRatingRequest,
+  AppError,
 } from '@lessgo/shared';
 
 const pool = new Pool({
@@ -32,7 +33,7 @@ export const createBooking = async (
 
   // Check trip availability
   const tripQuery = `
-    SELECT trip_id, driver_id, origin, destination, seats_available, status
+    SELECT trip_id, driver_id, origin, destination, seats_available, status, departure_time
     FROM trips
     WHERE trip_id = $1
   `;
@@ -73,22 +74,53 @@ export const createBooking = async (
     return { booking: existingBooking as any, quote: existingQuote.rows[0] };
   }
 
-  // Create booking (store pickup_location if provided for detour-aware settlement)
-  const bookingQuery = `
-    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location, scost_breakdown)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING *
-  `;
-  const bookingResult = await pool.query(bookingQuery, [
-    trip_id,
-    riderId,
-    seats_booked,
-    BookingStatus.Pending,
-    'pending',  // booking_state for driver approval flow
-    pickupLocation ? JSON.stringify(pickupLocation) : null,
-    scost_breakdown ? JSON.stringify(scost_breakdown) : null,
-  ]);
-  const booking = bookingResult.rows[0];
+  // Atomically decrement seats and insert booking in a transaction
+  const client = await pool.connect();
+  let booking: any;
+  try {
+    await client.query('BEGIN');
+
+    // Decrement seats atomically with capacity guard
+    const seatUpdate = await client.query(
+      `UPDATE trips
+       SET seats_available = seats_available - $1, updated_at = current_timestamp
+       WHERE trip_id = $2
+         AND status = 'pending'
+         AND seats_available >= $1`,
+      [seats_booked, trip_id]
+    );
+    if (seatUpdate.rowCount === 0) {
+      throw new Error('Not enough seats available');
+    }
+
+    // Compute hold expiry: MIN(NOW() + 2h, departure_time - 1h)
+    const holdExpiresAt = `LEAST(NOW() + INTERVAL '2 hours', $8::timestamptz - INTERVAL '1 hour')`;
+
+    // Create booking (store pickup_location if provided for detour-aware settlement)
+    const bookingQuery = `
+      INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location, scost_breakdown, hold_expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, ${holdExpiresAt})
+      RETURNING *
+    `;
+    const bookingResult = await client.query(bookingQuery, [
+      trip_id,
+      riderId,
+      seats_booked,
+      BookingStatus.Pending,
+      'pending',  // booking_state for driver approval flow
+      pickupLocation ? JSON.stringify(pickupLocation) : null,
+      scost_breakdown ? JSON.stringify(scost_breakdown) : null,
+      trip.departure_time,
+    ]);
+    booking = bookingResult.rows[0];
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 
   // Generate quote via Cost Calculation Service (with fallback).
   // If the client provided a fare (from the search-results quote), prefer it for consistency.
@@ -157,7 +189,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       r.user_id as rider_user_id, r.name as rider_name, r.email as rider_email,
       r.role as rider_role, r.sjsu_id_status as rider_sjsu_id_status, r.rating as rider_rating,
       r.created_at as rider_created_at, r.updated_at as rider_updated_at,
-      q.quote_id, q.max_price, q.final_price, q.created_at as quote_created_at,
+      q.quote_id, q.max_price, q.max_price AS fare, q.final_price, q.created_at as quote_created_at,
       p.payment_id, p.stripe_payment_intent_id, p.amount, p.status as payment_status,
       p.created_at as payment_created_at, p.updated_at as payment_updated_at
     FROM bookings b
@@ -166,7 +198,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     JOIN users r ON b.rider_id = r.user_id
     LEFT JOIN quotes q ON b.booking_id = q.booking_id
     LEFT JOIN payments p ON b.booking_id = p.booking_id
-    WHERE b.booking_id = $1
+    WHERE b.booking_id = $1 AND b.deleted_at IS NULL
   `;
 
   const result = await pool.query(query, [bookingId]);
@@ -175,7 +207,42 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     return null;
   }
 
-  const row = result.rows[0];
+  let row = result.rows[0];
+
+  // Lazy expiry: if booking is pending and hold has expired, expire it now
+  if (
+    row.booking_state === 'pending' &&
+    row.hold_expires_at &&
+    new Date(row.hold_expires_at) < new Date()
+  ) {
+    const expireClient = await pool.connect();
+    try {
+      await expireClient.query('BEGIN');
+      const expireResult = await expireClient.query(
+        `UPDATE bookings
+         SET booking_state = 'rejected', updated_at = current_timestamp
+         WHERE booking_id = $1 AND booking_state = 'pending'
+         RETURNING booking_state`,
+        [bookingId]
+      );
+      if (expireResult.rowCount && expireResult.rowCount > 0) {
+        // Restore seats on the trip atomically
+        await expireClient.query(
+          `UPDATE trips
+           SET seats_available = seats_available + $1, updated_at = current_timestamp
+           WHERE trip_id = $2`,
+          [row.seats_booked, row.trip_id]
+        );
+        row = { ...row, booking_state: 'rejected' };
+      }
+      await expireClient.query('COMMIT');
+    } catch (expireErr) {
+      await expireClient.query('ROLLBACK');
+      console.error(`[LAZY_EXPIRY] Failed to expire booking ${bookingId}:`, expireErr);
+    } finally {
+      expireClient.release();
+    }
+  }
 
   return {
     booking_id: row.booking_id,
@@ -184,6 +251,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     status: row.status,
     booking_state: row.booking_state || 'pending',
     seats_booked: row.seats_booked,
+    fare: row.fare != null ? parseFloat(row.fare) : undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
     trip: {
@@ -252,8 +320,8 @@ export const listUserBookings = async (
   asDriver: boolean = false
 ): Promise<BookingWithDetails[]> => {
   const query = asDriver
-    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 ORDER BY b.created_at DESC`
-    : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 ORDER BY created_at DESC`;
+    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 AND b.deleted_at IS NULL ORDER BY b.created_at DESC`
+    : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`;
 
   const result = await pool.query(query, [userId]);
 
@@ -325,6 +393,7 @@ export const confirmBooking = async (
     }
 
     // Update booking status only if still pending (prevents double-confirm race)
+    // Note: seat decrement already happened at createBooking time
     const bookingUpdate = await client.query(
       `UPDATE bookings
        SET status = $1, updated_at = current_timestamp
@@ -333,19 +402,6 @@ export const confirmBooking = async (
     );
     if (bookingUpdate.rowCount === 0) {
       throw new Error('Booking is not pending');
-    }
-
-    // Reduce trip seats atomically with capacity guard (prevents overbooking race)
-    const tripUpdate = await client.query(
-      `UPDATE trips
-       SET seats_available = seats_available - $1, updated_at = current_timestamp
-       WHERE trip_id = $2
-         AND status = 'pending'
-         AND seats_available >= $1`,
-      [bookingData.seats_booked, bookingData.trip_id]
-    );
-    if (tripUpdate.rowCount === 0) {
-      throw new Error('Not enough seats available');
     }
 
     await client.query('COMMIT');
@@ -405,6 +461,7 @@ export const cancelBooking = async (
     }
 
     const wasConfirmed = bookingData.status === BookingStatus.Confirmed;
+    const wasPending = bookingData.status === BookingStatus.Pending;
 
     // If confirmed with a payment, handle based on payment status
     if (wasConfirmed && bookingData.payment) {
@@ -419,12 +476,12 @@ export const cancelBooking = async (
 
     // Update booking status
     await client.query(
-      'UPDATE bookings SET status = $1, updated_at = current_timestamp WHERE booking_id = $2',
+      'UPDATE bookings SET status = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
       [BookingStatus.Cancelled, bookingId]
     );
 
-    // Restore trip seats only if they were deducted previously (confirmed bookings)
-    if (wasConfirmed) {
+    // Restore trip seats if they were previously deducted (pending or confirmed bookings)
+    if (wasConfirmed || wasPending) {
       await client.query(
         'UPDATE trips SET seats_available = seats_available + $1, updated_at = current_timestamp WHERE trip_id = $2',
         [bookingData.seats_booked, bookingData.trip_id]
@@ -552,9 +609,9 @@ export const updatePickupLocation = async (
 /**
  * Get all bookings for a specific trip
  * @param tripId Trip UUID
- * @returns Array of bookings with rider details
+ * @returns Object with bookings array (including fare) and totalFare for approved/confirmed bookings
  */
-export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
+export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: any[]; totalFare: number }> => {
   const query = `
     SELECT
       b.booking_id as id,
@@ -569,15 +626,26 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       u.name as rider_name,
       u.email as rider_email,
       u.rating as rider_rating,
-      u.profile_picture_url as rider_profile_picture_url
+      u.profile_picture_url as rider_profile_picture_url,
+      q.max_price AS fare
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
-    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending')
+    LEFT JOIN quotes q ON q.booking_id = b.booking_id
+    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending') AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `;
 
   const result = await pool.query(query, [tripId]);
-  return result.rows;
+  const bookings = result.rows.map((row) => ({
+    ...row,
+    fare: row.fare !== null && row.fare !== undefined ? parseFloat(row.fare) : undefined,
+  }));
+
+  const totalFare = bookings
+    .filter((b) => b.booking_state === 'approved' || b.status === 'confirmed')
+    .reduce((sum, b) => sum + (b.fare ?? 0), 0);
+
+  return { bookings, totalFare: parseFloat(totalFare.toFixed(2)) };
 };
 
 /**
@@ -614,25 +682,11 @@ export const approveBooking = async (
       throw new Error('Cannot approve a rejected or cancelled booking');
     }
 
-    // Update booking state
+    // Update booking state and clear hold_expires_at (seat is now permanently held)
     await client.query(
-      'UPDATE bookings SET booking_state = $1, updated_at = current_timestamp WHERE booking_id = $2',
+      'UPDATE bookings SET booking_state = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
       ['approved', bookingId]
     );
-
-    // Deduct seats from trip
-    const tripUpdate = await client.query(
-      `UPDATE trips
-       SET seats_available = seats_available - $1, updated_at = current_timestamp
-       WHERE trip_id = $2
-         AND status = 'pending'
-         AND seats_available >= $1`,
-      [bookingData.seats_booked, bookingData.trip_id]
-    );
-
-    if (tripUpdate.rowCount === 0) {
-      throw new Error('Not enough seats available');
-    }
 
     await client.query('COMMIT');
 
@@ -675,17 +729,62 @@ export const rejectBooking = async (
     throw new Error('Cannot reject an approved booking');
   }
 
-  // Update booking state
-  const query = `
-    UPDATE bookings
-    SET booking_state = $1, updated_at = current_timestamp
-    WHERE booking_id = $2
-  `;
+  // Update booking state and restore seats atomically
+  const rejectClient = await pool.connect();
+  try {
+    await rejectClient.query('BEGIN');
 
-  await pool.query(query, ['rejected', bookingId]);
+    await rejectClient.query(
+      `UPDATE bookings
+       SET booking_state = $1, updated_at = current_timestamp
+       WHERE booking_id = $2`,
+      ['rejected', bookingId]
+    );
+
+    // Restore seats since they were decremented at createBooking time
+    await rejectClient.query(
+      `UPDATE trips
+       SET seats_available = seats_available + $1, updated_at = current_timestamp
+       WHERE trip_id = $2`,
+      [bookingData.seats_booked, bookingData.trip_id]
+    );
+
+    await rejectClient.query('COMMIT');
+  } catch (error) {
+    await rejectClient.query('ROLLBACK');
+    throw error;
+  } finally {
+    rejectClient.release();
+  }
 
   const updatedBooking = await getBookingById(bookingId);
   return updatedBooking!;
+};
+
+/**
+ * Soft delete a booking (set deleted_at = NOW())
+ * Only allowed if booking_state IN ('cancelled', 'rejected') and requester is the rider
+ * @param bookingId Booking's UUID
+ * @param userId Requesting user's UUID
+ */
+export const deleteBooking = async (bookingId: string, userId: string): Promise<void> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new Error('Booking not found');
+  }
+
+  if (bookingData.rider_id !== userId) {
+    throw new AppError('Forbidden: You are not the rider of this booking', 403);
+  }
+
+  if (!['cancelled', 'rejected'].includes(bookingData.booking_state || '')) {
+    throw new AppError('Booking can only be deleted when cancelled or rejected', 400);
+  }
+
+  await pool.query(
+    'UPDATE bookings SET deleted_at = NOW() WHERE booking_id = $1',
+    [bookingId]
+  );
 };
 
 export default {
@@ -699,4 +798,5 @@ export default {
   getBookingsByTripId,
   approveBooking,
   rejectBooking,
+  deleteBooking,
 };

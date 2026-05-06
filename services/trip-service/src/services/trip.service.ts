@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import axios from 'axios';
 import { config } from '../config';
-import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
+import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint, AppError } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
 import { mineFrequentRouteFromTrip } from './frequent_route.service';
 import {
@@ -28,7 +28,9 @@ const checkTripOverlap = async (
   driverId: string,
   originPoint: GeoPoint,
   destinationPoint: GeoPoint,
-  departureTime: Date
+  departureTime: Date,
+  originAddress?: string,
+  destinationAddress?: string
 ): Promise<void> => {
   // Calculate distance using Haversine formula
   const R = 3959; // Earth radius in miles
@@ -52,6 +54,7 @@ const checkTripOverlap = async (
     FROM trips
     WHERE driver_id = $1
       AND status = 'pending'
+      AND deleted_at IS NULL
       AND (
         (departure_time BETWEEN $2 AND ($2 + INTERVAL '${estimatedDurationMinutes} minutes'))
         OR
@@ -71,6 +74,32 @@ const checkTripOverlap = async (
       `You already have a trip scheduled at ${existingTime}. Please choose a different time.`
     );
   }
+
+  // Check for exact duplicate: same origin address, destination address, and departure_time
+  if (originAddress && destinationAddress) {
+    const exactDuplicateQuery = `
+      SELECT trip_id
+      FROM trips
+      WHERE driver_id = $1
+        AND origin = $2
+        AND destination = $3
+        AND departure_time = $4
+        AND status NOT IN ('cancelled')
+        AND deleted_at IS NULL
+      LIMIT 1
+    `;
+
+    const exactResult = await pool.query(exactDuplicateQuery, [
+      driverId,
+      originAddress,
+      destinationAddress,
+      departureTime,
+    ]);
+
+    if (exactResult.rows.length > 0) {
+      throw new AppError('A trip with this exact route and time already exists.', 409);
+    }
+  }
 };
 
 /**
@@ -88,8 +117,8 @@ export const createTrip = async (
   // Geocode origin and destination
   const { originPoint, destinationPoint } = await geocodeTripLocations(origin, destination);
 
-  // Check for overlapping trips
-  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time));
+  // Check for overlapping trips (and exact duplicates)
+  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time), origin, destination);
 
   const query = `
     INSERT INTO trips (
@@ -158,7 +187,7 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE t.trip_id = $1
+    WHERE t.trip_id = $1 AND t.deleted_at IS NULL
   `;
 
   const result = await pool.query(query, [tripId]);
@@ -246,7 +275,7 @@ export const searchTripsNearby = async (
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE (
+    WHERE t.deleted_at IS NULL AND (
       ST_DWithin(
         t.origin_point::geography,
         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
@@ -360,7 +389,7 @@ export const listTrips = async (filters?: {
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE 1=1
+    WHERE t.deleted_at IS NULL
   `;
 
   const values: any[] = [];
@@ -909,6 +938,32 @@ export const searchTripsWithRerouting = async (
   return enriched;
 };
 
+/**
+ * Soft delete a trip (set deleted_at = NOW())
+ * Only allowed if status = 'cancelled' and requester is the driver
+ * @param tripId Trip's UUID
+ * @param driverId Requesting user's UUID
+ */
+export const deleteTrip = async (tripId: string, driverId: string): Promise<void> => {
+  const trip = await getTripById(tripId);
+  if (!trip) {
+    throw new Error('Trip not found');
+  }
+
+  if (trip.driver_id !== driverId) {
+    throw new AppError('Forbidden: You are not the driver of this trip', 403);
+  }
+
+  if (trip.status !== TripStatus.Cancelled) {
+    throw new AppError('Trip can only be deleted when cancelled', 400);
+  }
+
+  await pool.query(
+    'UPDATE trips SET deleted_at = NOW() WHERE trip_id = $1',
+    [tripId]
+  );
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
@@ -919,6 +974,7 @@ export default {
   listTrips,
   updateTrip,
   cancelTrip,
+  deleteTrip,
   updateTripState,
   sendMessage,
   getTripMessages,
