@@ -88,6 +88,7 @@ struct HomeView: View {
 extension Notification.Name {
     static let navigateToHomeTab = Notification.Name("navigateToHomeTab")
     static let navigateToBookingsTab = Notification.Name("navigateToBookingsTab")
+    static let openBookingDetail = Notification.Name("openBookingDetail")
 }
 
 // MARK: - Custom Tab Bar

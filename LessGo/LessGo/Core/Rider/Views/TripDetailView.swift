@@ -90,6 +90,11 @@ struct TripDetailView: View {
                     )
                 }
             }
+            .onChange(of: viewModel.bookingSucceeded) { succeeded in
+                if succeeded {
+                    dismiss()
+                }
+            }
         }
         .navigationViewStyle(.stack)
     }

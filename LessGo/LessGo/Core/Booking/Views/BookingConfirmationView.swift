@@ -501,6 +501,7 @@ struct BookingListView: View {
     @State private var reportedUserId: String?
     @State private var reportedUserName: String?
     @State private var reportTripId: String?
+    @State private var deepLinkedBooking: Booking? = nil
 
     private var filteredBookings: [Booking] {
         let cutoff = Date().addingTimeInterval(-24 * 3600)
@@ -615,6 +616,30 @@ struct BookingListView: View {
             }
             .sheet(item: $editingTrip) { trip in
                 EditPostedTripSheet(trip: trip, vm: vm)
+            }
+            .background(
+                NavigationLink(
+                    destination: Group {
+                        if let booking = deepLinkedBooking {
+                            BookingRideDetailView(booking: booking, vm: vm, showAsDriver: false)
+                        }
+                    },
+                    isActive: Binding(
+                        get: { deepLinkedBooking != nil },
+                        set: { if !$0 { deepLinkedBooking = nil } }
+                    )
+                ) { EmptyView() }
+                .hidden()
+            )
+            .onReceive(NotificationCenter.default.publisher(for: .openBookingDetail)) { notification in
+                guard let bookingId = notification.userInfo?["bookingId"] as? String else { return }
+                // Wait briefly to allow the tab switch animation to complete, then reload and open
+                Task {
+                    await vm.loadBookings(asDriver: false)
+                    if let matched = vm.bookings.first(where: { $0.id == bookingId }) {
+                        deepLinkedBooking = matched
+                    }
+                }
             }
         }
     }
