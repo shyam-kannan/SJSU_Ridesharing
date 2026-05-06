@@ -214,8 +214,10 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     row.hold_expires_at &&
     new Date(row.hold_expires_at) < new Date()
   ) {
+    const expireClient = await pool.connect();
     try {
-      const expireResult = await pool.query(
+      await expireClient.query('BEGIN');
+      const expireResult = await expireClient.query(
         `UPDATE bookings
          SET booking_state = 'rejected', updated_at = current_timestamp
          WHERE booking_id = $1 AND booking_state = 'pending'
@@ -223,8 +225,8 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
         [bookingId]
       );
       if (expireResult.rowCount && expireResult.rowCount > 0) {
-        // Restore seats on the trip
-        await pool.query(
+        // Restore seats on the trip atomically
+        await expireClient.query(
           `UPDATE trips
            SET seats_available = seats_available + $1, updated_at = current_timestamp
            WHERE trip_id = $2`,
@@ -232,8 +234,12 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
         );
         row = { ...row, booking_state: 'rejected' };
       }
+      await expireClient.query('COMMIT');
     } catch (expireErr) {
+      await expireClient.query('ROLLBACK');
       console.error(`[LAZY_EXPIRY] Failed to expire booking ${bookingId}:`, expireErr);
+    } finally {
+      expireClient.release();
     }
   }
 
@@ -468,7 +474,7 @@ export const cancelBooking = async (
 
     // Update booking status
     await client.query(
-      'UPDATE bookings SET status = $1, updated_at = current_timestamp WHERE booking_id = $2',
+      'UPDATE bookings SET status = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
       [BookingStatus.Cancelled, bookingId]
     );
 
@@ -710,14 +716,33 @@ export const rejectBooking = async (
     throw new Error('Cannot reject an approved booking');
   }
 
-  // Update booking state
-  const query = `
-    UPDATE bookings
-    SET booking_state = $1, updated_at = current_timestamp
-    WHERE booking_id = $2
-  `;
+  // Update booking state and restore seats atomically
+  const rejectClient = await pool.connect();
+  try {
+    await rejectClient.query('BEGIN');
 
-  await pool.query(query, ['rejected', bookingId]);
+    await rejectClient.query(
+      `UPDATE bookings
+       SET booking_state = $1, updated_at = current_timestamp
+       WHERE booking_id = $2`,
+      ['rejected', bookingId]
+    );
+
+    // Restore seats since they were decremented at createBooking time
+    await rejectClient.query(
+      `UPDATE trips
+       SET seats_available = seats_available + $1, updated_at = current_timestamp
+       WHERE trip_id = $2`,
+      [bookingData.seats_booked, bookingData.trip_id]
+    );
+
+    await rejectClient.query('COMMIT');
+  } catch (error) {
+    await rejectClient.query('ROLLBACK');
+    throw error;
+  } finally {
+    rejectClient.release();
+  }
 
   const updatedBooking = await getBookingById(bookingId);
   return updatedBooking!;
