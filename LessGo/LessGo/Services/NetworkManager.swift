@@ -334,6 +334,9 @@ class NetworkManager {
     private func refreshAccessToken() async throws -> String {
         restoreSavedSessionIfNeeded()
         guard let refreshToken = KeychainManager.shared.getRefreshToken() else {
+            #if DEBUG
+            print("[NetworkManager] refreshAccessToken: no refresh token in keychain")
+            #endif
             throw NetworkError.unauthorized
         }
 

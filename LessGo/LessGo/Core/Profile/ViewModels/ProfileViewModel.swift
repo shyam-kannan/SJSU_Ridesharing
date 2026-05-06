@@ -149,6 +149,9 @@ class ProfileViewModel: ObservableObject {
                 self.successMessage = nil
             }
         } catch {
+            #if DEBUG
+            print("[ProfileVM] saveProfile error: \(error)")
+            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }

@@ -1,39 +1,46 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: grouping-service-ksa
+  name: embedding-service-ksa
   namespace: lessgo
   annotations:
-    iam.gke.io/gcp-service-account: grouping-service-gsa@lessgo-492322.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: embedding-service-gsa@lessgo-492322.iam.gserviceaccount.com
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: grouping-service
+  name: embedding-service
   namespace: lessgo
   labels:
-    app: grouping-service
+    app: embedding-service
     tier: backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: grouping-service
+      app: embedding-service
   template:
     metadata:
       labels:
-        app: grouping-service
+        app: embedding-service
         tier: backend
     spec:
-      serviceAccountName: grouping-service-ksa
+      serviceAccountName: embedding-service-ksa
       enableServiceLinks: false
       containers:
-        - name: grouping-service
-          image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/grouping-service:${COMMIT_SHA}
+        - name: embedding-service
+          image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/embedding-service:${COMMIT_SHA}
           imagePullPolicy: Always
           ports:
-            - containerPort: 8001
+            - containerPort: 3010
               name: http
+          env:
+            - name: EMBEDDING_SERVICE_PORT
+              value: "3010"
+            - name: DATA_DIR
+              value: "/app/data/nyc_taxi"
+            - name: MODEL_DIR
+              value: "/app/models"
           volumeMounts:
             - name: secrets-store
               mountPath: /mnt/secrets-store
@@ -43,23 +50,25 @@ spec:
                 name: lessgo-config
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "50m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
-              memory: "128Mi"
-              cpu: "200m"
+              memory: "512Mi"
+              cpu: "500m"
           livenessProbe:
             httpGet:
               path: /health
-              port: 8001
+              port: 3010
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8001
+              port: 3010
             initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
       volumes:
         - name: secrets-store
           csi:
@@ -71,16 +80,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: grouping-service
+  name: embedding-service
   namespace: lessgo
   labels:
-    app: grouping-service
+    app: embedding-service
 spec:
   selector:
-    app: grouping-service
+    app: embedding-service
   ports:
     - protocol: TCP
-      port: 8001
-      targetPort: 8001
+      port: 3010
+      targetPort: 3010
       name: http
   type: ClusterIP

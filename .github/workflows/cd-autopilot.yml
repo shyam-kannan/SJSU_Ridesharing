@@ -42,8 +42,8 @@ jobs:
             dockerfile: services/notification-service/Dockerfile
           - service: cost-calculation-service
             dockerfile: services/cost-calculation-service/Dockerfile
-          - service: grouping-service
-            dockerfile: services/grouping-service/Dockerfile
+          - service: embedding-service
+            dockerfile: services/embedding-service/Dockerfile
           - service: routing-service
             dockerfile: services/routing-service/Dockerfile
           - service: safety-service
@@ -202,7 +202,7 @@ jobs:
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
 
           # List of services to deploy
-          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service embedding-service routing-service safety-service"
 
           for svc in $services; do
             service_changed=false
