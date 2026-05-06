@@ -12,6 +12,7 @@ struct Trip: Codable, Identifiable {
     let destinationPoint: Coordinate?
     let departureTime: Date
     let seatsAvailable: Int
+    let maxRiders: Int?
     let recurrence: String?
     let status: TripStatus
     let createdAt: Date
@@ -27,6 +28,7 @@ struct Trip: Codable, Identifiable {
         destinationPoint: Coordinate?,
         departureTime: Date,
         seatsAvailable: Int,
+        maxRiders: Int? = nil,
         recurrence: String?,
         status: TripStatus,
         createdAt: Date,
@@ -41,6 +43,7 @@ struct Trip: Codable, Identifiable {
         self.destinationPoint = destinationPoint
         self.departureTime = departureTime
         self.seatsAvailable = seatsAvailable
+        self.maxRiders = maxRiders
         self.recurrence = recurrence
         self.status = status
         self.createdAt = createdAt
@@ -56,6 +59,7 @@ struct Trip: Codable, Identifiable {
         case destinationPoint = "destination_point"
         case departureTime = "departure_time"
         case seatsAvailable = "seats_available"
+        case maxRiders = "max_riders"
         case recurrence, status
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -72,6 +76,7 @@ struct Trip: Codable, Identifiable {
         destinationPoint = try container.decodeIfPresent(Coordinate.self, forKey: .destinationPoint)
         departureTime = try container.decode(Date.self, forKey: .departureTime)
         seatsAvailable = try container.decode(Int.self, forKey: .seatsAvailable)
+        maxRiders = try container.decodeIfPresent(Int.self, forKey: .maxRiders)
         recurrence = try container.decodeIfPresent(String.self, forKey: .recurrence)
         status = try Self.decodeStatus(from: container)
         createdAt = try container.decode(Date.self, forKey: .createdAt)

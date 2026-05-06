@@ -37,6 +37,36 @@ struct PassengerCard: View {
                         .lineLimit(1)
 
                     StarRatingView(rating: passenger.riderRating, size: 12)
+
+                    if let scost = passenger.scostBreakdown {
+                        HStack(spacing: 10) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "dollarsign.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brandGreen)
+                                Text(String(format: "$%.2f", scost.total * 8.50))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.turn.up.right")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brandOrange)
+                                Text(formatScostDistance(scost.walk))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brand)
+                                Text(formatScostTime(scost.advance))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                 }
 
                 Spacer()

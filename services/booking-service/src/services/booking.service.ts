@@ -26,9 +26,9 @@ export const createBooking = async (
   bookingData: CreateBookingRequest
 ): Promise<{ booking: Booking; quote: Quote }> => {
   const { trip_id, seats_booked, scost_breakdown } = bookingData;
-  // pickup_location is not in CreateBookingRequest type but may be sent by clients
-  // (e.g. dev-tools simulation for detour testing). Store it if present.
+  // pickup_location and fare are not in CreateBookingRequest type but may be sent by clients.
   const pickupLocation = (bookingData as any).pickup_location ?? null;
+  const clientFare: number | null = (bookingData as any).fare ?? null;
 
   // Check trip availability
   const tripQuery = `
@@ -57,6 +57,22 @@ export const createBooking = async (
     throw new Error('Drivers cannot book their own trips');
   }
 
+  // Idempotency: return existing active booking if one already exists
+  const existingQuery = await pool.query(
+    `SELECT booking_id FROM bookings
+     WHERE trip_id = $1 AND rider_id = $2
+       AND booking_state NOT IN ('cancelled', 'rejected')`,
+    [trip_id, riderId]
+  );
+  if (existingQuery.rows.length > 0) {
+    const existingBooking = await getBookingById(existingQuery.rows[0].booking_id);
+    const existingQuote = await pool.query(
+      `SELECT * FROM quotes WHERE booking_id = $1`,
+      [existingQuery.rows[0].booking_id]
+    );
+    return { booking: existingBooking as any, quote: existingQuote.rows[0] };
+  }
+
   // Create booking (store pickup_location if provided for detour-aware settlement)
   const bookingQuery = `
     INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location, scost_breakdown)
@@ -74,26 +90,31 @@ export const createBooking = async (
   ]);
   const booking = bookingResult.rows[0];
 
-  // Generate quote via Cost Calculation Service (with fallback)
+  // Generate quote via Cost Calculation Service (with fallback).
+  // If the client provided a fare (from the search-results quote), prefer it for consistency.
   let maxPrice: number;
 
-  try {
-    const costResponse = await axios.post(`${config.costServiceUrl}/cost/calculate`, {
-      origin: trip.origin,
-      destination: trip.destination,
-      num_riders: seats_booked,
-      trip_id: trip_id,
-    });
+  if (clientFare !== null && clientFare > 0) {
+    maxPrice = clientFare;
+  } else {
+    try {
+      const costResponse = await axios.post(`${config.costServiceUrl}/cost/calculate`, {
+        origin: trip.origin,
+        destination: trip.destination,
+        num_riders: seats_booked,
+        trip_id: trip_id,
+      });
 
-    maxPrice = costResponse.data.data.max_price;
-  } catch (error) {
-    // Fallback: calculate price locally if cost service is unavailable
-    console.warn('Cost service unavailable, using fallback pricing');
-    const basePricePerRider = 5.0;
-    const estimatedDistanceMiles = 10;
-    const pricePerMile = 0.5;
-    const totalTripCost = basePricePerRider + estimatedDistanceMiles * pricePerMile;
-    maxPrice = parseFloat((totalTripCost / seats_booked).toFixed(2));
+      maxPrice = costResponse.data.data.max_price;
+    } catch (error) {
+      // Fallback: calculate price locally if cost service is unavailable
+      console.warn('Cost service unavailable, using fallback pricing');
+      const basePricePerRider = 5.0;
+      const estimatedDistanceMiles = 10;
+      const pricePerMile = 0.5;
+      const totalTripCost = basePricePerRider + estimatedDistanceMiles * pricePerMile;
+      maxPrice = parseFloat((totalTripCost / seats_booked).toFixed(2));
+    }
   }
 
   try {

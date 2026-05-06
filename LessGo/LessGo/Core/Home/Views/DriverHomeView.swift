@@ -18,6 +18,7 @@ struct DriverHomeView: View {
     // ── Posted rides navigation ────────────────────────────────────────────────
     @State private var showCreateTrip = false
     @State private var selectedTripForDetail: Trip? = nil
+    @State private var selectedDriverTab: Int = 0
 
     // ── Notifications ──────────────────────────────────────────────────────────
     @State private var showAccountMenu = false
@@ -523,12 +524,101 @@ struct DriverHomeView: View {
         profileVM.driverTrips.filter { $0.status == .pending }
     }
 
+    private var tripsWithPassengers: [Trip] {
+        scheduledTrips.filter { trip in
+            guard let maxRiders = trip.maxRiders else { return false }
+            return trip.seatsAvailable < maxRiders
+        }
+    }
+
     private var postedRidesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Your Posted Rides")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(.textPrimary)
 
+            Picker("", selection: $selectedDriverTab) {
+                Text("Passengers").tag(0)
+                Text("Posted Trips").tag(1)
+            }
+            .pickerStyle(.segmented)
+
+            if selectedDriverTab == 0 {
+                passengersTabContent
+            } else {
+                postedTripsTabContent
+            }
+        }
+    }
+
+    private var passengersTabContent: some View {
+        Group {
+            if tripsWithPassengers.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.slash")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color.brand.opacity(0.5))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No confirmed passengers yet")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text("Passengers appear here once you approve their requests")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.cardBackground)
+                )
+            } else {
+                ForEach(tripsWithPassengers) { trip in
+                    Button(action: { selectedTripForDetail = trip }) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(trip.origin) → \(trip.destination)")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if let maxRiders = trip.maxRiders {
+                                let confirmedCount = maxRiders - trip.seatsAvailable
+                                HStack(spacing: 4) {
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 11))
+                                    Text("\(confirmedCount)")
+                                        .font(.system(size: 12, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.brandGreen)
+                                .clipShape(Capsule())
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.cardBackground)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var postedTripsTabContent: some View {
+        Group {
             if scheduledTrips.isEmpty {
                 HStack(spacing: 12) {
                     Image(systemName: "car.rear.road.lane.dashed")

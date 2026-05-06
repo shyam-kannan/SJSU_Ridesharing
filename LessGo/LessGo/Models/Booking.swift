@@ -135,10 +135,12 @@ struct Quote: Codable {
 struct CreateBookingRequest: Codable {
     let tripId: String
     let seatsBooked: Int
+    let fare: Double?
 
     enum CodingKeys: String, CodingKey {
         case tripId = "trip_id"
         case seatsBooked = "seats_booked"
+        case fare
     }
 }
 

@@ -321,7 +321,10 @@ struct DriverTripDetailsView: View {
     }
 
     private var headerStatsStrip: some View {
-        HStack(spacing: 12) {
+        let statusColor: Color = approvedBookings.isEmpty ? .brandGold : .brandGreen
+        let statusLabel = approvedBookings.isEmpty ? "Pending" : "Confirmed"
+
+        return HStack(spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "person.2.fill")
                     .foregroundColor(.brand)
@@ -339,6 +342,18 @@ struct DriverTripDetailsView: View {
                 Image(systemName: "dollarsign.circle.fill")
                     .foregroundColor(DesignSystem.Colors.accentLime)
                 Text(String(format: "$%.2f est.", totalEarnings))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.cardBackground)
+            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
+            .clipShape(Capsule())
+
+            HStack(spacing: 6) {
+                Circle().fill(statusColor).frame(width: 8, height: 8)
+                Text(statusLabel)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.textPrimary)
             }
@@ -483,7 +498,7 @@ private struct PendingBookingCard: View {
                                 Image(systemName: "arrow.triangle.turn.up.right")
                                     .font(.system(size: 11))
                                     .foregroundColor(.brandOrange)
-                                Text(formatDistance(scost.walk))
+                                Text(formatScostDistance(scost.walk))
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.textPrimary)
                             }
@@ -493,7 +508,7 @@ private struct PendingBookingCard: View {
                                 Image(systemName: "clock.fill")
                                     .font(.system(size: 11))
                                     .foregroundColor(.brand)
-                                Text(formatTime(scost.advance))
+                                Text(formatScostTime(scost.advance))
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.textPrimary)
                             }
@@ -576,7 +591,7 @@ private struct PendingBookingCard: View {
 
 // MARK: - Helper Functions
 
-private func formatDistance(_ meters: Double) -> String {
+func formatScostDistance(_ meters: Double) -> String {
     if meters < 1000 {
         return String(format: "%.0fm", meters)
     } else {
@@ -584,7 +599,7 @@ private func formatDistance(_ meters: Double) -> String {
     }
 }
 
-private func formatTime(_ seconds: Double) -> String {
+func formatScostTime(_ seconds: Double) -> String {
     if seconds < 60 {
         return String(format: "%.0fs", seconds)
     } else if seconds < 3600 {

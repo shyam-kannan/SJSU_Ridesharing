@@ -76,19 +76,22 @@ class TripDetailViewModel: ObservableObject {
     }
 
     func requestBooking() async {
+        guard !isBooking else { return }
         isBooking = true
         errorMessage = nil
 
         defer { isBooking = false }
 
         do {
-            let response = try await bookingService.createBooking(tripId: tripId, seatsBooked: 1)
+            let fare = trip?.costBreakdown?.perRiderSplit ?? trip?.estimatedCost
+            let response = try await bookingService.createBooking(tripId: tripId, seatsBooked: 1, fare: fare)
             booking = response.booking
             bookingState = .pending
 
             // Start polling for booking status updates
             startPolling()
 
+            NotificationCenter.default.post(name: .navigateToBookingsTab, object: nil)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
             errorMessage = error.userMessage

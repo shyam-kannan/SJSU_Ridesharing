@@ -179,6 +179,11 @@ struct TripDetailView: View {
                             .font(.system(size: 13))
                             .foregroundColor(.textSecondary)
                     }
+
+                    if let state = viewModel.bookingState {
+                        bookingStateBadge(state)
+                            .padding(.top, 2)
+                    }
                 }
 
                 Spacer()
@@ -540,6 +545,19 @@ struct TripDetailView: View {
                     .cornerRadius(12)
                 }
                 .disabled(viewModel.isCancelling)
+
+                Button(action: { showChat = true }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "message.fill")
+                        Text("Chat with Driver")
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.brand)
+                    .cornerRadius(12)
+                }
             }
 
         case .approved:
@@ -691,6 +709,31 @@ struct TripDetailView: View {
         }
         }
         )
+    }
+
+    // MARK: - Booking State Badge
+
+    @ViewBuilder
+    private func bookingStateBadge(_ state: BookingState) -> some View {
+        let (label, color): (String, Color) = {
+            switch state {
+            case .pending:   return ("Pending", .brandGold)
+            case .approved:  return ("Confirmed", .brandGreen)
+            case .rejected:  return ("Declined", .brandRed)
+            case .cancelled: return ("Cancelled", .textTertiary)
+            case .completed: return ("Completed", .brandGreen)
+            }
+        }()
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.12))
+        .clipShape(Capsule())
     }
 
     // MARK: - Helpers
