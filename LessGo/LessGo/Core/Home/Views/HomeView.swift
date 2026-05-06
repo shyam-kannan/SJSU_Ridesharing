@@ -138,3 +138,8 @@ private struct CustomTabBar: View {
         .padding(.bottom, 10)
     }
 }
+
+#Preview {
+    HomeView()
+        .environmentObject(AuthViewModel())
+}

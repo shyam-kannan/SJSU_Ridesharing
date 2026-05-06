@@ -97,3 +97,7 @@ private struct FAQRow: View {
         .animation(.spring(response: 0.3), value: isExpanded)
     }
 }
+
+#Preview {
+    FAQView()
+}

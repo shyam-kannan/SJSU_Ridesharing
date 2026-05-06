@@ -163,3 +163,12 @@ struct ReportUserView: View {
         }
     }
 }
+
+#Preview {
+    ReportUserView(
+        reportedUserId: "user-1",
+        reportedUserName: "Marcus Chen",
+        tripId: "trip-1"
+    )
+    .environmentObject(AuthViewModel())
+}

@@ -363,3 +363,8 @@ private struct PasswordStrengthIndicator: View {
         }
     }
 }
+
+#Preview {
+    SignUpView()
+        .environmentObject(AuthViewModel())
+}

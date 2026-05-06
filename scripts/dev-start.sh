@@ -44,7 +44,6 @@ SERVICES=(
   "Cost Service|3009|node|services/cost-calculation-service|npm run dev"
   "Safety Service|8005|node|services/safety-service|npm run dev"
   "Routing Service|8002|python|services/routing-service|python -m app.main"
-  "Grouping Service|8001|python|services/grouping-service|python -m app.main"
   "Embedding Service|3010|python|services/embedding-service|python -m app.main"
   "API Gateway|3000|node|services/api-gateway|npm run dev"
 )
@@ -164,9 +163,6 @@ do_start() {
     fi
   fi
   
-  # Check for Python venvs
-  local has_venv_warning=false
-  
   # ── Start Services ──
   echo -e "${BOLD}Starting services...${NC}"
   echo ""
@@ -196,15 +192,13 @@ do_start() {
         printf "  ${YELLOW}⊘${NC} %-24s ${DIM}skipped (no Python)${NC}\n" "$name"
         continue
       fi
-      
+
       # Check for venv
       local actual_python="$python_cmd"
       if [[ -f "$service_dir/venv/bin/python" ]]; then
         actual_python="$service_dir/venv/bin/python"
       elif [[ -f "$service_dir/.venv/bin/python" ]]; then
         actual_python="$service_dir/.venv/bin/python"
-      else
-        has_venv_warning=true
       fi
       
       # Replace "python" in the command with the resolved interpreter
@@ -255,13 +249,6 @@ do_start() {
       up=$((up + 1))
     fi
   done
-  
-  # ── Warnings ──
-  if [[ "$has_venv_warning" == true ]]; then
-    echo ""
-    echo -e "  ${YELLOW}⚠ Some Python services have no venv.${NC}"
-    echo -e "  ${DIM}  Tip: cd services/<python-service> && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt${NC}"
-  fi
   
   # ── Summary ──
   echo ""

@@ -231,3 +231,8 @@ private struct PasswordStrengthBar: View {
         }
     }
 }
+
+#Preview {
+    ChangePasswordView()
+        .environmentObject(AuthViewModel())
+}

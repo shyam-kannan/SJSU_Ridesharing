@@ -74,12 +74,16 @@ struct DriverListBottomSheet: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 10) {
-                        ForEach(viewModel.filteredTrips) { trip in
-                            DriverListCard(trip: trip) {
+                        ForEach(Array(viewModel.filteredTrips.enumerated()), id: \.element.id) { index, trip in
+                            Button(action: {
                                 guard authVM.currentUser?.sjsuIdStatus == .verified else { return }
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 selectedTrip = trip
                                 showTripDetails = true
+                            }) {
+                                TripCardView(trip: trip, index: index)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -224,3 +228,17 @@ private struct LeavingSoonBadge: View {
     }
 }
 
+
+#Preview {
+    @State var selectedTrip: Trip? = nil
+    @State var showTripDetails = false
+    return DriverListBottomSheet(
+        viewModel: TripSearchViewModel(),
+        locationName: "SJSU Campus",
+        selectedTrip: $selectedTrip,
+        showTripDetails: $showTripDetails
+    )
+    .environmentObject(AuthViewModel())
+    .frame(height: 400)
+    .background(Color.appBackground)
+}

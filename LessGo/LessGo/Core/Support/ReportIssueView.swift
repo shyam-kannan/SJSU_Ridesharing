@@ -169,3 +169,8 @@ private struct IssueTypePill: View {
 
 // Empty response type for notification service
 struct EmptyNotificationResponse: Codable {}
+
+#Preview {
+    ReportIssueView()
+        .environmentObject(AuthViewModel())
+}

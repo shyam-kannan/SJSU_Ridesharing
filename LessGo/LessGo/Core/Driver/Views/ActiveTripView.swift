@@ -24,6 +24,8 @@ struct ActiveTripView: View {
     @State private var unreadCount = 0
     @State private var showPostRideSummary = false
     @State private var showReportIssueSheet = false
+    @State private var showPostRideFlow = false
+    @State private var showRateRiderSheet = false
     @State private var pollTimer: Timer?
     @State private var passengerPollTimer: Timer?
     @State private var riderPickupSyncTimer: Timer?
@@ -92,6 +94,17 @@ struct ActiveTripView: View {
                 trip: trip,
                 booking: booking,
                 isDriver: isDriver
+            )
+            .environmentObject(authVM)
+        }
+        .sheet(isPresented: $showPostRideFlow) {
+            PostRideFlow(
+                bookingId: booking?.id ?? "",
+                driverName: trip.driver?.name ?? "Your Driver",
+                driverRating: trip.driver?.rating ?? 5.0,
+                fareAmount: booking?.quote?.finalPrice ?? booking?.quote?.maxPrice ?? 8.50,
+                origin: trip.origin,
+                destination: trip.destination
             )
             .environmentObject(authVM)
         }
@@ -624,6 +637,28 @@ struct ActiveTripView: View {
                     .background(Color.brand.opacity(0.10))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
+                if let booking {
+                    Button(action: { showRateRiderSheet = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.fill")
+                            Text("Rate Your Rider")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.brandGold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        .background(Color.brandGold.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .sheet(isPresented: $showRateRiderSheet) {
+                        RateRiderSheet(
+                            bookingId: booking.id,
+                            riderName: booking.rider?.name ?? "Your Rider"
+                        )
+                    }
+                }
             case .cancelled:
                 HStack(spacing: 8) {
                     Image(systemName: "xmark.circle.fill")
@@ -649,28 +684,49 @@ struct ActiveTripView: View {
             case .inProgress:
                 statusLabel(text: "You're on your way!", icon: "arrow.triangle.turn.up.right.circle.fill", color: .brand)
             case .completed:
-                statusLabel(text: "Trip completed! Rate your driver.", icon: "checkmark.circle.fill", color: .brandGreen)
+                statusLabel(text: "Trip completed!", icon: "checkmark.circle.fill", color: .brandGreen)
             case .cancelled:
                 statusLabel(text: "Trip was cancelled.", icon: "xmark.circle.fill", color: .brandRed)
             }
 
-            // Chat and Call buttons for rider
-            HStack(spacing: 12) {
-                Button(action: { showChat = true }) {
+            // Chat button (hide once completed)
+            if tripStatus != .completed && tripStatus != .cancelled {
+                HStack(spacing: 12) {
+                    Button(action: { showChat = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "message.fill")
+                            Text("Chat")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.brand.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                }
+            }
+
+            if tripStatus == .completed {
+                PrimaryButton(title: "Rate & Pay", icon: "star.circle.fill", color: .green) {
+                    showPostRideFlow = true
+                }
+                Button(action: { showPostRideSummary = true }) {
                     HStack(spacing: 8) {
-                        Image(systemName: "message.fill")
-                        Text("Chat")
+                        Image(systemName: "doc.text.magnifyingglass")
+                        Text("View Trip Summary")
+                        Spacer()
+                        Image(systemName: "chevron.right")
                     }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.brand)
                     .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 12)
-                    .background(Color.brand.opacity(0.1))
-                    .cornerRadius(12)
+                    .background(Color.brand.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-            }
-
-            if tripStatus == .completed || tripStatus == .cancelled {
+            } else if tripStatus == .cancelled {
                 Button(action: { showPostRideSummary = true }) {
                     HStack(spacing: 8) {
                         Image(systemName: "doc.text.magnifyingglass")
@@ -1562,6 +1618,153 @@ private struct TimelineRowState {
     let iconColor: Color
     let connector: Color
 }
+
+// MARK: - Rate Rider Sheet (Driver-side)
+
+private struct RateRiderSheet: View {
+    let bookingId: String
+    let riderName: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedStars = 5
+    @State private var comment = ""
+    @State private var isSubmitting = false
+    @State private var submitted = false
+    @State private var errorMessage: String?
+
+    private var riderFirstName: String {
+        riderName.components(separatedBy: " ").first ?? riderName
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Avatar
+                    VStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(DesignSystem.Colors.sjsuGold.opacity(0.15))
+                                .frame(width: 72, height: 72)
+                            Text(riderFirstName.prefix(1).uppercased())
+                                .font(.system(size: 30, weight: .bold, design: .rounded))
+                                .foregroundColor(.brandGold)
+                        }
+                        Text("How was \(riderFirstName)?")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.textPrimary)
+                    }
+                    .padding(.top, 8)
+
+                    // Star picker
+                    HStack(spacing: 14) {
+                        ForEach(1...5, id: \.self) { star in
+                            Button(action: {
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                                    selectedStars = star
+                                }
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }) {
+                                Image(systemName: star <= selectedStars ? "star.fill" : "star")
+                                    .font(.system(size: 38))
+                                    .foregroundColor(star <= selectedStars ? .brandOrange : DesignSystem.Colors.border)
+                                    .scaleEffect(star == selectedStars ? 1.2 : 1.0)
+                                    .animation(.spring(response: 0.2, dampingFraction: 0.6), value: selectedStars)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(submitted)
+                        }
+                    }
+
+                    // Comment
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Add a comment (optional)")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textSecondary)
+                        TextEditor(text: $comment)
+                            .frame(height: 80)
+                            .padding(10)
+                            .background(DesignSystem.Colors.fieldBackground)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(DesignSystem.Colors.border, lineWidth: 1)
+                            )
+                            .font(.system(size: 14))
+                            .disabled(submitted)
+                    }
+
+                    if submitted {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.brandGreen)
+                            Text("Rating submitted!")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                        }
+                        Button("Done") { dismiss() }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.brand)
+                            .padding(.vertical, 8)
+                    } else {
+                        VStack(spacing: 10) {
+                            PrimaryButton(
+                                title: "Submit Rating",
+                                icon: "star.fill",
+                                isLoading: isSubmitting,
+                                isEnabled: !isSubmitting
+                            ) {
+                                Task { await submit() }
+                            }
+                            if let err = errorMessage {
+                                Text(err)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.brandRed)
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 24)
+                }
+                .padding(.horizontal, 20)
+            }
+            .background(Color.appBackground.ignoresSafeArea())
+            .navigationTitle("Rate Rider")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
+    }
+
+    private func submit() async {
+        isSubmitting = true
+        errorMessage = nil
+        do {
+            _ = try await BookingService.shared.rateBooking(
+                id: bookingId,
+                score: selectedStars,
+                comment: comment.isEmpty ? nil : comment
+            )
+            await MainActor.run {
+                isSubmitting = false
+                submitted = true
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } catch {
+            await MainActor.run {
+                isSubmitting = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+// MARK: - Post Ride Report Sheet (issue reporter)
 
 private struct PostRideReportSheet: View {
     @EnvironmentObject var authVM: AuthViewModel

@@ -58,6 +58,12 @@ struct MatchedRideView: View {
     @State private var isCancelling = false
     @State private var errorMessage: String?
 
+    // ── Post-ride ──────────────────────────────────────────────────────────────
+    @State private var showPostRideFlow = false
+    @State private var postRideBookingId = ""
+    @State private var postRideFare: Double = 8.50
+    private let tripStatusPollTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
+
     // ── Entry animations ───────────────────────────────────────────────────────
     @State private var sheetAppeared = false
     @State private var driverCardAppeared = false
@@ -166,6 +172,10 @@ struct MatchedRideView: View {
         .onReceive(chatPollTimer) { _ in
             Task { await refreshChatUnread() }
         }
+        .onReceive(tripStatusPollTimer) { _ in
+            guard phase == .inTrip else { return }
+            Task { await pollTripCompletion() }
+        }
         .onChange(of: locationService.driverLocation?.latitude) { _ in
             checkDriverArrival()
             interpolateDriverCoordinate()
@@ -187,6 +197,19 @@ struct MatchedRideView: View {
         }
         .sheet(isPresented: $showSafety) {
             safetySheet
+        }
+        .sheet(isPresented: $showPostRideFlow) {
+            PostRideFlow(
+                bookingId: postRideBookingId,
+                driverName: driverName,
+                driverRating: driverRating,
+                fareAmount: postRideFare,
+                origin: originLabel,
+                destination: destinationLabel
+            ) {
+                dismiss()
+            }
+            .environmentObject(authVM)
         }
         .confirmationDialog(
             "Cancel your ride?",
@@ -235,6 +258,52 @@ struct MatchedRideView: View {
     // MARK: - Bottom Sheet
 
     private var bottomSheet: some View {
+        Group {
+            if phase == .completed {
+                completedBottomSheet
+            } else {
+                activeBottomSheet
+            }
+        }
+    }
+
+    private var completedBottomSheet: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 40, height: 4)
+                .padding(.top, 14)
+                .padding(.bottom, 20)
+
+            VStack(spacing: 14) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(.brandGreen)
+
+                VStack(spacing: 4) {
+                    Text("You've arrived!")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.textPrimary)
+                    Text("Trip complete with \(driverFirstName).")
+                        .font(.system(size: 14))
+                        .foregroundColor(.textSecondary)
+                }
+
+                PrimaryButton(title: "Rate & Pay", icon: "star.circle.fill", color: .green) {
+                    showPostRideFlow = true
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+        }
+        .background(Color.cardBackground)
+        .cornerRadius(20, corners: [.topLeft, .topRight])
+        .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: -4)
+    }
+
+    private var activeBottomSheet: some View {
         VStack(spacing: 0) {
             // Drag handle
             RoundedRectangle(cornerRadius: 3)
@@ -561,6 +630,34 @@ struct MatchedRideView: View {
         isCancelling = false
         await MainActor.run { dismiss() }
     }
+
+    private func pollTripCompletion() async {
+        guard !matchedTripId.isEmpty else { return }
+        do {
+            let trip: Trip = try await NetworkManager.shared.request(
+                endpoint: "/trips/\(matchedTripId)",
+                method: .get
+            )
+            guard trip.status == .completed else { return }
+            await fetchRiderBookingForPostRide()
+            await MainActor.run {
+                withAnimation { phase = .completed }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                showPostRideFlow = true
+            }
+        } catch { }
+    }
+
+    private func fetchRiderBookingForPostRide() async {
+        do {
+            let list = try await BookingService.shared.listBookings()
+            guard let match = list.bookings.first(where: { $0.tripId == matchedTripId }) else { return }
+            await MainActor.run {
+                postRideBookingId = match.id
+                postRideFare = match.quote?.finalPrice ?? match.quote?.maxPrice ?? 8.50
+            }
+        } catch { }
+    }
 }
 
 // MARK: - Haversine helper
@@ -573,4 +670,30 @@ private func haversineMeters(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordin
     let Δλ = (b.longitude - a.longitude) * .pi / 180
     let s = sin(Δφ/2)*sin(Δφ/2) + cos(φ1)*cos(φ2)*sin(Δλ/2)*sin(Δλ/2)
     return R * 2 * atan2(sqrt(s), sqrt(1-s))
+}
+
+// MARK: - Previews
+
+#Preview {
+    let mockRequest = TripRequestStatus(
+        requestId: "req-1",
+        riderId: "rider-1",
+        status: "matched",
+        origin: "SJSU Engineering Building",
+        destination: "Diridon Station",
+        departureTime: Date().addingTimeInterval(1800),
+        matchedTripId: "trip-1",
+        driverId: "driver-1",
+        driverName: "Marcus Chen",
+        driverRating: 4.8,
+        driverVehicleInfo: "2022 Toyota Camry Silver"
+    )
+    MatchedRideView(
+        tripRequest: mockRequest,
+        originCoordinate: CLLocationCoordinate2D(latitude: 37.3365, longitude: -121.8820),
+        destinationCoordinate: CLLocationCoordinate2D(latitude: 37.3297, longitude: -121.9020),
+        originLabel: "SJSU Engineering Building, San Jose",
+        destinationLabel: "Diridon Station"
+    )
+    .environmentObject(AuthViewModel())
 }

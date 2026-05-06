@@ -497,3 +497,8 @@ struct ImagePickerView: UIViewControllerRepresentable {
         }
     }
 }
+
+#Preview {
+    IDVerificationView()
+        .environmentObject(AuthViewModel())
+}

@@ -188,3 +188,8 @@ private extension TripRequestState {
     }
 }
 
+
+#Preview {
+    TripRequestView()
+        .environmentObject(AuthViewModel())
+}

@@ -364,3 +364,27 @@ struct CompactTripCard: View {
         isLoadingPassengers = false
     }
 }
+
+#Preview {
+    let trip = Trip(
+        id: "trip-preview",
+        driverId: "driver-1",
+        origin: "10th & San Fernando, San Jose",
+        destination: "San Jose State University",
+        originPoint: nil,
+        destinationPoint: nil,
+        departureTime: Date().addingTimeInterval(1800),
+        seatsAvailable: 3,
+        recurrence: nil,
+        status: .pending,
+        createdAt: Date(),
+        updatedAt: Date(),
+        driver: nil
+    )
+    VStack(spacing: 12) {
+        TripCardView(trip: trip, index: 0)
+        CompactTripCard(trip: trip)
+    }
+    .padding()
+    .background(Color.appBackground)
+}

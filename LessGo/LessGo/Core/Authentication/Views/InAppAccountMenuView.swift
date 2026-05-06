@@ -199,3 +199,8 @@ struct InAppAccountMenuView: View {
         }
     }
 }
+
+#Preview {
+    InAppAccountMenuView()
+        .environmentObject(AuthViewModel())
+}

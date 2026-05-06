@@ -3858,3 +3858,8 @@ struct DevToolsSection: View {
         .buttonStyle(.plain)
     }
 }
+
+#Preview {
+    ProfileView()
+        .environmentObject(AuthViewModel())
+}

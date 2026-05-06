@@ -200,3 +200,7 @@ private struct AboutLinkRow: View {
         .padding(.vertical, 10)
     }
 }
+
+#Preview {
+    AboutView()
+}

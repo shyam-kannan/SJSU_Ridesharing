@@ -507,3 +507,23 @@ struct InfoCell: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+#Preview {
+    let trip = Trip(
+        id: "trip-preview",
+        driverId: "driver-1",
+        origin: "10th & San Fernando, San Jose",
+        destination: "San Jose State University",
+        originPoint: nil,
+        destinationPoint: nil,
+        departureTime: Date().addingTimeInterval(1800),
+        seatsAvailable: 3,
+        recurrence: nil,
+        status: .pending,
+        createdAt: Date(),
+        updatedAt: Date(),
+        driver: nil
+    )
+    TripDetailsView(trip: trip)
+        .environmentObject(AuthViewModel())
+}

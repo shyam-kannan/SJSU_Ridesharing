@@ -488,6 +488,7 @@ struct BookingListView: View {
     @StateObject private var vm = BookingViewModel()
     @State private var showAsDriver = false
     @State private var showAccountMenu = false
+    @State private var showTripRequest = false
     @State private var showReportUser = false
     @State private var reportedUserId: String?
     @State private var reportedUserName: String?
@@ -516,7 +517,7 @@ struct BookingListView: View {
                             title: "No bookings yet",
                             message: showAsDriver ? "Your passengers will appear here" : "Find a ride and get going!",
                             actionTitle: showAsDriver ? nil : "Find Rides"
-                        ) {}
+                        ) { showTripRequest = true }
                         .padding(.top, 60)
                     }
                     .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
@@ -572,6 +573,10 @@ struct BookingListView: View {
                     showAsDriver = authVM.isDriver
                     await vm.loadBookings(asDriver: showAsDriver)
                 }
+            }
+            .sheet(isPresented: $showTripRequest) {
+                TripRequestView()
+                    .environmentObject(authVM)
             }
             .sheet(isPresented: $showReportUser) {
                 if let userId = reportedUserId, let userName = reportedUserName {
@@ -751,6 +756,26 @@ private struct BookingRow: View {
             }
 
             if let trip = booking.trip {
+                if showAsDriver {
+                    NavigationLink(destination: DriverTripDetailsView(trip: trip)) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "map.fill")
+                            Text("Trip Overview")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                                .opacity(0.8)
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
+                        .background(Color.brand.opacity(0.10))
+                        .cornerRadius(14)
+                    }
+                }
+
                 NavigationLink(
                     destination: BookingRideDetailView(booking: booking, vm: vm, showAsDriver: showAsDriver)
                 ) {
@@ -1338,4 +1363,25 @@ private struct BookingRideDetailView: View {
             return "Failed"
         }
     }
+}
+
+#Preview {
+    let mockTrip = Trip(
+        id: "trip-preview",
+        driverId: "driver-1",
+        origin: "10th & San Fernando, San Jose",
+        destination: "San Jose State University",
+        originPoint: nil,
+        destinationPoint: nil,
+        departureTime: Date().addingTimeInterval(1800),
+        seatsAvailable: 3,
+        recurrence: nil,
+        status: .pending,
+        createdAt: Date(),
+        updatedAt: Date(),
+        driver: nil
+    )
+    BookingConfirmationView(trip: mockTrip, seats: 1)
+        .environmentObject(AuthViewModel())
+        .environmentObject(BookingViewModel())
 }

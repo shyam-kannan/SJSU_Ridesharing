@@ -33,7 +33,6 @@ const SERVICES = {
   booking: process.env.BOOKING_SERVICE_URL || 'http://127.0.0.1:3004',
   payment: process.env.PAYMENT_SERVICE_URL || 'http://127.0.0.1:3005',
   notification: process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:3006',
-  grouping: process.env.GROUPING_SERVICE_URL || 'http://127.0.0.1:8001',
   routing: process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8002',
   cost: process.env.COST_SERVICE_URL || 'http://127.0.0.1:3009',
   embedding: process.env.EMBEDDING_SERVICE_URL || 'http://127.0.0.1:3010',
@@ -162,12 +161,6 @@ app.use('/api/payments', createProxyMiddleware({
 app.use('/api/notifications', createProxyMiddleware({
   target: SERVICES.notification,
   pathRewrite: { '^/api/notifications': '/notifications' },
-  ...proxyOptions,
-}));
-
-app.use('/api/group', createProxyMiddleware({
-  target: SERVICES.grouping,
-  pathRewrite: { '^/api/group': '/group' },
   ...proxyOptions,
 }));
 

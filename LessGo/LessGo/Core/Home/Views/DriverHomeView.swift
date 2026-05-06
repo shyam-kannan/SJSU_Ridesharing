@@ -22,6 +22,9 @@ struct DriverHomeView: View {
     @State private var unreadNotificationCount = 0
     @State private var notificationChatDestination: DriverNotificationChatDestination?
 
+    // ── Create trip ────────────────────────────────────────────────────────────
+    @State private var showCreateTrip = false
+
     // ── Today stats ────────────────────────────────────────────────────────────
     @State private var todayTripCount = 0
     @AppStorage("hasCompletedFirstTrip") private var hasCompletedFirstTrip = false
@@ -66,6 +69,9 @@ struct DriverHomeView: View {
                             .staggeredAppear(index: 0)
                     }
 
+                    postATripCard
+                        .padding(.horizontal, AppConstants.pagePadding)
+
                     if !hasCompletedFirstTrip {
                         howItWorksSection
                             .padding(.horizontal, AppConstants.pagePadding)
@@ -103,6 +109,10 @@ struct DriverHomeView: View {
             }
             .onChange(of: authVM.currentUser?.id) { _ in
                 Task { await refreshDashboardData() }
+            }
+            .sheet(isPresented: $showCreateTrip) {
+                CreateTripView()
+                    .environmentObject(authVM)
             }
             .sheet(isPresented: $showAccountMenu) {
                 InAppAccountMenuView()
@@ -258,6 +268,44 @@ struct DriverHomeView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 16)
         .padding(.bottom, 90) // clears the custom tab bar (~88 pt incl. safe area)
+    }
+
+    // MARK: - Post a Trip Card
+
+    private var postATripCard: some View {
+        Button(action: { showCreateTrip = true }) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.brand.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.brand)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Post a Trip")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.textPrimary)
+                    Text("Schedule a trip for riders to book")
+                        .font(.system(size: 12))
+                        .foregroundColor(.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.textTertiary)
+            }
+            .padding(16)
+            .background(Color.cardBackground)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.brand.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - How It Works Section
@@ -818,4 +866,9 @@ struct SectionHeader: View {
         }
         .padding(.horizontal, AppConstants.pagePadding)
     }
+}
+
+#Preview {
+    DriverHomeView()
+        .environmentObject(AuthViewModel())
 }

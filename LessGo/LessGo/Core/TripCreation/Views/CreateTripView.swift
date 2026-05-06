@@ -816,3 +816,8 @@ private struct TripCreatedView: View {
         }
     }
 }
+
+#Preview {
+    CreateTripView()
+        .environmentObject(AuthViewModel())
+}

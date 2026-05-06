@@ -198,3 +198,22 @@ struct IncomingRideRequestView: View {
     }
 }
 
+
+#Preview {
+    let payload = IncomingMatchPayload(
+        matchId: "match-1",
+        requestId: "req-1",
+        tripId: "trip-1",
+        riderName: "Alex Johnson",
+        riderRating: 4.7,
+        origin: "SJSU Engineering Building",
+        destination: "Diridon Station",
+        departureTime: "2025-06-01T08:30:00Z",
+        expiresInSeconds: 15
+    )
+    IncomingRideRequestView(
+        payload: payload,
+        onAccept: {},
+        onDecline: {}
+    )
+}

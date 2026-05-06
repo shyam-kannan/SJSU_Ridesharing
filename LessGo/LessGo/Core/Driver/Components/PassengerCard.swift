@@ -154,3 +154,24 @@ struct PassengerCard: View {
         .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
     }
 }
+
+#Preview {
+    PassengerCard(passenger: .preview)
+        .padding()
+}
+
+private extension BookingWithRider {
+    static var preview: BookingWithRider {
+        let json = """
+        {"id":"booking-1","trip_id":"trip-1","rider_id":"rider-1","rider_name":"Alex Johnson",
+         "rider_email":"alex@sjsu.edu","rider_phone":null,"rider_rating":"4.8",
+         "rider_picture":null,"seats_booked":1,"status":"confirmed",
+         "pickup_location":{"lat":37.3365,"lng":-121.882,"address":"SJSU Engineering Building"},
+         "created_at":"2025-01-01T00:00:00Z"}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        // swiftlint:disable:next force_try
+        return try! decoder.decode(BookingWithRider.self, from: Data(json.utf8))
+    }
+}

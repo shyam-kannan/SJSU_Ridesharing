@@ -90,3 +90,31 @@ struct RecentActivityCard: View {
         .shadow(color: .black.opacity(0.05), radius: 6, x: 0, y: 2)
     }
 }
+
+#Preview {
+    let trip = Trip(
+        id: "trip-1", driverId: "driver-1",
+        origin: "10th & San Fernando", destination: "SJSU Campus",
+        originPoint: nil, destinationPoint: nil,
+        departureTime: Date().addingTimeInterval(1800),
+        seatsAvailable: 3, recurrence: nil, status: .pending,
+        createdAt: Date(), updatedAt: Date(), driver: nil
+    )
+    RecentActivityCard(passenger: .previewSam, trip: trip)
+        .padding()
+}
+
+private extension BookingWithRider {
+    static var previewSam: BookingWithRider {
+        let json = """
+        {"id":"booking-2","trip_id":"trip-1","rider_id":"rider-2","rider_name":"Sam Rivera",
+         "rider_email":"sam@sjsu.edu","rider_phone":null,"rider_rating":"4.5",
+         "rider_picture":null,"seats_booked":1,"status":"confirmed",
+         "pickup_location":null,"created_at":"2025-01-01T10:00:00Z"}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        // swiftlint:disable:next force_try
+        return try! decoder.decode(BookingWithRider.self, from: Data(json.utf8))
+    }
+}

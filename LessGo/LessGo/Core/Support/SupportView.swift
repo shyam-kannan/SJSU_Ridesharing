@@ -203,3 +203,8 @@ struct MailComposerView: UIViewControllerRepresentable {
         }
     }
 }
+
+#Preview {
+    SupportView()
+        .environmentObject(AuthViewModel())
+}

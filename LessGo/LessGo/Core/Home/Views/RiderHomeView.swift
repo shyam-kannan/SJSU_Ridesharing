@@ -16,7 +16,9 @@ private enum DirectionChoice: Equatable {
 struct RiderHomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var requestVM = TripRequestViewModel()
+    @StateObject private var tripSearchVM = TripSearchViewModel()
     @StateObject private var locationManager = LocationManager.shared
+    @State private var showBrowseTrips = false
 
     @State private var region = MKCoordinateRegion(
         center: AppConstants.sjsuCoordinate,
@@ -90,6 +92,21 @@ struct RiderHomeView: View {
             }
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
+            .sheet(isPresented: $showBrowseTrips) {
+                DriverListBottomSheet(
+                    viewModel: tripSearchVM,
+                    locationName: "SJSU Area",
+                    selectedTrip: $tripSearchVM.selectedTrip,
+                    showTripDetails: $tripSearchVM.showTripDetails
+                )
+                .environmentObject(authVM)
+            }
+            .sheet(isPresented: $tripSearchVM.showTripDetails) {
+                if let trip = tripSearchVM.selectedTrip {
+                    TripDetailsView(trip: trip)
+                        .environmentObject(authVM)
+                }
+            }
             .sheet(isPresented: $showAccountMenu) {
                 InAppAccountMenuView().environmentObject(authVM)
             }
@@ -402,7 +419,29 @@ struct RiderHomeView: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 36)
+            .padding(.bottom, 16)
+
+            Button(action: {
+                Task { await tripSearchVM.loadAllUpcoming() }
+                showBrowseTrips = true
+            }) {
+                HStack(spacing: 10) {
+                    Image(systemName: "list.bullet.below.rectangle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.textSecondary)
+                    Text("Browse Scheduled Trips")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textSecondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.textTertiary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
         }
     }
 
