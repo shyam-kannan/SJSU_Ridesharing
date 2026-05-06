@@ -608,9 +608,9 @@ export const updatePickupLocation = async (
 /**
  * Get all bookings for a specific trip
  * @param tripId Trip UUID
- * @returns Array of bookings with rider details
+ * @returns Object with bookings array (including fare) and totalFare for approved/confirmed bookings
  */
-export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
+export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: any[]; totalFare: number }> => {
   const query = `
     SELECT
       b.booking_id as id,
@@ -625,15 +625,26 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       u.name as rider_name,
       u.email as rider_email,
       u.rating as rider_rating,
-      u.profile_picture_url as rider_profile_picture_url
+      u.profile_picture_url as rider_profile_picture_url,
+      q.max_price AS fare
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
+    LEFT JOIN quotes q ON q.booking_id = b.booking_id
     WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending') AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `;
 
   const result = await pool.query(query, [tripId]);
-  return result.rows;
+  const bookings = result.rows.map((row) => ({
+    ...row,
+    fare: row.fare !== null && row.fare !== undefined ? parseFloat(row.fare) : undefined,
+  }));
+
+  const totalFare = bookings
+    .filter((b) => b.booking_state === 'approved' || b.status === 'confirmed')
+    .reduce((sum, b) => sum + (b.fare ?? 0), 0);
+
+  return { bookings, totalFare: parseFloat(totalFare.toFixed(2)) };
 };
 
 /**

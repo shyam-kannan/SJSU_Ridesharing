@@ -132,6 +132,7 @@ export interface Booking {
   status: BookingStatus;
   booking_state?: BookingState;  // New field for driver approval flow
   seats_booked: number;
+  fare?: number;  // Rider's fare from quotes table (max_price)
   created_at: Date;
   updated_at: Date;
 }

@@ -300,9 +300,9 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
     }
 
     // Get all bookings for this trip
-    const bookings = await bookingService.getBookingsByTripId(tripId);
+    const { bookings, totalFare } = await bookingService.getBookingsByTripId(tripId);
 
-    successResponse(res, bookings, 'Trip bookings retrieved successfully');
+    successResponse(res, { bookings, totalFare }, 'Trip bookings retrieved successfully');
   } catch (error) {
     console.error('Get trip bookings error:', error);
     if (error instanceof Error) {

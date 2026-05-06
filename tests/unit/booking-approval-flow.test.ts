@@ -340,18 +340,22 @@ describe('Booking Approval Flow', () => {
       closeServer = server.close;
 
       const { getBookingsByTripId } = await import('../../services/booking-service/src/services/booking.service');
-      bookingServiceMocks.getBookingsByTripId.mockResolvedValueOnce([
-        {
-          id: testBookingId,
-          trip_id: testTripId,
-          rider_id: testRiderId,
-          booking_state: 'pending',
-          rider_name: 'Test Rider',
-          rider_rating: 4.5,
-        },
-      ]);
+      bookingServiceMocks.getBookingsByTripId.mockResolvedValueOnce({
+        bookings: [
+          {
+            id: testBookingId,
+            trip_id: testTripId,
+            rider_id: testRiderId,
+            booking_state: 'pending',
+            rider_name: 'Test Rider',
+            rider_rating: 4.5,
+            fare: 7.50,
+          },
+        ],
+        totalFare: 0,
+      });
 
-      const response = await requestJson<{ status: string; data: any[] }>({
+      const response = await requestJson<{ status: string; data: { bookings: any[]; totalFare: number } }>({
         baseUrl: server.baseUrl,
         method: 'GET',
         path: `/bookings/trip/${testTripId}`,
@@ -362,8 +366,10 @@ describe('Booking Approval Flow', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('success');
-      expect(response.body.data).toHaveLength(1);
-      expect(response.body.data[0].booking_state).toBe('pending');
+      expect(response.body.data.bookings).toHaveLength(1);
+      expect(response.body.data.bookings[0].booking_state).toBe('pending');
+      expect(response.body.data.bookings[0].fare).toBe(7.50);
+      expect(response.body.data).toHaveProperty('totalFare');
     });
 
     it('requires authentication', async () => {
