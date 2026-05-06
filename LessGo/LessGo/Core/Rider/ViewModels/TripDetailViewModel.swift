@@ -142,11 +142,17 @@ class TripDetailViewModel: ObservableObject {
     func checkExistingBooking() async {
         do {
             let existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
-            booking = existingBooking
-            if let bookingState = existingBooking?.bookingState {
-                self.bookingState = bookingState
-                if bookingState == .pending {
-                    startPolling()
+            if let existingBooking = existingBooking,
+               existingBooking.bookingState == .cancelled || existingBooking.bookingState == .rejected {
+                booking = nil
+                bookingState = nil
+            } else {
+                booking = existingBooking
+                if let bookingState = existingBooking?.bookingState {
+                    self.bookingState = bookingState
+                    if bookingState == .pending {
+                        startPolling()
+                    }
                 }
             }
         } catch {

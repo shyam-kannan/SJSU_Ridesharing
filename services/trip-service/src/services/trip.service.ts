@@ -28,7 +28,9 @@ const checkTripOverlap = async (
   driverId: string,
   originPoint: GeoPoint,
   destinationPoint: GeoPoint,
-  departureTime: Date
+  departureTime: Date,
+  originAddress?: string,
+  destinationAddress?: string
 ): Promise<void> => {
   // Calculate distance using Haversine formula
   const R = 3959; // Earth radius in miles
@@ -72,6 +74,32 @@ const checkTripOverlap = async (
       `You already have a trip scheduled at ${existingTime}. Please choose a different time.`
     );
   }
+
+  // Check for exact duplicate: same origin address, destination address, and departure_time
+  if (originAddress && destinationAddress) {
+    const exactDuplicateQuery = `
+      SELECT trip_id
+      FROM trips
+      WHERE driver_id = $1
+        AND origin = $2
+        AND destination = $3
+        AND departure_time = $4
+        AND status NOT IN ('cancelled')
+        AND deleted_at IS NULL
+      LIMIT 1
+    `;
+
+    const exactResult = await pool.query(exactDuplicateQuery, [
+      driverId,
+      originAddress,
+      destinationAddress,
+      departureTime,
+    ]);
+
+    if (exactResult.rows.length > 0) {
+      throw new AppError('A trip with this exact route and time already exists.', 409);
+    }
+  }
 };
 
 /**
@@ -89,8 +117,8 @@ export const createTrip = async (
   // Geocode origin and destination
   const { originPoint, destinationPoint } = await geocodeTripLocations(origin, destination);
 
-  // Check for overlapping trips
-  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time));
+  // Check for overlapping trips (and exact duplicates)
+  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time), origin, destination);
 
   const query = `
     INSERT INTO trips (

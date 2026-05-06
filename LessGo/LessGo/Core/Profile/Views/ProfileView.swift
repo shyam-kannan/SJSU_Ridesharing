@@ -1696,7 +1696,7 @@ struct TripHistoryView: View {
                 else if vm.bookings.isEmpty {
                     EmptyStateView(icon: "clock.arrow.circlepath", title: "No history", message: "Your completed trips will appear here")
                 } else {
-                    List(vm.bookings) { booking in
+                    List(vm.bookings.filter { $0.trip?.departureTime ?? Date() < Date().addingTimeInterval(-86400) }) { booking in
                         if let trip = booking.trip {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("\(trip.origin) → \(trip.destination)")
