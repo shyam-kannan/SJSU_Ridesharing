@@ -19,6 +19,7 @@ const makeAccessToken = (payload: { userId: string; email: string; role: 'Driver
 
 const tripServiceMocks = vi.hoisted(() => ({
   searchTripsNearby: vi.fn(),
+  searchTripsWithRerouting: vi.fn(),
   createTrip: vi.fn(),
   isLocationNearSJSU: vi.fn(),
 }));
@@ -286,7 +287,7 @@ describe('Enhanced Trip Search Endpoint', () => {
     });
 
     it('supports destination coordinates for from_sjsu direction', async () => {
-      tripServiceMocks.searchTripsNearby.mockResolvedValueOnce([
+      tripServiceMocks.searchTripsWithRerouting.mockResolvedValueOnce([
         {
           trip_id: 'trip-1',
           origin: 'SJSU',
