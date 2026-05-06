@@ -57,7 +57,7 @@ enum AppConstants {
     static let minPasswordLength = 8
 
     // SJSU Campus coordinates
-    static let sjsuCoordinate = CLLocationCoordinate2D(latitude: 37.3352, longitude: -122.8811)
+    static let sjsuCoordinate = CLLocationCoordinate2D(latitude: 37.3352, longitude: -121.8811)
 
     // Animation durations
     static let animationFast:   Double = 0.2

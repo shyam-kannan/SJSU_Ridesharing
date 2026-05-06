@@ -165,7 +165,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 'invalid',
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
         },
       });
 
@@ -211,7 +211,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           limit: 10,
           offset: 0,
         },
@@ -243,7 +243,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           limit: 10,
           offset: 0,
         },
@@ -275,7 +275,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           limit: 10,
           offset: 0,
         },
@@ -310,7 +310,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           destination_lat: 37.7749,
           destination_lng: -122.4194,
           limit: 10,
@@ -343,7 +343,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           departure_after: '2026-05-04T08:00:00Z',
           departure_before: '2026-05-04T10:00:00Z',
           limit: 10,
@@ -372,7 +372,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           min_seats: '2',
           limit: 10,
           offset: '0',
@@ -400,7 +400,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           limit: 100, // Should be capped at 50
           offset: '0',
         },
@@ -426,7 +426,7 @@ describe('Enhanced Trip Search Endpoint', () => {
         path: '/trips/search',
         query: {
           origin_lat: 37.3352,
-          origin_lng: -122.8811,
+          origin_lng: -121.8811,
           limit: 10,
           offset: '0',
         },

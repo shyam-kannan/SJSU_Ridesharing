@@ -1791,7 +1791,7 @@ private struct PostRideReportSheet: View {
         origin: "Sunnyvale Caltrain",
         destination: "San Jose State University",
         originPoint: Coordinate(lat: 37.3787, lng: -122.0311),
-        destinationPoint: Coordinate(lat: 37.3352, lng: -122.8811),
+        destinationPoint: Coordinate(lat: 37.3352, lng: -121.8811),
         departureTime: Date(),
         seatsAvailable: 3,
         recurrence: nil,

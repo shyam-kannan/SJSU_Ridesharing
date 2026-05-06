@@ -2049,7 +2049,7 @@ class DevToolsViewModel: ObservableObject {
     ]
 
     // Geographic anchors (matches zone_mapper.py grid)
-    private let simSJSULat   = 37.3352,  simSJSULng   = -122.8811
+    private let simSJSULat   = 37.3352,  simSJSULng   = -121.8811
     private let simNorthLat  = 37.3400,  simNorthLng  = -121.8780  // Near 10th & Julian
     private let simSouthLat  = 37.3290,  simSouthLng  = -121.8790  // Near 7th & Humboldt
     // Carpool sim: Rider 2 pickup ~200m offset from North zone
@@ -3784,7 +3784,7 @@ struct DevToolsSection: View {
                 devButton(title: "Force Match", icon: "bolt.fill", running: vm.forceMatchRunning, color: .brandOrange) {
                     let lat = Double(forceMatchOriginLat) ?? 37.4146
                     let lng = Double(forceMatchOriginLng) ?? -121.9006
-                    Task { await vm.forceMatch(riderLat: lat, riderLng: lng, destLat: 37.3352, destLng: -122.8811) }
+                    Task { await vm.forceMatch(riderLat: lat, riderLng: lng, destLat: 37.3352, destLng: -121.8811) }
                 }
             }
         }

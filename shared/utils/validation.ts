@@ -113,7 +113,7 @@ export const isValidLatitude = (lat: number): boolean => {
  * @returns True if valid longitude (-180 to 180)
  * @example
  * ```ts
- * isValidLongitude(-122.8811) // true (SJSU longitude)
+ * isValidLongitude(-121.8811) // true (SJSU longitude)
  * isValidLongitude(200) // false
  * ```
  */

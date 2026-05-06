@@ -424,7 +424,7 @@ struct TripCard: View {
     RiderSearchResultsView(criteria: SearchCriteria(
         direction: .toSJSU,
         location: "123 Main St",
-        coordinate: CLLocationCoordinate2D(latitude: 37.3352, longitude: -122.8811),
+        coordinate: CLLocationCoordinate2D(latitude: 37.3352, longitude: -121.8811),
         departureTime: Date()
     ))
 }

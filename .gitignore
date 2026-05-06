@@ -71,7 +71,7 @@ Thumbs.db
 
 # Embedding service data and trained models
 services/embedding-service/data/
-services/embedding-service/models/
+# services/embedding-service/models/
 
 # Grouping service (deprecated - not in use)
 services/grouping-service/
