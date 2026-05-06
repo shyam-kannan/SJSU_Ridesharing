@@ -68,26 +68,61 @@ struct RiderHomeView: View {
 
     var body: some View {
         NavigationView {
-            ZStack(alignment: .bottom) {
-                // Full-screen map
-                Map(
-                    coordinateRegion: $region,
-                    interactionModes: .all,
-                    showsUserLocation: true,
-                    userTrackingMode: $trackingMode
-                )
+            GeometryReader { geometry in
+                ZStack(alignment: .bottom) {
+                    // Map constrained to upper half
+                    VStack(spacing: 0) {
+                        ZStack {
+                            Map(
+                                coordinateRegion: $region,
+                                interactionModes: .all,
+                                showsUserLocation: true,
+                                userTrackingMode: $trackingMode
+                            )
+
+                            // Locate me button
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    Button(action: {
+                                        if let coord = locationManager.currentLocation?.coordinate {
+                                            centerMap(on: coord)
+                                            trackingMode = .follow
+                                        }
+                                    }) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white)
+                                                .frame(width: 44, height: 44)
+                                                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                                            Image(systemName: "location.fill")
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(.brand)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.trailing, 20)
+                                    .padding(.bottom, 20)
+                                }
+                            }
+                        }
+                        .frame(height: geometry.size.height - currentSheetHeight)
+                        Spacer()
+                    }
                     .ignoresSafeArea()
 
-                // Floating header
-                VStack {
-                    floatingHeader
-                        .padding(.horizontal, AppConstants.pagePadding)
-                        .padding(.top, 56)
-                    Spacer()
-                }
+                    // Floating header
+                    VStack {
+                        floatingHeader
+                            .padding(.horizontal, AppConstants.pagePadding)
+                            .padding(.top, 56)
+                        Spacer()
+                    }
 
-                // Fixed-height bottom sheet
-                requestSheet
+                    // Fixed-height bottom sheet
+                    requestSheet
+                }
             }
             .ignoresSafeArea(edges: .top)
             .navigationBarHidden(true)
