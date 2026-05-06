@@ -96,24 +96,36 @@ def _load_parquet_files(data_dir: str) -> pd.DataFrame:
 # Pseudo-user clustering
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_user_clusters(df: pd.DataFrame) -> Tuple[KMeans, StandardScaler, np.ndarray]:
+def _build_user_clusters(df: pd.DataFrame) -> Tuple[KMeans, StandardScaler, np.ndarray, "pd.Index"]:
     """
     K-Means (k=500) on (PULocationID, DOLocationID, hour_bin) features
     to create pseudo-user nodes, following Tang et al. 2020 §3.2.
+
+    Returns the fitted KMeans, scaler, cluster labels, and the index of rows
+    that survived datetime parsing (so callers can align labels with the
+    original DataFrame).
     """
     df = df.copy()
-    df["hour"] = pd.to_datetime(df["tpep_pickup_datetime"]).dt.hour
+    df["hour"] = pd.to_datetime(df["tpep_pickup_datetime"], errors='coerce').dt.hour
+    df = df.dropna(subset=["hour"])
+    df["hour"] = df["hour"].astype(int)
 
     features = df[["PULocationID", "DOLocationID", "hour"]].astype(float).values
 
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
 
-    logger.info(f"Fitting K-Means (k={K_CLUSTERS}) on {len(features_scaled):,} samples …")
-    kmeans = KMeans(n_clusters=K_CLUSTERS, n_init=10, random_state=42)
+    num_samples = len(features_scaled)
+    actual_clusters = min(K_CLUSTERS, num_samples)
+
+    if actual_clusters < 1:
+        raise ValueError("No valid data samples found for clustering.")
+
+    logger.info(f"Fitting K-Means (k={actual_clusters}) on {num_samples:,} samples …")
+    kmeans = KMeans(n_clusters=actual_clusters, n_init=10, random_state=42)
     labels = kmeans.fit_predict(features_scaled)
 
-    return kmeans, scaler, labels
+    return kmeans, scaler, labels, df.index
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -129,11 +141,15 @@ def build_hin(data_dir: str) -> Dict:
       - 'meta_paths': list of supported meta-path names
     """
     df = _load_parquet_files(data_dir)
-    kmeans, scaler, labels = _build_user_clusters(df)
+    kmeans, scaler, labels, valid_index = _build_user_clusters(df)
 
-    df = df.copy()
+    # Restrict to the rows that survived datetime parsing in _build_user_clusters,
+    # then assign cluster labels by position (labels is a plain numpy array).
+    df = df.loc[valid_index].copy()
     df["cluster"] = labels
-    df["hour"] = pd.to_datetime(df["tpep_pickup_datetime"]).dt.hour
+    df["hour"] = pd.to_datetime(df["tpep_pickup_datetime"], errors='coerce').dt.hour
+    df = df.dropna(subset=["hour"])
+    df["hour"] = df["hour"].astype(int)
     df["pu_zone"] = df["PULocationID"].apply(nyc_to_bay_zone)
     df["do_zone"] = df["DOLocationID"].apply(nyc_to_bay_zone)
 
