@@ -262,6 +262,15 @@ DRIVER_TOKEN=$(jget "$DRIVER_REFRESH" '.data.accessToken' 'driver accessToken')
 DRIVER_ID=$(jget "$DRIVER_REFRESH" '.data.user.user_id' 'driver user_id')
 ok "Driver token refreshed"
 
+# Set driver online — the PostGIS candidate query requires available_for_rides = true.
+# debug-verify only sets role/sjsu_id_status; availability must be toggled separately.
+AVAIL_RESP=$(curl_json PATCH "/users/${DRIVER_ID}/availability" '{"available_for_rides": true}' "$DRIVER_TOKEN")
+if echo "$AVAIL_RESP" | jq -e '.status' > /dev/null 2>&1 && ! echo "$AVAIL_RESP" | grep -qi "error"; then
+  ok "Driver set online (available_for_rides = true)"
+else
+  warn "Availability toggle returned unexpected response — matching may return 0 candidates"
+fi
+
 # ──────────────────────────────────────────────────────────────────────────────
 
 step "Set up driver vehicle profile"
