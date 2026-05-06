@@ -76,14 +76,10 @@ services/embedding-service/data/
 # Grouping service (deprecated - not in use)
 services/grouping-service/
 k8s-manifests/grouping-service.yaml
-POSTED_RIDES_IMPLEMENTATION_PLAN.md
-POSTED_RIDES_IMPLEMENTATION.md
-POsted_Rides.md
-docs/superpowers/
-CLAUDE.md
 .Rhistory
 LessGo/LessGo.xcodeproj/project.pbxproj
 LessGo/LessGo.xcodeproj/xcshareddata/xcschemes/LessGo.xcscheme
 LessGo/LessGo.xcodeproj/project.xcworkspace/xcuserdata/sriram.xcuserdatad/UserInterfaceState.xcuserstate
 LessGo/LessGo.xcodeproj/xcuserdata/sriram.xcuserdatad/xcschemes/xcschememanagement.plist
 *.xcuserstate
+.worktrees/
