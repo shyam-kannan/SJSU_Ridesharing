@@ -43,7 +43,7 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
     const tripData: CreateTripRequest = req.body;
 
     // Validate SJSU requirement
-    const sjsuCoordinates = { lat: 37.3352, lng: -122.8811 };
+    const sjsuCoordinates = { lat: 37.3352, lng: -121.8811 };
     const sjsuRadiusMeters = 800; // ~0.5 miles
 
     // Check if origin or destination is within SJSU radius
