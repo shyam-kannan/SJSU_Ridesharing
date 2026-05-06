@@ -384,7 +384,7 @@ struct TripDetailView: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text(formatPrice(trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
+                Text(formatPrice(viewModel.booking?.fare ?? trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.brand)
             }
@@ -413,9 +413,7 @@ struct TripDetailView: View {
                     costBreakdownRow(label: "ETA with detour", value: "\(eta) min")
                 }
             } else {
-                costBreakdownRow(label: "Base fare", value: "$5.00")
-                costBreakdownRow(label: "Distance", value: "$3.50")
-                costBreakdownRow(label: "Service fee", value: "$1.50")
+                costBreakdownRow(label: "Estimated fare", value: formatPrice(trip.estimatedCost))
             }
 
             Divider()
@@ -425,7 +423,7 @@ struct TripDetailView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text(formatPrice(trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
+                Text(formatPrice(viewModel.booking?.fare ?? trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.brand)
             }

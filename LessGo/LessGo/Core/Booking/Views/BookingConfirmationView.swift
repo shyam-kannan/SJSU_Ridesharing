@@ -1090,7 +1090,7 @@ private struct BookingRow: View {
                     }
                     .foregroundColor(.textSecondary)
                     Spacer()
-                    if let amount = booking.quote?.maxPrice {
+                    if let amount = booking.fare ?? booking.quote?.maxPrice {
                         HStack(spacing: 6) {
                             Text(String(format: "$%.2f", amount))
                                 .font(.system(size: 14, weight: .bold))

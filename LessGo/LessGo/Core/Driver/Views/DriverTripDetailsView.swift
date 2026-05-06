@@ -15,7 +15,15 @@ struct DriverTripDetailsView: View {
     }
 
     private var totalEarnings: Double {
-        Double(totalSeatsBooked) * 8.50
+        let confirmedFares = approvedBookings.compactMap { $0.fare }
+        if !confirmedFares.isEmpty {
+            return confirmedFares.reduce(0, +)
+        }
+        // Fall back to pending+approved when no fare data
+        return passengers
+            .filter { $0.bookingState == .approved || $0.bookingState == .pending }
+            .compactMap { $0.fare }
+            .reduce(0, +)
     }
 
     private var pendingBookings: [BookingWithRider] {
@@ -479,21 +487,20 @@ private struct PendingBookingCard: View {
                     .font(.system(size: 11))
                     .foregroundColor(.textTertiary)
 
-                // Scost breakdown information
-                if let scost = passenger.scostBreakdown {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 12) {
-                            // Fare (derived from total Scost)
+                // Fare and scost breakdown information
+                if passenger.fare != nil || passenger.scostBreakdown != nil {
+                    HStack(spacing: 12) {
+                        if let fare = passenger.fare {
                             HStack(spacing: 4) {
                                 Image(systemName: "dollarsign.circle.fill")
                                     .font(.system(size: 11))
                                     .foregroundColor(.brandGreen)
-                                Text(String(format: "$%.2f", scost.total * 8.50))
+                                Text(String(format: "$%.2f", fare))
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.textPrimary)
                             }
-
-                            // Extra distance (walk component)
+                        }
+                        if let scost = passenger.scostBreakdown {
                             HStack(spacing: 4) {
                                 Image(systemName: "arrow.triangle.turn.up.right")
                                     .font(.system(size: 11))
@@ -502,8 +509,6 @@ private struct PendingBookingCard: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.textPrimary)
                             }
-
-                            // Added time (advance component)
                             HStack(spacing: 4) {
                                 Image(systemName: "clock.fill")
                                     .font(.system(size: 11))
@@ -513,8 +518,8 @@ private struct PendingBookingCard: View {
                                     .foregroundColor(.textPrimary)
                             }
                         }
-                        .padding(.top, 4)
                     }
+                    .padding(.top, 4)
                 }
             }
 
