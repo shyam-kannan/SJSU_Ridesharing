@@ -16,6 +16,7 @@ struct Booking: Codable, Identifiable {
     let pickupLocation: PickupLocation?
     let quote: Quote?
     let payment: Payment?
+    let fare: Double?
 
     enum CodingKeys: String, CodingKey {
         case id = "booking_id"
@@ -28,7 +29,7 @@ struct Booking: Codable, Identifiable {
         case updatedAt = "updated_at"
         case trip, rider
         case pickupLocation = "pickup_location"
-        case quote, payment
+        case quote, payment, fare
     }
 
     init(from decoder: Decoder) throws {
@@ -47,6 +48,14 @@ struct Booking: Codable, Identifiable {
         pickupLocation = try c.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         quote = try c.decodeIfPresent(Quote.self, forKey: .quote)
         payment = try c.decodeIfPresent(Payment.self, forKey: .payment)
+        // fare = max_price from the quotes table, returned directly on the booking by some endpoints
+        if let fareDouble = try? c.decode(Double.self, forKey: .fare) {
+            fare = fareDouble
+        } else if let fareString = try? c.decode(String.self, forKey: .fare), let parsed = Double(fareString) {
+            fare = parsed
+        } else {
+            fare = nil
+        }
     }
 }
 

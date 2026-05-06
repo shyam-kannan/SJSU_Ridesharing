@@ -325,6 +325,15 @@ class TripService {
         )
     }
 
+    // MARK: - Delete Trip (permanent removal, distinct from cancel)
+
+    func deleteTrip(tripId: String) async throws {
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/trips/\(tripId)/delete",
+            method: .delete
+        )
+    }
+
     // MARK: - Update Trip State
 
     func updateTripState(tripId: String, status: TripStatus) async throws -> TripStateUpdateResponse {
