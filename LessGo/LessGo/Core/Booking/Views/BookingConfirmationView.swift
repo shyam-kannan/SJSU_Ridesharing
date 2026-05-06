@@ -1004,6 +1004,8 @@ private struct BookingRow: View {
     let showAsDriver: Bool
     var onReport: ((String, String, String?) -> Void)?
 
+    @State private var showDeleteConfirm = false
+
     var statusColor: Color {
         switch booking.status {
         case .pending:   return .brandOrange
@@ -1258,6 +1260,26 @@ private struct BookingRow: View {
                 }
         )
         .shadow(color: .black.opacity(0.045), radius: 10, x: 0, y: 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if booking.bookingState == .cancelled || booking.bookingState == .rejected {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .confirmationDialog("Delete this booking?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    try? await BookingService.shared.deleteBooking(bookingId: booking.id)
+                    await vm.loadBookings(asDriver: showAsDriver)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the booking from your history.")
+        }
     }
 
     private var paymentStatusLabel: String {
