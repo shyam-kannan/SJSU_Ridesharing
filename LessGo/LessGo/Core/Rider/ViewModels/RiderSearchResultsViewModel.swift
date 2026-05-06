@@ -41,8 +41,8 @@ class RiderSearchResultsViewModel: ObservableObject {
         do {
             let response = try await tripService.searchPostedTrips(
                 direction: criteria.direction.rawValue,
-                originLat: criteria.coordinate.latitude,
-                originLng: criteria.coordinate.longitude,
+                originLat: criteria.originCoordinate.latitude,
+                originLng: criteria.originCoordinate.longitude,
                 destinationLat: criteria.destinationCoordinate.latitude,
                 destinationLng: criteria.destinationCoordinate.longitude,
                 departureAfter: criteria.departureTime,
@@ -75,8 +75,8 @@ class RiderSearchResultsViewModel: ObservableObject {
         do {
             let response = try await tripService.searchPostedTrips(
                 direction: criteria.direction.rawValue,
-                originLat: criteria.coordinate.latitude,
-                originLng: criteria.coordinate.longitude,
+                originLat: criteria.originCoordinate.latitude,
+                originLng: criteria.originCoordinate.longitude,
                 destinationLat: criteria.destinationCoordinate.latitude,
                 destinationLng: criteria.destinationCoordinate.longitude,
                 departureAfter: criteria.departureTime,

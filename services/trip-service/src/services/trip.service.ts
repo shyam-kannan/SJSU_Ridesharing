@@ -229,7 +229,7 @@ export const searchTripsNearby = async (
       ST_X(t.destination_point::geometry) as destination_lng,
       ST_Y(t.destination_point::geometry) as destination_lat,
       t.departure_time, t.seats_available, t.recurrence, t.status,
-      t.created_at, t.updated_at,
+      t.featured, t.created_at, t.updated_at,
       ST_Distance(
         t.origin_point::geography,
         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
@@ -310,6 +310,7 @@ export const searchTripsNearby = async (
     seats_available: row.seats_available,
     recurrence: row.recurrence,
     status: row.status,
+    featured: row.featured ?? false,
     created_at: row.created_at,
     updated_at: row.updated_at,
     driver: {
@@ -878,12 +879,17 @@ export const searchTripsWithRerouting = async (
 
       return {
         ...trip,
+        driver_name: trip.driver.name,
+        driver_rating: trip.driver.rating,
+        vehicle_info: trip.driver.vehicle_info,
+        driver_photo_url: trip.driver.profile_picture_url,
+        estimated_cost: perRiderSplit,
         detour_miles: parseFloat(detourMiles.toFixed(2)),
         adjusted_eta_minutes: adjustedEtaMinutes,
         cost_breakdown: {
-          base_fare:        baseFare,
+          base_fare: baseFare,
           detour_surcharge: detourSurcharge,
-          per_rider_split:  perRiderSplit,
+          per_rider_split: perRiderSplit,
         },
       };
     })

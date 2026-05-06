@@ -15,6 +15,14 @@ struct SearchCriteria {
         case fromSJSU = "from_sjsu"
     }
 
+    /// The origin coordinate for the trip (rider's coord when going to SJSU, SJSU when going from SJSU).
+    var originCoordinate: CLLocationCoordinate2D {
+        switch direction {
+        case .toSJSU:   return coordinate
+        case .fromSJSU: return AppConstants.sjsuCoordinate
+        }
+    }
+
     /// The destination coordinate for the trip (SJSU when going to SJSU, rider's coord when going from SJSU).
     var destinationCoordinate: CLLocationCoordinate2D {
         switch direction {
