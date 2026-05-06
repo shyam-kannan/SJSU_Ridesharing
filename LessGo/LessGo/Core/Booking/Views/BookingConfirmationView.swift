@@ -1240,6 +1240,27 @@ private struct BookingRow: View {
                     .cornerRadius(10)
                 }
             }
+
+            // Remove button for cancelled/rejected bookings
+            if booking.bookingState == .cancelled || booking.bookingState == .rejected {
+                HStack {
+                    Spacer()
+                    Button(action: { showDeleteConfirm = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                            Text("Remove")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.brandRed.opacity(0.7))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.brandRed.opacity(0.07))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(15)
         .background(
@@ -1260,16 +1281,7 @@ private struct BookingRow: View {
                 }
         )
         .shadow(color: .black.opacity(0.045), radius: 10, x: 0, y: 4)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if booking.bookingState == .cancelled || booking.bookingState == .rejected {
-                Button(role: .destructive) {
-                    showDeleteConfirm = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-        }
-        .confirmationDialog("Delete this booking?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+        .confirmationDialog("Remove this booking?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {
                     try? await BookingService.shared.deleteBooking(bookingId: booking.id)
