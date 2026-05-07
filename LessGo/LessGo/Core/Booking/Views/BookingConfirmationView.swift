@@ -1005,6 +1005,15 @@ private struct BookingRow: View {
 
     @State private var showDeleteConfirm = false
 
+    private var chatAvailable: Bool {
+        let activeStates = booking.bookingState == .pending
+            || booking.bookingState == .approved
+            || booking.status == .confirmed
+        let recentlyCompleted = booking.status == .completed
+            && (booking.trip?.departureTime ?? Date()) > Date().addingTimeInterval(-86400)
+        return activeStates || recentlyCompleted
+    }
+
     var statusColor: Color {
         switch booking.status {
         case .pending:   return .brandOrange
@@ -1169,8 +1178,8 @@ private struct BookingRow: View {
                 }
             }
 
-            // Chat button for confirmed/completed bookings so riders can reopen chat history
-            if (booking.status == .confirmed || booking.status == .completed), let trip = booking.trip {
+            // Chat button for active/recently-completed bookings so riders can reopen chat history
+            if chatAvailable, let trip = booking.trip {
                 if showAsDriver, let rider = booking.rider {
                     NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
                         HStack(spacing: 8) {
@@ -1538,17 +1547,47 @@ private struct BookingRideDetailView: View {
         .cardStyle(padding: 20, cornerRadius: 20)
     }
 
+    private var cancelledBannerInfo: (icon: String, title: String, subtitle: String)? {
+        guard booking.bookingState == .cancelled else { return nil }
+        if let expires = booking.holdExpiresAt, expires < Date() {
+            return ("clock.badge.xmark.fill", "Request Expired", "Driver didn't respond in time")
+        } else {
+            return ("xmark.circle.fill", "Request Cancelled", "You cancelled this booking")
+        }
+    }
+
     @ViewBuilder
     private func actionsCard(trip: Trip) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Actions")
+
+            if let banner = cancelledBannerInfo {
+                HStack(spacing: 12) {
+                    Image(systemName: banner.icon)
+                        .font(.system(size: 20))
+                        .foregroundColor(.brandRed)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(banner.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.brandRed)
+                        Text(banner.subtitle)
+                            .font(.system(size: 12))
+                            .foregroundColor(.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.brandRed.opacity(0.07))
+                .cornerRadius(12)
+            }
+
             if booking.status == .confirmed, [.enRoute, .arrived, .inProgress].contains(trip.status) {
                 NavigationLink(destination: ActiveTripView(trip: trip, booking: booking, isDriver: showAsDriver)) {
                     actionPill(title: "Track Live Ride", icon: "location.fill", fill: Color.brand, fg: .white)
                 }
             }
 
-            if booking.status == .confirmed || booking.status == .completed {
+            if chatAvailable {
                 if showAsDriver, let rider = booking.rider {
                     NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
                         actionPill(title: "Chat with \(rider.name)", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
@@ -1675,6 +1714,15 @@ private struct BookingRideDetailView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
+    }
+
+    private var chatAvailable: Bool {
+        let activeStates = booking.bookingState == .pending
+            || booking.bookingState == .approved
+            || booking.status == .confirmed
+        let recentlyCompleted = booking.status == .completed
+            && (booking.trip?.departureTime ?? Date()) > Date().addingTimeInterval(-86400)
+        return activeStates || recentlyCompleted
     }
 
     private var statusColor: Color {
