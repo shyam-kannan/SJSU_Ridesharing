@@ -3,7 +3,7 @@ import CoreLocation
 
 // MARK: - Trip Models
 
-struct Trip: Codable, Identifiable {
+struct Trip: Decodable, Identifiable {
     let id: String
     let driverId: String
     let origin: String
