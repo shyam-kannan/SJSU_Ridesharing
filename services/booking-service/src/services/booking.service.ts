@@ -223,7 +223,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       await expireClient.query('BEGIN');
       const expireResult = await expireClient.query(
         `UPDATE bookings
-         SET booking_state = 'rejected', updated_at = current_timestamp
+         SET booking_state = 'cancelled', updated_at = current_timestamp
          WHERE booking_id = $1 AND booking_state = 'pending'
          RETURNING booking_state`,
         [bookingId]
@@ -236,7 +236,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
            WHERE trip_id = $2`,
           [row.seats_booked, row.trip_id]
         );
-        row = { ...row, booking_state: 'rejected' };
+        row = { ...row, booking_state: 'cancelled' };
       }
       await expireClient.query('COMMIT');
     } catch (expireErr) {
@@ -641,6 +641,7 @@ export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: a
       b.booking_state,
       b.pickup_location,
       b.scost_breakdown,
+      b.hold_expires_at,
       b.created_at,
       u.name as rider_name,
       u.email as rider_email,

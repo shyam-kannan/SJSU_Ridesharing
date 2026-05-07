@@ -135,10 +135,10 @@ class BookingService {
     // MARK: - Authorize Payment (Rider Only)
 
     func authorizePayment(bookingId: String) async throws -> [String: Any] {
-        struct AuthorizePaymentResponse: Decodable {
+        struct AuthorizePaymentResponse: Codable {
             let status: String
             let data: AuthorizePaymentData?
-            struct AuthorizePaymentData: Decodable {
+            struct AuthorizePaymentData: Codable {
                 let clientSecret: String
                 let paymentIntentId: String
                 enum CodingKeys: String, CodingKey {
@@ -154,7 +154,7 @@ class BookingService {
         )
 
         guard let data = response.data else {
-            throw NetworkError.serverError(500, "No payment data returned")
+            throw NetworkError.serverError(APIError(status: "error", message: "No payment data returned", errors: nil))
         }
 
         return [

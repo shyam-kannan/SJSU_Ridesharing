@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 struct DriverTripDetailsView: View {
     let trip: Trip
@@ -36,16 +37,39 @@ struct DriverTripDetailsView: View {
         passengers.filter { $0.bookingState == .approved }
     }
 
+    private var approvedPickupCoords: [CLLocationCoordinate2D] {
+        approvedBookings.compactMap { booking in
+            guard let pl = booking.pickupLocation else { return nil }
+            return CLLocationCoordinate2D(latitude: pl.lat, longitude: pl.lng)
+        }
+    }
+
+    private var routeMapWithPassengers: some View {
+        let origin = trip.originPoint?.clLocationCoordinate2D
+        let destination = trip.destinationPoint?.clLocationCoordinate2D
+        let pickups = approvedPickupCoords
+        let waypoint = pickups.first
+        var fitCoords: [CLLocationCoordinate2D] = []
+        if let o = origin { fitCoords.append(o) }
+        if let d = destination { fitCoords.append(d) }
+        fitCoords.append(contentsOf: pickups)
+
+        return RouteMapView(
+            origin: origin,
+            destination: destination,
+            driver: nil,
+            waypoint: waypoint,
+            riders: pickups,
+            showsUserLocation: true,
+            fitAnchors: fitCoords.isEmpty ? nil : fitCoords
+        )
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
-                    RouteMapView(
-                        origin: trip.originPoint?.clLocationCoordinate2D,
-                        destination: trip.destinationPoint?.clLocationCoordinate2D,
-                        driver: nil,
-                        showsUserLocation: true
-                    )
+                    routeMapWithPassengers
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(
@@ -493,6 +517,27 @@ private struct PendingBookingCard: View {
 
     @State private var isApproving = false
     @State private var isRejecting = false
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
+    private var timeRemaining: String? {
+        guard let expires = passenger.holdExpiresAt else { return nil }
+        let diff = expires.timeIntervalSince(now)
+        guard diff > 0 else { return "Expired" }
+        let hours = Int(diff) / 3600
+        let mins = (Int(diff) % 3600) / 60
+        if hours > 0 { return "\(hours)h \(mins)m left" }
+        return "\(mins)m left"
+    }
+
+    private var countdownColor: Color {
+        guard let expires = passenger.holdExpiresAt else { return .textTertiary }
+        let diff = expires.timeIntervalSince(now)
+        if diff <= 0 { return .brandRed }
+        if diff <= 1800 { return .brandRed }
+        if diff <= 3600 { return .brandOrange }
+        return .textTertiary
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -518,6 +563,20 @@ private struct PendingBookingCard: View {
                     Text(String(format: "%.1f", passenger.riderRating))
                         .font(.system(size: 12))
                         .foregroundColor(.textSecondary)
+                    if let remaining = timeRemaining {
+                        Spacer()
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 9))
+                            Text(remaining)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(countdownColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(countdownColor.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
                 }
                 Text("\(passenger.seatsBooked) seat\(passenger.seatsBooked > 1 ? "s" : "")")
                     .font(.system(size: 11))
@@ -630,6 +689,7 @@ private struct PendingBookingCard: View {
                         .strokeBorder(Color.brandRed.opacity(0.5), lineWidth: 1)
                 )
         )
+        .onReceive(timer) { _ in now = Date() }
     }
 }
 

@@ -954,8 +954,8 @@ export const deleteTrip = async (tripId: string, driverId: string): Promise<void
     throw new AppError('Forbidden: You are not the driver of this trip', 403);
   }
 
-  if (trip.status !== TripStatus.Cancelled) {
-    throw new AppError('Trip can only be deleted when cancelled', 400);
+  if (trip.status !== TripStatus.Cancelled && trip.status !== TripStatus.Completed) {
+    throw new AppError('Trip can only be deleted when cancelled or completed', 400);
   }
 
   await pool.query(

@@ -11,6 +11,7 @@ struct Booking: Codable, Identifiable {
     let bookingState: BookingState
     let createdAt: Date
     let updatedAt: Date
+    let holdExpiresAt: Date?
     let trip: Trip?
     let rider: User?
     let pickupLocation: PickupLocation?
@@ -27,6 +28,7 @@ struct Booking: Codable, Identifiable {
         case bookingState = "booking_state"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case holdExpiresAt = "hold_expires_at"
         case trip, rider
         case pickupLocation = "pickup_location"
         case quote, payment, fare
@@ -43,6 +45,7 @@ struct Booking: Codable, Identifiable {
         bookingState = try c.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        holdExpiresAt = try c.decodeIfPresent(Date.self, forKey: .holdExpiresAt)
         trip = try c.decodeIfPresent(Trip.self, forKey: .trip)
         rider = try c.decodeIfPresent(User.self, forKey: .rider)
         pickupLocation = try c.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
@@ -207,6 +210,7 @@ struct BookingWithRider: Codable, Identifiable {
     let bookingState: BookingState
     let pickupLocation: PickupLocation?
     let createdAt: Date
+    let holdExpiresAt: Date?
     let scostBreakdown: ScostBreakdown?
     let fare: Double?
     let paymentIntentId: String?
@@ -225,6 +229,7 @@ struct BookingWithRider: Codable, Identifiable {
         case bookingState = "booking_state"
         case pickupLocation = "pickup_location"
         case createdAt = "created_at"
+        case holdExpiresAt = "hold_expires_at"
         case scostBreakdown = "scost_breakdown"
         case fare
         case paymentIntentId = "payment_intent_id"
@@ -244,6 +249,7 @@ struct BookingWithRider: Codable, Identifiable {
         bookingState = try container.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
         pickupLocation = try container.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        holdExpiresAt = try container.decodeIfPresent(Date.self, forKey: .holdExpiresAt)
         scostBreakdown = try container.decodeIfPresent(ScostBreakdown.self, forKey: .scostBreakdown)
         paymentIntentId = try container.decodeIfPresent(String.self, forKey: .paymentIntentId)
         if let fareDouble = try? container.decode(Double.self, forKey: .fare) {

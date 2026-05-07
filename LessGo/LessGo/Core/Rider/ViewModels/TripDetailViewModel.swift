@@ -15,7 +15,6 @@ class TripDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var bookingState: BookingState? = nil
     @Published var cancellationSuccess = false
-    @Published var bookingSucceeded = false
     @Published var isAuthorizing = false
     @Published var paymentAuthorized = false
 
@@ -92,14 +91,6 @@ class TripDetailViewModel: ObservableObject {
 
             // Start polling for booking status updates
             startPolling()
-
-            NotificationCenter.default.post(name: .navigateToBookingsTab, object: nil)
-            NotificationCenter.default.post(
-                name: .openBookingDetail,
-                object: nil,
-                userInfo: ["bookingId": response.booking.id]
-            )
-            bookingSucceeded = true
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
             errorMessage = error.userMessage

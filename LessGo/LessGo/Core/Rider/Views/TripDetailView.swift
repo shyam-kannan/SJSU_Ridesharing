@@ -7,7 +7,6 @@ struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: TripDetailViewModel
     @State private var showChat = false
-    @State private var showSuccessMessage = false
 
     private let fallbackRiderCoordinate: CLLocationCoordinate2D
 
@@ -29,25 +28,6 @@ struct TripDetailView: View {
                 Color.appBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    if showSuccessMessage {
-                        VStack(spacing: 0) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.brandGreen)
-                                Text("Booking cancelled successfully")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(.textPrimary)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.brandGreen.opacity(0.1))
-
-                            Divider()
-                        }
-                    }
-
                     ScrollView {
                         VStack(spacing: 20) {
                             if viewModel.isLoading {
@@ -94,11 +74,6 @@ struct TripDetailView: View {
                         isDriver: false,
                         includesTabBarClearance: false
                     )
-                }
-            }
-            .onChange(of: viewModel.bookingSucceeded) { succeeded in
-                if succeeded {
-                    dismiss()
                 }
             }
         }
@@ -230,8 +205,19 @@ struct TripDetailView: View {
             tripDetailRow(
                 icon: "mappin.circle.fill",
                 iconColor: .brand,
-                title: "Pickup",
+                title: "Driver starts at",
                 value: trip.origin
+            )
+
+            Divider()
+
+            // Rider pickup (intermediate stop)
+            let pickupAddress = viewModel.booking?.pickupLocation?.address
+            tripDetailRow(
+                icon: "figure.wave",
+                iconColor: .brandGold,
+                title: "Your Pickup",
+                value: pickupAddress ?? "Your selected location"
             )
 
             Divider()
@@ -300,14 +286,19 @@ struct TripDetailView: View {
             trip.originLng.map { lng in CLLocationCoordinate2D(latitude: lat, longitude: lng) }
         }
         let pickup = pickupCoordinate
+        let destination = AppConstants.sjsuCoordinate
+
+        // Collect all known coords so the map zooms to fit the full route
+        let fitCoords: [CLLocationCoordinate2D] = [driverOrigin, pickup, destination].compactMap { $0 }
 
         return RouteMapView(
             origin: driverOrigin,
-            destination: AppConstants.sjsuCoordinate,
+            destination: destination,
             driver: nil,
             waypoint: pickup,
             riders: pickup.map { [$0] } ?? [],
-            showsUserLocation: false
+            showsUserLocation: false,
+            fitAnchors: fitCoords.isEmpty ? nil : fitCoords
         )
         .frame(height: 180)
         .cornerRadius(12)
@@ -417,28 +408,43 @@ struct TripDetailView: View {
             Group {
                 switch viewModel.bookingState {
                 case nil:
-                    // Not booked - show request button
-                    Button(action: {
-                        Task {
-                            await viewModel.requestBooking()
-                        }
-                    }) {
-                        HStack(spacing: 10) {
-                            if viewModel.isBooking {
-                                ProgressView().tint(.white)
-                            } else {
-                                Image(systemName: "car.fill")
+                    // Not booked - show request button + pre-booking chat
+                    VStack(spacing: 10) {
+                        Button(action: {
+                            Task {
+                                await viewModel.requestBooking()
                             }
-                            Text(viewModel.isBooking ? "Requesting..." : "Request Ride")
+                        }) {
+                            HStack(spacing: 10) {
+                                if viewModel.isBooking {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Image(systemName: "car.fill")
+                                }
+                                Text(viewModel.isBooking ? "Requesting..." : "Request Ride")
+                            }
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(viewModel.isBooking ? Color.brand.opacity(0.6) : Color.brand)
+                            .cornerRadius(16)
                         }
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(viewModel.isBooking ? Color.brand.opacity(0.6) : Color.brand)
-                        .cornerRadius(16)
+                        .disabled(viewModel.isBooking || trip.seatsAvailable == 0)
+
+                        Button(action: { showChat = true }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "message")
+                                Text("Message Driver")
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.brand)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.brand.opacity(0.08))
+                            .cornerRadius(12)
+                        }
                     }
-                    .disabled(viewModel.isBooking || trip.seatsAvailable == 0)
 
                 case .pending:
                     // Pending - show awaiting approval with cancel button
@@ -468,13 +474,6 @@ struct TripDetailView: View {
                 Button(action: {
                     Task {
                         await viewModel.cancelBooking()
-                        if viewModel.cancellationSuccess {
-                            showSuccessMessage = true
-                            // Dismiss after showing success
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                dismiss()
-                            }
-                        }
                     }
                 }) {
                     HStack(spacing: 8) {
@@ -634,17 +633,20 @@ struct TripDetailView: View {
             }
 
         case .cancelled:
-            // Cancelled - show cancelled message
+            // Cancelled — distinguish timeout from rider-initiated
+            let isExpired = viewModel.booking?.holdExpiresAt.map { $0 < Date() } ?? false
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
                     Image(systemName: "xmark.circle")
                         .font(.system(size: 20))
                         .foregroundColor(.textTertiary)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Request Cancelled")
+                        Text(isExpired ? "Request Expired" : "Request Cancelled")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.textPrimary)
-                        Text("You cancelled this booking request.")
+                        Text(isExpired
+                             ? "The driver didn't respond in time. Your seat hold has expired."
+                             : "You cancelled this booking request.")
                             .font(.system(size: 13))
                             .foregroundColor(.textSecondary)
                     }

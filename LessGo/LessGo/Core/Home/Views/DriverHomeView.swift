@@ -532,6 +532,10 @@ struct DriverHomeView: View {
         profileVM.driverTrips.filter { $0.status == .cancelled }
     }
 
+    private var completedTrips: [Trip] {
+        profileVM.driverTrips.filter { $0.status == .completed }
+    }
+
     private var tripsWithPassengers: [Trip] {
         scheduledTrips.filter { trip in
             guard let maxRiders = trip.maxRiders else { return false }
@@ -557,8 +561,8 @@ struct DriverHomeView: View {
                 postedTripsTabContent
             }
         }
-        .confirmationDialog("Delete this cancelled trip?", isPresented: $showDeleteTripConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
+        .confirmationDialog("Remove this trip?", isPresented: $showDeleteTripConfirm, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
                 guard let trip = tripPendingDelete else { return }
                 Task {
                     try? await TripService.shared.deleteTrip(tripId: trip.id)
@@ -568,7 +572,7 @@ struct DriverHomeView: View {
             }
             Button("Cancel", role: .cancel) { tripPendingDelete = nil }
         } message: {
-            Text("This will permanently remove the cancelled trip from your history.")
+            Text("This will permanently remove the trip from your history.")
         }
     }
 
@@ -698,46 +702,63 @@ struct DriverHomeView: View {
                         .padding(.top, 4)
 
                     ForEach(cancelledTrips) { trip in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(trip.origin) → \(trip.destination)")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.primary)
-                                    .lineLimit(1)
-                                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Text("Cancelled")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.red)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.red.opacity(0.10))
-                                .clipShape(Capsule())
-                            Button(action: {
-                                tripPendingDelete = trip
-                                showDeleteTripConfirm = true
-                            }) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.red)
-                                    .padding(8)
-                                    .background(Color.red.opacity(0.08))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.cardBackground)
-                        )
+                        archivedTripRow(trip: trip, label: "Cancelled", labelColor: .red)
+                    }
+                }
+
+                if !completedTrips.isEmpty {
+                    Text("Completed Trips")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    ForEach(completedTrips) { trip in
+                        archivedTripRow(trip: trip, label: "Completed", labelColor: .brandGreen)
                     }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func archivedTripRow(trip: Trip, label: String, labelColor: Color) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(trip.origin) → \(trip.destination)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(labelColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(labelColor.opacity(0.10))
+                .clipShape(Capsule())
+            Button(action: {
+                tripPendingDelete = trip
+                showDeleteTripConfirm = true
+            }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.red)
+                    .padding(8)
+                    .background(Color.red.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.cardBackground)
+        )
     }
 
     // MARK: - Post Ride Button
