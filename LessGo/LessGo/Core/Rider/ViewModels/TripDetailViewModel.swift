@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import UIKit
 
 // MARK: - Trip Detail ViewModel
 
