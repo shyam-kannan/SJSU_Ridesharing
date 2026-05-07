@@ -99,6 +99,27 @@ struct Trip: Codable, Identifiable {
         driver = try container.decodeIfPresent(User.self, forKey: .driver)
     }
 
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(driverId, forKey: .driverId)
+        try container.encode(origin, forKey: .origin)
+        try container.encode(destination, forKey: .destination)
+        try container.encodeIfPresent(originPoint, forKey: .originPoint)
+        try container.encodeIfPresent(destinationPoint, forKey: .destinationPoint)
+        try container.encode(departureTime, forKey: .departureTime)
+        try container.encode(seatsAvailable, forKey: .seatsAvailable)
+        try container.encodeIfPresent(maxRiders, forKey: .maxRiders)
+        try container.encodeIfPresent(pendingBookingCount, forKey: .pendingBookingCount)
+        try container.encodeIfPresent(totalPayout, forKey: .totalPayout)
+        try container.encodeIfPresent(totalQuoted, forKey: .totalQuoted)
+        try container.encodeIfPresent(recurrence, forKey: .recurrence)
+        try container.encode(status, forKey: .status)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(driver, forKey: .driver)
+    }
+
     private static func decodeStatus(from container: KeyedDecodingContainer<CodingKeys>) throws -> TripStatus {
         let rawValue = try container.decode(String.self, forKey: .status)
         if let status = TripStatus(rawValue: rawValue) {
