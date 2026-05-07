@@ -981,18 +981,15 @@ export const confirmPayment = async (
     return updatedBooking!;
   }
 
-  // Confirm with a test payment method (pm_card_visa works in Stripe test mode)
-  await stripe.paymentIntents.confirm(paymentIntentId, {
-    payment_method: 'pm_card_visa',
-  });
+  // Confirm the PaymentIntent; use test card only outside production
+  const confirmParams: Stripe.PaymentIntentConfirmParams = {};
+  if (process.env.NODE_ENV !== 'production') {
+    confirmParams.payment_method = 'pm_card_visa';
+  }
+  await stripe.paymentIntents.confirm(paymentIntentId, confirmParams);
 
-  // Mark booking_state as 'confirmed' so the driver can proceed to capture
-  await pool.query(
-    `UPDATE bookings
-     SET booking_state = 'confirmed', updated_at = current_timestamp
-     WHERE booking_id = $1`,
-    [bookingId]
-  );
+  // Booking stays in 'approved' state — payment_authorized_at already signals authorization.
+  // It will move to 'completed' when the trip ends.
 
   const updatedBooking = await getBookingById(bookingId);
   return updatedBooking!;

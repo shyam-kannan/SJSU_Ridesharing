@@ -430,7 +430,7 @@ export const authorizePayment = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
- * Capture authorized payment when trip completes (driver only)
+ * Confirm authorized PaymentIntent server-side after rider taps Pay (rider only)
  * POST /api/bookings/:id/confirm-payment
  */
 export const confirmPayment = async (req: AuthRequest, res: Response): Promise<void> => {
