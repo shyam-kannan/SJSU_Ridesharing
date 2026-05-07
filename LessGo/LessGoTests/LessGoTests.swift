@@ -331,7 +331,8 @@ struct LessGoTests {
     @Test @MainActor func recurrenceStringIsWeekdaysForMonThroughFri() {
         let vm = CreateTripViewModel()
         vm.isRecurring = true
-        vm.recurrenceDays = Set([2, 3, 4, 5, 6]) // Mon–Fri calendar values
+        // Calendar.Component.weekday: 1=Sunday, 2=Monday, 3=Tue, 4=Wed, 5=Thu, 6=Fri, 7=Saturday
+        vm.recurrenceDays = Set([2, 3, 4, 5, 6]) // Monday through Friday
         #expect(vm.recurrenceString == "weekdays")
     }
 
@@ -389,12 +390,16 @@ struct LessGoTests {
         #expect(pastDate.countdownString == "Departed")
     }
 
-    @Test func countdownStringIsLeavingNowForZeroMinutes() {
-        // A date exactly at the minute boundary returns 0 minutes
+    @Test func countdownStringIsLeavingNowWhenDepartureIsUnderOneMinuteAway() {
+        // minutesUntil() truncates via Int(), so 30 s → 0 min → "Leaving now"
         let nearFuture = Date().addingTimeInterval(30)
-        let result = nearFuture.countdownString
-        // Depending on rounding, this is "Leaving now" or "Leaving in 1 min"
-        #expect(result == "Leaving now" || result.contains("Leaving in"))
+        #expect(nearFuture.countdownString == "Leaving now")
+    }
+
+    @Test func countdownStringContainsMinutesWhenDepartureIsMoreThanOneMinuteAway() {
+        // 90 seconds → 1 minute when truncated → "Leaving in 1 min"
+        let oneMinFuture = Date().addingTimeInterval(90)
+        #expect(oneMinFuture.countdownString.contains("Leaving in"))
     }
 
     @Test func countdownStringContainsHoursForTwoHourFutureDate() {
