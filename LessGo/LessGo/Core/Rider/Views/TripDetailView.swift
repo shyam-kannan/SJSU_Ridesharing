@@ -509,29 +509,79 @@ struct TripDetailView: View {
             }
 
         case .approved:
-            // Approved - show confirmed status
+            // Approved - show payment authorization or confirmed status
             VStack(spacing: 12) {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.brandGreen)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Ride Confirmed!")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.textPrimary)
-                        Text("Your ride has been confirmed by the driver.")
-                            .font(.system(size: 13))
-                            .foregroundColor(.textSecondary)
+                if viewModel.paymentAuthorized {
+                    // Payment hold placed — show confirmed badge
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.brandGreen)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Payment Held — Ride Confirmed")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                            Text("Your card has been authorized. Payment will be captured after the trip.")
+                                .font(.system(size: 13))
+                                .foregroundColor(.textSecondary)
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(16)
+                    .background(Color.cardBackground)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color.brandGreen.opacity(0.5), lineWidth: 1)
+                    )
+                } else {
+                    // Driver approved — prompt rider to authorize payment
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.brandGreen)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Driver Approved Your Request!")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                            Text("Confirm your spot by authorizing payment. Your card will only be charged after the trip.")
+                                .font(.system(size: 13))
+                                .foregroundColor(.textSecondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(16)
+                    .background(Color.cardBackground)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color.brandGreen.opacity(0.5), lineWidth: 1)
+                    )
+
+                    Button(action: {
+                        Task { await viewModel.authorizePayment() }
+                    }) {
+                        HStack(spacing: 8) {
+                            if viewModel.isAuthorizing {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "lock.shield.fill")
+                            }
+                            if let fare = viewModel.booking?.fare {
+                                Text(viewModel.isAuthorizing ? "Authorizing..." : String(format: "Confirm & Pay $%.2f", fare))
+                            } else {
+                                Text(viewModel.isAuthorizing ? "Authorizing..." : "Confirm & Pay")
+                            }
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.brandGreen)
+                        .cornerRadius(12)
+                    }
+                    .disabled(viewModel.isAuthorizing)
                 }
-                .padding(16)
-                .background(Color.cardBackground)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.brandGreen.opacity(0.5), lineWidth: 1)
-                )
 
                 Button(action: { showChat = true }) {
                     HStack(spacing: 8) {

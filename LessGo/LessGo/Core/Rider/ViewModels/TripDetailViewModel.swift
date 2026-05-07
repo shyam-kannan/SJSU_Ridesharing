@@ -17,6 +17,8 @@ class TripDetailViewModel: ObservableObject {
     @Published var bookingState: BookingState? = nil
     @Published var cancellationSuccess = false
     @Published var bookingSucceeded = false
+    @Published var isAuthorizing = false
+    @Published var paymentAuthorized = false
 
     // MARK: - Private State
 
@@ -133,6 +135,26 @@ class TripDetailViewModel: ObservableObject {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         } catch {
             errorMessage = "Failed to cancel booking. Please try again."
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    func authorizePayment() async {
+        guard let bookingId = booking?.id else { return }
+        isAuthorizing = true
+        errorMessage = nil
+
+        defer { isAuthorizing = false }
+
+        do {
+            _ = try await bookingService.authorizePayment(bookingId: bookingId)
+            paymentAuthorized = true
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch let error as NetworkError {
+            errorMessage = error.userMessage
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        } catch {
+            errorMessage = "Failed to authorize payment. Please try again."
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }

@@ -401,6 +401,64 @@ export const deleteBooking = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 /**
+ * Authorize payment for an approved booking (rider only)
+ * POST /api/bookings/:id/authorize-payment
+ */
+export const authorizePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+    const result = await bookingService.authorizePayment(id, req.user.userId);
+
+    successResponse(res, result, 'Payment authorized successfully');
+  } catch (error) {
+    console.error('Authorize payment error:', error);
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to authorize payment', 500);
+  }
+};
+
+/**
+ * Capture authorized payment when trip completes (driver only)
+ * POST /api/bookings/:id/capture-payment
+ */
+export const capturePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+    const booking = await bookingService.capturePayment(id, req.user.userId);
+
+    successResponse(res, booking, 'Payment captured successfully');
+  } catch (error) {
+    console.error('Capture payment error:', error);
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to capture payment', 500);
+  }
+};
+
+/**
  * Reject a booking (driver only)
  * PATCH /api/bookings/:id/reject
  */

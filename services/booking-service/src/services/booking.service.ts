@@ -1,6 +1,9 @@
 import { Pool } from 'pg';
 import axios from 'axios';
+import Stripe from 'stripe';
 import { config } from '../config';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2024-04-10' as any });
 import {
   Booking,
   BookingWithDetails,
@@ -463,6 +466,22 @@ export const cancelBooking = async (
     const wasConfirmed = bookingData.status === BookingStatus.Confirmed;
     const wasPending = bookingData.status === BookingStatus.Pending;
 
+    // If a Stripe PaymentIntent hold exists on the booking, cancel it to release the hold
+    const paymentIntentIdResult = await client.query(
+      'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+      [bookingId]
+    );
+    const paymentIntentId = paymentIntentIdResult.rows[0]?.payment_intent_id;
+    if (paymentIntentId) {
+      try {
+        await stripe.paymentIntents.cancel(paymentIntentId);
+        console.log(`[CANCEL] Released Stripe hold for PaymentIntent ${paymentIntentId}`);
+      } catch (stripeErr: any) {
+        // Log but don't block cancellation if Stripe cancel fails (e.g. already cancelled)
+        console.warn(`[CANCEL] Stripe cancel failed for ${paymentIntentId}:`, stripeErr.message);
+      }
+    }
+
     // If confirmed with a payment, handle based on payment status
     if (wasConfirmed && bookingData.payment) {
       if (bookingData.payment.status === 'captured') {
@@ -787,6 +806,118 @@ export const deleteBooking = async (bookingId: string, userId: string): Promise<
   );
 };
 
+/**
+ * Authorize payment for an approved booking (rider only)
+ * Creates a Stripe PaymentIntent with capture_method: 'manual' (card hold)
+ * @param bookingId Booking's UUID
+ * @param riderId Rider's UUID (for authorization)
+ * @returns { clientSecret, paymentIntentId }
+ */
+export const authorizePayment = async (
+  bookingId: string,
+  riderId: string
+): Promise<{ clientSecret: string; paymentIntentId: string }> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new AppError('Booking not found', 404);
+  }
+
+  if (bookingData.rider_id !== riderId) {
+    throw new AppError('Unauthorized', 403);
+  }
+
+  if (bookingData.booking_state !== 'approved') {
+    throw new AppError('Booking must be approved before payment can be authorized', 400);
+  }
+
+  // Don't create a duplicate PaymentIntent
+  const existingResult = await pool.query(
+    'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+    [bookingId]
+  );
+  if (existingResult.rows[0]?.payment_intent_id) {
+    // Return existing PaymentIntent client secret
+    const existing = await stripe.paymentIntents.retrieve(existingResult.rows[0].payment_intent_id);
+    return {
+      clientSecret: existing.client_secret!,
+      paymentIntentId: existing.id,
+    };
+  }
+
+  // Determine fare amount in cents
+  const fareUsd = bookingData.fare ?? bookingData.quote?.max_price ?? 0;
+  const amountCents = Math.round(fareUsd * 100);
+
+  if (amountCents <= 0) {
+    throw new AppError('Cannot authorize payment: fare amount is zero or unknown', 400);
+  }
+
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amountCents,
+    currency: 'usd',
+    capture_method: 'manual',
+    metadata: {
+      booking_id: bookingId,
+      rider_id: riderId,
+    },
+  });
+
+  // Persist PaymentIntent on the booking row
+  await pool.query(
+    `UPDATE bookings
+     SET payment_intent_id = $1, payment_authorized_at = NOW(), updated_at = current_timestamp
+     WHERE booking_id = $2`,
+    [paymentIntent.id, bookingId]
+  );
+
+  return {
+    clientSecret: paymentIntent.client_secret!,
+    paymentIntentId: paymentIntent.id,
+  };
+};
+
+/**
+ * Capture authorized payment when trip completes (driver or server-side)
+ * @param bookingId Booking's UUID
+ * @param driverId Driver's UUID (for authorization) — pass undefined for server-side calls
+ * @returns Updated booking
+ */
+export const capturePayment = async (
+  bookingId: string,
+  driverId: string
+): Promise<BookingWithDetails> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new AppError('Booking not found', 404);
+  }
+
+  if (bookingData.trip.driver_id !== driverId) {
+    throw new AppError('Unauthorized: Only the driver can capture payment', 403);
+  }
+
+  const intentIdResult = await pool.query(
+    'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+    [bookingId]
+  );
+  const paymentIntentId = intentIdResult.rows[0]?.payment_intent_id;
+
+  if (!paymentIntentId) {
+    throw new AppError('No authorized payment found for this booking', 400);
+  }
+
+  await stripe.paymentIntents.capture(paymentIntentId);
+
+  await pool.query(
+    `UPDATE bookings
+     SET booking_state = 'completed', updated_at = current_timestamp
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
+};
+
 export default {
   createBooking,
   getBookingById,
@@ -799,4 +930,6 @@ export default {
   approveBooking,
   rejectBooking,
   deleteBooking,
+  authorizePayment,
+  capturePayment,
 };
