@@ -1335,11 +1335,16 @@ private struct BookingRideDetailView: View {
     @State private var anchorPoints: [AnchorPoint] = []
     @State private var isLoadingAnchors = true
     @State private var isAuthorizing = false
+    @State private var authError: String?
+
+    private var currentBooking: Booking {
+        vm.bookings.first(where: { $0.id == booking.id }) ?? booking
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
-                if let trip = booking.trip {
+                if let trip = currentBooking.trip {
                     Group {
                         if !anchorPoints.isEmpty {
                             AnchorRouteMapView(
@@ -1361,8 +1366,10 @@ private struct BookingRideDetailView: View {
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(alignment: .topLeading) {
-                        statusBadge
-                            .padding(14)
+                        if !showAsDriver {
+                            statusBadge
+                                .padding(14)
+                        }
                     }
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)

@@ -248,7 +248,11 @@ router.post(
  */
 router.post(
   '/:id/merge-route',
-  authenticateToken,
+  (req: any, res: any, next: any) => {
+    // Allow internal service-to-service calls to bypass JWT auth
+    if (req.headers['x-internal-service']) return next();
+    return authenticateToken(req, res, next);
+  },
   [
     body('rider_id').notEmpty(),
     body('pickup_lat').isFloat(),

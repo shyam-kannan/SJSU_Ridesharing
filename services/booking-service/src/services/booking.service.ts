@@ -266,6 +266,9 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     booking_state: row.booking_state || 'pending',
     seats_booked: row.seats_booked,
     fare: row.fare != null ? parseFloat(row.fare) : undefined,
+    payment_intent_id: row.payment_intent_id || null,
+    hold_expires_at: row.hold_expires_at || null,
+    pickup_location: row.pickup_location || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     trip: {
@@ -882,6 +885,56 @@ export const authorizePayment = async (
      WHERE booking_id = $2`,
     [paymentIntent.id, bookingId]
   );
+
+  // Merge rider pickup into trip route (non-fatal)
+  if (bookingData.pickup_location) {
+    const pl = bookingData.pickup_location as { lat: number; lng: number };
+    try {
+      const tripResult = await pool.query(
+        `SELECT ST_Y(destination_point::geometry) as dest_lat,
+                ST_X(destination_point::geometry) as dest_lng
+         FROM trips WHERE trip_id = $1`,
+        [bookingData.trip_id]
+      );
+      if (tripResult.rows.length > 0) {
+        const { dest_lat, dest_lng } = tripResult.rows[0];
+        await axios.post(
+          `${config.tripServiceUrl}/trips/${bookingData.trip_id}/merge-route`,
+          {
+            rider_id: bookingData.rider_id,
+            pickup_lat: pl.lat,
+            pickup_lng: pl.lng,
+            dropoff_lat: dest_lat,
+            dropoff_lng: dest_lng,
+          },
+          { headers: { 'x-internal-service': 'booking-service' } }
+        );
+      }
+    } catch (mergeErr) {
+      console.warn('[authorizePayment] Route merge failed (non-fatal):', mergeErr);
+    }
+  }
+
+  // Notify all active riders on the trip that the route was updated
+  try {
+    const allRiders = await pool.query(
+      `SELECT rider_id FROM bookings
+       WHERE trip_id = $1
+         AND booking_state IN ('pending', 'approved')
+         AND rider_id != $2
+         AND deleted_at IS NULL`,
+      [bookingData.trip_id, bookingData.rider_id]
+    );
+    for (const row of allRiders.rows) {
+      axios.post(`${config.notificationServiceUrl}/notifications/send`, {
+        user_id: row.rider_id,
+        type: 'route_updated',
+        title: 'Route Updated',
+        message: 'The pickup route has been updated. Check your ride details.',
+        data: { trip_id: bookingData.trip_id },
+      }).catch(() => {});
+    }
+  } catch { /* non-fatal */ }
 
   return {
     clientSecret: paymentIntent.client_secret!,
