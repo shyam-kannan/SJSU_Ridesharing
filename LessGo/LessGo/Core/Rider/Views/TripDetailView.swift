@@ -297,8 +297,8 @@ struct TripDetailView: View {
             driver: nil,
             waypoint: pickup,
             riders: pickup.map { [$0] } ?? [],
-            showsUserLocation: false,
-            fitAnchors: fitCoords.isEmpty ? nil : fitCoords
+            fitAnchors: fitCoords.isEmpty ? nil : fitCoords,
+            showsUserLocation: false
         )
         .frame(height: 180)
         .cornerRadius(12)

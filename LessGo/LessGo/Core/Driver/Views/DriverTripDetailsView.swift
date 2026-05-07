@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import Combine
 
 struct DriverTripDetailsView: View {
     let trip: Trip
@@ -60,8 +61,8 @@ struct DriverTripDetailsView: View {
             driver: nil,
             waypoint: waypoint,
             riders: pickups,
-            showsUserLocation: true,
-            fitAnchors: fitCoords.isEmpty ? nil : fitCoords
+            fitAnchors: fitCoords.isEmpty ? nil : fitCoords,
+            showsUserLocation: true
         )
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 // MARK: - Trip Detail ViewModel
 
@@ -89,8 +90,16 @@ class TripDetailViewModel: ObservableObject {
             booking = response.booking
             bookingState = .pending
 
-            // Start polling for booking status updates
-            startPolling()
+            // Navigate rider to Trips tab and deep-link into the new booking
+            NotificationCenter.default.post(name: .navigateToBookingsTab, object: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                NotificationCenter.default.post(
+                    name: .openBookingDetail,
+                    object: nil,
+                    userInfo: ["bookingId": response.booking.id]
+                )
+            }
+
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
             errorMessage = error.userMessage
