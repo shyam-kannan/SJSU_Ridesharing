@@ -551,14 +551,21 @@ struct BookingListView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 14) {
-                            ForEach(filteredBookings) { booking in
-                                BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
-                                    reportedUserId = userId
-                                    reportedUserName = userName
-                                    reportTripId = tripId
-                                    showReportUser = true
+                            if showAsDriver && driverTab == .passengers {
+                                ForEach(vm.bookingsGroupedByTrip, id: \.trip.id) { group in
+                                    DriverTripGroupRow(trip: group.trip, bookings: group.bookings)
+                                        .padding(.horizontal, AppConstants.pagePadding)
                                 }
-                                .padding(.horizontal, AppConstants.pagePadding)
+                            } else {
+                                ForEach(filteredBookings) { booking in
+                                    BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
+                                        reportedUserId = userId
+                                        reportedUserName = userName
+                                        reportTripId = tripId
+                                        showReportUser = true
+                                    }
+                                    .padding(.horizontal, AppConstants.pagePadding)
+                                }
                             }
                         }
                         .padding(.top, 14)
@@ -950,6 +957,81 @@ private struct PostedTripRow: View {
         case .enRoute, .inProgress, .arrived: return .blue
         case .completed: return .gray
         case .cancelled: return .red
+        }
+    }
+}
+
+// MARK: - Driver Trip Group Row
+
+private struct DriverTripGroupRow: View {
+    let trip: Trip
+    let bookings: [Booking]
+    @State private var showDetail = false
+
+    private var pendingCount: Int {
+        bookings.filter { $0.bookingState == .pending }.count
+    }
+    private var approvedCount: Int {
+        bookings.filter { $0.bookingState == .approved }.count
+    }
+    private var riderNames: String {
+        bookings.compactMap { $0.rider?.name.components(separatedBy: " ").first }
+                .joined(separator: ", ")
+    }
+
+    var body: some View {
+        Button(action: { showDetail = true }) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(trip.origin) → \(trip.destination)")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                            .lineLimit(1)
+                        Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                            .font(.system(size: 12))
+                            .foregroundColor(.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.textTertiary)
+                }
+                HStack(spacing: 8) {
+                    if pendingCount > 0 {
+                        Label("\(pendingCount) pending", systemImage: "clock.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                    }
+                    if approvedCount > 0 {
+                        Label("\(approvedCount) confirmed", systemImage: "person.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Color.brandGreen)
+                            .clipShape(Capsule())
+                    }
+                }
+                if !riderNames.isEmpty {
+                    Text(riderNames)
+                        .font(.system(size: 12))
+                        .foregroundColor(.textTertiary)
+                }
+            }
+            .padding(AppConstants.cardPadding)
+            .background(Color.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.5), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showDetail) {
+            DriverTripDetailsView(trip: trip)
         }
     }
 }

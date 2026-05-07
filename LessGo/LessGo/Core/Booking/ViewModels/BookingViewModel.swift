@@ -96,6 +96,26 @@ class BookingViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Grouped Bookings (Driver View)
+
+    /// Groups driver-view bookings by trip_id, preserving the most-recent booking order.
+    var bookingsGroupedByTrip: [(trip: Trip, bookings: [Booking])] {
+        var seen = Set<String>()
+        var groups: [(trip: Trip, bookings: [Booking])] = []
+        for booking in bookings {
+            guard let trip = booking.trip else { continue }
+            if seen.contains(trip.id) {
+                if let idx = groups.firstIndex(where: { $0.trip.id == trip.id }) {
+                    groups[idx].bookings.append(booking)
+                }
+            } else {
+                seen.insert(trip.id)
+                groups.append((trip: trip, bookings: [booking]))
+            }
+        }
+        return groups
+    }
+
     private func errorKindFor(_ error: NetworkError) -> BookingErrorKind {
         switch error {
         case .noConnection: return .noConnection
