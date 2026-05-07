@@ -13,6 +13,8 @@ struct DriverTripDetailsView: View {
     @State private var chatDestination: DriverNotificationChatDestination?
     @State private var showCancelTripConfirm = false
     @State private var isCancellingTrip = false
+    @State private var anchorPoints: [AnchorPoint] = []
+    @State private var isLoadingAnchors = true
 
     private var totalSeatsBooked: Int {
         passengers.reduce(0) { $0 + $1.seatsBooked }
@@ -45,9 +47,27 @@ struct DriverTripDetailsView: View {
         }
     }
 
+    @ViewBuilder
     private var routeMapWithPassengers: some View {
         let origin = trip.originPoint?.clLocationCoordinate2D
         let destination = trip.destinationPoint?.clLocationCoordinate2D
+
+        // Use AnchorRouteMapView when we have anchor points, otherwise fall back to RouteMapView
+        if !anchorPoints.isEmpty {
+            AnchorRouteMapView(
+                origin: origin,
+                destination: destination,
+                driver: nil,
+                anchorPoints: anchorPoints,
+                showsUserLocation: true
+            )
+        } else {
+            // Fallback to existing RouteMapView for simple trips
+            routeMapViewFallback(origin: origin, destination: destination)
+        }
+    }
+
+    private func routeMapViewFallback(origin: CLLocationCoordinate2D?, destination: CLLocationCoordinate2D?) -> some View {
         let pickups = approvedPickupCoords
         let waypoint = pickups.first
         var fitCoords: [CLLocationCoordinate2D] = []
@@ -375,6 +395,7 @@ struct DriverTripDetailsView: View {
         }
         .task {
             await loadPassengers()
+            await loadAnchorPoints()
         }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             Task { await loadPassengers() }
@@ -482,6 +503,17 @@ struct DriverTripDetailsView: View {
             errorMessage = "Failed to load passengers"
             isLoading = false
             print("Error loading passengers: \(error)")
+        }
+    }
+
+    private func loadAnchorPoints() async {
+        isLoadingAnchors = true
+        do {
+            anchorPoints = try await TripService.shared.getAnchorPoints(tripId: trip.id)
+            isLoadingAnchors = false
+        } catch {
+            print("Error loading anchor points: \(error)")
+            isLoadingAnchors = false
         }
     }
 

@@ -1305,7 +1305,7 @@ private struct BookingRow: View {
     private var paymentStatusLabel: String {
         switch booking.payment?.status {
         case .captured: return "Paid"
-        case .pending: return "Authorized"
+        case .pending: return "Payment Held"
         case .refunded: return "Refunded"
         case .failed: return "Failed"
         case .none: return "Quoted"
@@ -1332,16 +1332,32 @@ private struct BookingRideDetailView: View {
     @ObservedObject var vm: BookingViewModel
     let showAsDriver: Bool
 
+    @State private var anchorPoints: [AnchorPoint] = []
+    @State private var isLoadingAnchors = true
+    @State private var isAuthorizing = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
                 if let trip = booking.trip {
-                    RouteMapView(
-                        origin: trip.originPoint?.clLocationCoordinate2D,
-                        destination: trip.destinationPoint?.clLocationCoordinate2D,
-                        driver: nil,
-                        showsUserLocation: true
-                    )
+                    Group {
+                        if !anchorPoints.isEmpty {
+                            AnchorRouteMapView(
+                                origin: trip.originPoint?.clLocationCoordinate2D,
+                                destination: trip.destinationPoint?.clLocationCoordinate2D,
+                                driver: nil,
+                                anchorPoints: anchorPoints,
+                                showsUserLocation: true
+                            )
+                        } else {
+                            RouteMapView(
+                                origin: trip.originPoint?.clLocationCoordinate2D,
+                                destination: trip.destinationPoint?.clLocationCoordinate2D,
+                                driver: nil,
+                                showsUserLocation: true
+                            )
+                        }
+                    }
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(alignment: .topLeading) {
@@ -1354,14 +1370,22 @@ private struct BookingRideDetailView: View {
                     )
                     .padding(.horizontal, 20)
 
+                    bookingStatusTimeline
+                        .padding(.horizontal, 20)
+
                     routeCard(trip: trip)
                         .padding(.horizontal, 20)
 
-                    counterpartCard(trip: trip)
-                        .padding(.horizontal, 20)
+                    if showAsDriver {
+                        unifiedRiderCard(trip: trip)
+                            .padding(.horizontal, 20)
+                    } else {
+                        counterpartCard(trip: trip)
+                            .padding(.horizontal, 20)
 
-                    paymentCard
-                        .padding(.horizontal, 20)
+                        paymentCard
+                            .padding(.horizontal, 20)
+                    }
 
                     actionsCard(trip: trip)
                         .padding(.horizontal, 20)
@@ -1381,6 +1405,30 @@ private struct BookingRideDetailView: View {
         .background(Color.appBackground.ignoresSafeArea())
         .navigationTitle("Ride Details")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadAnchorPoints()
+        }
+    }
+
+    private func loadAnchorPoints() async {
+        isLoadingAnchors = true
+        do {
+            anchorPoints = try await TripService.shared.getAnchorPoints(tripId: booking.tripId)
+            isLoadingAnchors = false
+        } catch {
+            print("Error loading anchor points: \(error)")
+            isLoadingAnchors = false
+        }
+    }
+
+    private var bookingStateLabel: String {
+        switch booking.bookingState {
+        case .pending:   return "Awaiting Approval"
+        case .approved:  return booking.payment == nil ? "Approved — Pay Now" : "Approved"
+        case .cancelled: return "Cancelled"
+        case .rejected:  return "Rejected"
+        case .completed: return "Completed"
+        }
     }
 
     private var statusBadge: some View {
@@ -1388,7 +1436,7 @@ private struct BookingRideDetailView: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
-            Text(booking.status.rawValue.capitalized)
+            Text(bookingStateLabel)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(statusColor)
         }
@@ -1398,6 +1446,172 @@ private struct BookingRideDetailView: View {
         .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    private var paymentStatusBadge: some View {
+        let (label, color): (String, Color) = {
+            switch booking.payment?.status {
+            case .captured:  return ("Paid", .brandGreen)
+            case .pending:   return ("Payment Held", .brandOrange)
+            case .refunded:  return ("Refunded", .brand)
+            case .failed:    return ("Failed", .brandRed)
+            case .none:      return ("Quoted", .textSecondary)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private var bookingStatusTimeline: some View {
+        let approvedDone = booking.bookingState == .approved || booking.bookingState == .completed
+        let paymentDone = booking.payment != nil
+        let completeDone = booking.bookingState == .completed
+        let steps: [(String, String, Bool)] = [
+            ("Requested", "paperplane.fill",      true),
+            ("Approved",  "checkmark.circle.fill", approvedDone),
+            ("Payment",   "creditcard.fill",       paymentDone),
+            ("Complete",  "flag.checkered",        completeDone),
+        ]
+        return HStack(spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { idx, step in
+                VStack(spacing: 4) {
+                    ZStack {
+                        Circle()
+                            .fill(step.2 ? Color.brandGreen : Color.sheetBackground)
+                            .frame(width: 30, height: 30)
+                            .overlay(Circle().strokeBorder(step.2 ? Color.brandGreen : DesignSystem.Colors.border, lineWidth: 1.5))
+                        Image(systemName: step.1)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(step.2 ? .white : .textTertiary)
+                    }
+                    Text(step.0)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(step.2 ? .textPrimary : .textTertiary)
+                        .fixedSize()
+                }
+                if idx < steps.count - 1 {
+                    let nextDone = steps[idx + 1].2
+                    Rectangle()
+                        .fill(nextDone ? Color.brandGreen : DesignSystem.Colors.border.opacity(0.5))
+                        .frame(height: 2)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 14)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.cardBackground.cornerRadius(16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
+    }
+
+    private func unifiedRiderCard(trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Color.brand.opacity(0.12)).frame(width: 46, height: 46)
+                    Text((booking.rider?.name ?? "R").prefix(1).uppercased())
+                        .font(.system(size: 18, weight: .bold)).foregroundColor(.brand)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(booking.rider?.name ?? "Rider")
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(.textPrimary)
+                    StarRatingView(rating: booking.rider?.rating ?? 0, size: 12)
+                }
+                Spacer()
+                Text("\(booking.seatsBooked) seat\(booking.seatsBooked == 1 ? "" : "s")")
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.brandGreen).clipShape(Capsule())
+            }
+
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Booking ID")
+                        .font(.system(size: 11)).foregroundColor(.textTertiary)
+                    Text("\(String(booking.id.prefix(8)))…")
+                        .font(.system(size: 13, weight: .medium)).foregroundColor(.textPrimary)
+                }
+                Spacer()
+                paymentStatusBadge
+            }
+
+            if let fare = booking.fare ?? booking.quote?.maxPrice {
+                HStack {
+                    Text("Fare")
+                        .font(.system(size: 13)).foregroundColor(.textSecondary)
+                    Spacer()
+                    Text(String(format: "$%.2f", fare))
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(.brandGreen)
+                }
+            }
+
+            Divider()
+
+            if chatAvailable {
+                NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: booking.rider?.name ?? "Rider", isDriver: true)) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "message.fill")
+                        Text("Chat with \(booking.rider?.name ?? "Rider")")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).opacity(0.55)
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.brand)
+                    .padding(.horizontal, 12).padding(.vertical, 11)
+                    .background(Color.brand.opacity(0.1))
+                    .cornerRadius(10)
+                }
+            }
+
+            if booking.bookingState == .pending {
+                HStack(spacing: 10) {
+                    Button(action: {
+                        Task {
+                            _ = await vm.rejectBooking(id: booking.id)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
+                        }
+                    }) {
+                        Label("Decline", systemImage: "xmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.brandRed)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.brandRed.opacity(0.1))
+                            .cornerRadius(10)
+                    }
+                    Button(action: {
+                        Task {
+                            _ = await vm.approveBooking(id: booking.id)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
+                        }
+                    }) {
+                        Label("Approve", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.brandGreen)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.brandGreen.opacity(0.1))
+                            .cornerRadius(10)
+                    }
+                }
+            }
+        }
+        .cardStyle(padding: 20, cornerRadius: 20)
+    }
+
+    private func authorizePayment() async {
+        isAuthorizing = true
+        _ = try? await BookingService.shared.authorizePayment(bookingId: booking.id)
+        await vm.loadBookings(asDriver: false)
+        isAuthorizing = false
     }
 
     private func routeCard(trip: Trip) -> some View {
@@ -1587,42 +1801,23 @@ private struct BookingRideDetailView: View {
                 }
             }
 
-            if chatAvailable {
-                if showAsDriver, let rider = booking.rider {
-                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
-                        actionPill(title: "Chat with \(rider.name)", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
-                    }
-                } else if !showAsDriver {
-                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: trip.driver?.name ?? "Driver", isDriver: false)) {
-                        actionPill(title: "Chat with Driver", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
-                    }
+            if !showAsDriver && chatAvailable {
+                NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: trip.driver?.name ?? "Driver", isDriver: false)) {
+                    actionPill(title: "Chat with Driver", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
                 }
             }
 
-            // Driver approves/rejects pending bookings (using bookingState)
-            if showAsDriver && booking.bookingState == .pending {
-                HStack(spacing: 10) {
-                    Button(action: {
-                        Task {
-                            _ = await vm.rejectBooking(id: booking.id)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                dismiss()
-                            }
-                        }
-                    }) {
-                        actionPill(title: "Decline", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
-                    }
-                    Button(action: {
-                        Task {
-                            _ = await vm.approveBooking(id: booking.id)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                dismiss()
-                            }
-                        }
-                    }) {
-                        actionPill(title: "Approve", icon: "checkmark.circle.fill", fill: Color.brandGreen.opacity(0.08), fg: .brandGreen)
-                    }
+            // Rider: authorize payment hold after driver approves
+            if !showAsDriver && booking.bookingState == .approved && booking.payment == nil {
+                Button(action: { Task { await authorizePayment() } }) {
+                    actionPill(
+                        title: isAuthorizing ? "Authorizing…" : "Confirm & Pay Hold",
+                        icon: "creditcard.fill",
+                        fill: Color.brandGreen,
+                        fg: .white
+                    )
                 }
+                .disabled(isAuthorizing)
             }
 
             if !showAsDriver && booking.status == .pending {
@@ -1726,10 +1921,11 @@ private struct BookingRideDetailView: View {
     }
 
     private var statusColor: Color {
-        switch booking.status {
-        case .pending: return .brandOrange
-        case .confirmed: return .brandGreen
+        switch booking.bookingState {
+        case .pending:   return .brandOrange
+        case .approved:  return .brandGreen
         case .cancelled: return .brandRed
+        case .rejected:  return .brandRed
         case .completed: return .textTertiary
         }
     }
@@ -1745,14 +1941,10 @@ private struct BookingRideDetailView: View {
 
     private func paymentStatusLabel(_ status: PaymentStatus) -> String {
         switch status {
-        case .pending:
-            return "Authorized"
-        case .captured:
-            return "Captured"
-        case .refunded:
-            return "Refunded"
-        case .failed:
-            return "Failed"
+        case .pending:  return "Payment Held"
+        case .captured: return "Paid"
+        case .refunded: return "Refunded"
+        case .failed:   return "Failed"
         }
     }
 }
