@@ -206,7 +206,7 @@ struct TripSearchParams {
     let departureBefore: Date?
 }
 
-struct TripListResponse: Codable {
+struct TripListResponse: Decodable {
     let trips: [Trip]
     let total: Int
 }
@@ -421,7 +421,7 @@ struct RiderSettlement: Codable {
 
 // MARK: - Trip State Update Response (wraps trip + optional settlement)
 
-struct TripStateUpdateResponse: Codable {
+struct TripStateUpdateResponse: Decodable {
     let trip: Trip
     let settlement: TripSettlement?
 }
