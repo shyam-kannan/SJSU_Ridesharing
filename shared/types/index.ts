@@ -131,9 +131,12 @@ export interface Booking {
   trip_id: string;
   rider_id: string;
   status: BookingStatus;
-  booking_state?: BookingState;  // New field for driver approval flow
+  booking_state?: BookingState;
   seats_booked: number;
-  fare?: number;  // Rider's fare from quotes table (max_price)
+  fare?: number;
+  payment_intent_id?: string | null;
+  hold_expires_at?: Date | null;
+  pickup_location?: { lat: number; lng: number } | null;
   created_at: Date;
   updated_at: Date;
 }
