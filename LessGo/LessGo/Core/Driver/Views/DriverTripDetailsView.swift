@@ -295,11 +295,19 @@ struct DriverTripDetailsView: View {
                                     }
                                 }
 
-                                // Other bookings (completed, cancelled, etc.)
-                                let otherBookings = passengers.filter { $0.bookingState != .pending && $0.bookingState != .approved }
-                                if !otherBookings.isEmpty {
-                                    ForEach(otherBookings) { passenger in
-                                        PassengerCard(passenger: passenger, onChat: { openChat(with: passenger) })
+                                // Past bookings (completed, cancelled, rejected)
+                                let archivedBookings = passengers.filter {
+                                    $0.bookingState == .completed || $0.bookingState == .cancelled || $0.bookingState == .rejected
+                                }
+                                if !archivedBookings.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Past Requests")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.textSecondary)
+                                            .padding(.horizontal, 2)
+                                        ForEach(archivedBookings) { booking in
+                                            archivedTripRow(booking)
+                                        }
                                     }
                                 }
                             }
@@ -429,6 +437,38 @@ struct DriverTripDetailsView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, -4)
+    }
+
+    private func archivedTripRow(_ booking: BookingWithRider) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Text(String(booking.riderName.prefix(1)))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.textSecondary)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(booking.riderName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                Text(booking.bookingState == .completed ? "Completed" : "Cancelled")
+                    .font(.system(size: 12))
+                    .foregroundColor(booking.bookingState == .completed ? Color.green : Color.secondary)
+            }
+            Spacer()
+            Button {
+                passengers.removeAll { $0.id == booking.id }
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 14))
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(12)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 
     private func loadPassengers() async {
