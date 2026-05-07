@@ -22,6 +22,8 @@ struct AnchorRouteMapView: UIViewRepresentable {
     var showsUserLocation: Bool = true
     // Mined frequent routes (He et al. 2014) rendered as dashed navy polylines
     var frequentRoutes: [FrequentRouteSegment] = []
+    // When set, only show pickup/dropoff pins for this rider (hides other riders' locations)
+    var ownRiderId: String? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -59,7 +61,8 @@ struct AnchorRouteMapView: UIViewRepresentable {
             origin: origin,
             destination: destination,
             driver: driver,
-            anchors: anchorPoints
+            anchors: anchorPoints,
+            ownRiderId: ownRiderId
         )
         context.coordinator.updateAnchorRoute(
             origin: origin,
@@ -100,7 +103,8 @@ struct AnchorRouteMapView: UIViewRepresentable {
             origin: CLLocationCoordinate2D?,
             destination: CLLocationCoordinate2D?,
             driver: CLLocationCoordinate2D?,
-            anchors: [AnchorPoint]
+            anchors: [AnchorPoint],
+            ownRiderId: String? = nil
         ) {
             guard let mapView else { return }
 
@@ -110,6 +114,10 @@ struct AnchorRouteMapView: UIViewRepresentable {
             if let driver      { desired["driver"]      = (driver,      "driver") }
 
             for (i, anchor) in anchors.enumerated() {
+                // If ownRiderId is set, only pin this rider's own stop (polyline still uses all anchors)
+                if let ownRiderId, let anchorRiderId = anchor.riderId, anchorRiderId != ownRiderId {
+                    continue
+                }
                 let key = "anchor_\(i)_\(anchor.type)"
                 desired[key] = (
                     CLLocationCoordinate2D(latitude: anchor.lat, longitude: anchor.lng),

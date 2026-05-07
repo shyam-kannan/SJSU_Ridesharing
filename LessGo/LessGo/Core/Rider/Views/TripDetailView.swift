@@ -5,8 +5,10 @@ import MapKit
 
 struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authVM: AuthViewModel
     @StateObject private var viewModel: TripDetailViewModel
     @State private var showChat = false
+    @State private var anchorPoints: [AnchorPoint] = []
 
     private let fallbackRiderCoordinate: CLLocationCoordinate2D
 
@@ -58,6 +60,16 @@ struct TripDetailView: View {
             }
             .task {
                 await viewModel.checkExistingBooking()
+                if let tripId = viewModel.trip?.id {
+                    anchorPoints = (try? await TripService.shared.getAnchorPoints(tripId: tripId)) ?? []
+                }
+            }
+            .onAppear {
+                Task {
+                    if let tripId = viewModel.trip?.id, anchorPoints.isEmpty {
+                        anchorPoints = (try? await TripService.shared.getAnchorPoints(tripId: tripId)) ?? []
+                    }
+                }
             }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil), presenting: viewModel.errorMessage) { _ in
                 Button("OK") {
@@ -281,6 +293,14 @@ struct TripDetailView: View {
 
     // MARK: - Route Map Section
 
+    private var myPickupETA: Date? {
+        guard let riderId = authVM.currentUser?.id,
+              let trip = viewModel.trip,
+              let anchor = anchorPoints.first(where: { $0.riderId == riderId && $0.type == .pickup }),
+              let etaOffset = anchor.etaOffsetSeconds else { return nil }
+        return trip.departureTime.addingTimeInterval(etaOffset)
+    }
+
     private func routeMapSection(trip: TripWithDriver) -> some View {
         let driverOrigin: CLLocationCoordinate2D? = trip.originLat.flatMap { lat in
             trip.originLng.map { lng in CLLocationCoordinate2D(latitude: lat, longitude: lng) }
@@ -288,20 +308,50 @@ struct TripDetailView: View {
         let pickup = pickupCoordinate
         let destination = AppConstants.sjsuCoordinate
 
-        // Collect all known coords so the map zooms to fit the full route
-        let fitCoords: [CLLocationCoordinate2D] = [driverOrigin, pickup, destination].compactMap { $0 }
+        let mapView: AnyView
+        if !anchorPoints.isEmpty {
+            mapView = AnyView(
+                AnchorRouteMapView(
+                    origin: driverOrigin,
+                    destination: destination,
+                    driver: nil,
+                    anchorPoints: anchorPoints,
+                    showsUserLocation: false,
+                    ownRiderId: authVM.currentUser?.id
+                )
+            )
+        } else {
+            let fitCoords: [CLLocationCoordinate2D] = [driverOrigin, pickup, destination].compactMap { $0 }
+            mapView = AnyView(
+                RouteMapView(
+                    origin: driverOrigin,
+                    destination: destination,
+                    driver: nil,
+                    waypoint: pickup,
+                    riders: pickup.map { [$0] } ?? [],
+                    fitAnchors: fitCoords.isEmpty ? nil : fitCoords,
+                    showsUserLocation: false
+                )
+            )
+        }
 
-        return RouteMapView(
-            origin: driverOrigin,
-            destination: destination,
-            driver: nil,
-            waypoint: pickup,
-            riders: pickup.map { [$0] } ?? [],
-            fitAnchors: fitCoords.isEmpty ? nil : fitCoords,
-            showsUserLocation: false
-        )
-        .frame(height: 180)
-        .cornerRadius(12)
+        return VStack(spacing: 0) {
+            mapView
+                .frame(height: 180)
+                .cornerRadius(12)
+            if let eta = myPickupETA {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.badge.checkmark")
+                        .font(.system(size: 12))
+                        .foregroundColor(.brandGreen)
+                    Text("Est. pickup \(eta.formatted(date: .omitted, time: .shortened))")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+        }
         .padding(16)
         .background(Color.cardBackground)
         .cornerRadius(16)
@@ -771,4 +821,5 @@ struct TripDetailView: View {
         ),
         riderCoordinate: CLLocationCoordinate2D(latitude: 37.3382, longitude: -121.8863)
     )
+    .environmentObject(AuthViewModel())
 }

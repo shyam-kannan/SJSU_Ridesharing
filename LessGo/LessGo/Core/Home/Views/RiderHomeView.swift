@@ -160,6 +160,7 @@ struct RiderHomeView: View {
             .fullScreenCover(isPresented: $showSearchResults) {
                 if let criteria = searchCriteria {
                     RiderSearchResultsView(criteria: criteria)
+                        .environmentObject(authVM)
                 }
             }
             .fullScreenCover(isPresented: $showFinding) {
