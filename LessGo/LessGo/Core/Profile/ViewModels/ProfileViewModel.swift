@@ -143,8 +143,11 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile updated!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-        } catch let error as NetworkError {
-            errorMessage = error.userMessage
+            
+            // Auto-dismiss success message after 2.5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch {
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
@@ -173,15 +176,14 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Driver profile saved!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            // Auto-dismiss success message after 2.5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch let error as NetworkError {
-            #if DEBUG
-            print("[ProfileViewModel] Failed to setup driver: \(error)")
-            #endif
             errorMessage = error.userMessage
         } catch {
-            #if DEBUG
-            print("[ProfileViewModel] Failed to setup driver: \(error)")
-            #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
         }
     }
@@ -232,6 +234,17 @@ class ProfileViewModel: ObservableObject {
         } catch {
             vehicleLookupFailed = true
         }
+    }
+
+    func retrySpecsLookup() async {
+        // Only retry if we have make, model, and year values
+        guard !pickerMake.isEmpty, !pickerModel.isEmpty, pickerYear > 0 else {
+            return
+        }
+
+        // Clear error state and retry
+        vehicleLookupFailed = false
+        await loadSpecs(make: pickerMake, model: pickerModel, year: pickerYear)
     }
 
     func loadPhoto(make: String, model: String, year: Int) async {
@@ -293,6 +306,11 @@ class ProfileViewModel: ObservableObject {
             #if DEBUG
             print("[ProfileViewModel] Failed to load driver trips: \(error)")
             #endif
+            // Surface a user-friendly message so the driver dashboard can show
+            // an empty/error state instructing the user to pull-to-refresh.
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Pull down to refresh"
+            // Clear trips to ensure UI shows empty state
+            driverTrips = []
         }
     }
 
@@ -322,6 +340,10 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile picture updated!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch let error as NetworkError {
             #if DEBUG
             print("[ProfileViewModel] Failed to upload profile picture: \(error)")
@@ -345,6 +367,10 @@ class ProfileViewModel: ObservableObject {
             user = updated
             successMessage = "Profile picture removed!"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.successMessage = nil
+            }
         } catch let error as NetworkError {
             #if DEBUG
             print("[ProfileViewModel] Failed to remove profile picture: \(error)")

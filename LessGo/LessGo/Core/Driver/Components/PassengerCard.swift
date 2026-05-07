@@ -2,7 +2,8 @@ import SwiftUI
 
 struct PassengerCard: View {
     let passenger: BookingWithRider
-    private var hasActions: Bool { (passenger.riderPhone?.isEmpty == false) || passenger.pickupLocation != nil }
+    var onChat: (() -> Void)? = nil
+    private var hasActions: Bool { (passenger.riderPhone?.isEmpty == false) || passenger.pickupLocation != nil || onChat != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -36,7 +37,74 @@ struct PassengerCard: View {
                         .lineLimit(1)
 
                     StarRatingView(rating: passenger.riderRating, size: 12)
+
+                    if let fare = passenger.fare {
+                        HStack(spacing: 10) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "dollarsign.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brandGreen)
+                                Text(String(format: "$%.2f", fare))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                            if let scost = passenger.scostBreakdown {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.turn.up.right")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.brandOrange)
+                                    Text(formatScostDistance(scost.walk))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.textPrimary)
+                                }
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.brand)
+                                    Text(formatScostTime(scost.advance))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.textPrimary)
+                                }
+                            }
+                        }
+                        .padding(.top, 2)
+                    } else if let scost = passenger.scostBreakdown {
+                        HStack(spacing: 10) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.turn.up.right")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brandOrange)
+                                Text(formatScostDistance(scost.walk))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.brand)
+                                Text(formatScostTime(scost.advance))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.textPrimary)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                 }
+
+                // Payment status badge
+                let held = passenger.paymentIntentId != nil
+                HStack(spacing: 4) {
+                    Image(systemName: held ? "lock.shield.fill" : "clock.badge.exclamationmark.fill")
+                        .font(.system(size: 10))
+                    Text(held ? "Payment Held" : "Awaiting Payment")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundColor(held ? .brandGreen : .brandGold)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background((held ? Color.brandGreen : Color.brandGold).opacity(0.12))
+                .cornerRadius(8)
+                .padding(.top, 2)
 
                 Spacer()
 
@@ -97,6 +165,23 @@ struct PassengerCard: View {
             // Action Buttons
             if hasActions {
                 HStack(spacing: 10) {
+                // Chat Button
+                if let onChat = onChat {
+                    Button(action: onChat) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 12))
+                            Text("Chat")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(.brand)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.brand.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+
                 // Call Button
                 if let phone = passenger.riderPhone, !phone.isEmpty {
                     Button(action: {

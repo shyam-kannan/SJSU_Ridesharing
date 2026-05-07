@@ -10,6 +10,7 @@ struct RouteMapView: UIViewRepresentable {
     let origin: CLLocationCoordinate2D?
     let destination: CLLocationCoordinate2D?
     let driver: CLLocationCoordinate2D?
+    var waypoint: CLLocationCoordinate2D? = nil
     var routeStart: CLLocationCoordinate2D? = nil
     var routeEnd: CLLocationCoordinate2D? = nil
     var riders: [CLLocationCoordinate2D] = []
@@ -38,6 +39,18 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.onRouteUpdated = onRouteUpdated
         mapView.showsUserLocation = showsUserLocation
 
+        guard mapView.bounds.width > 0, mapView.bounds.height > 0 else {
+            context.coordinator.scheduleLayoutRetry {
+                guard mapView.bounds.width > 0, mapView.bounds.height > 0 else { return }
+                self.syncMapContent(mapView, context: context)
+            }
+            return
+        }
+
+        syncMapContent(mapView, context: context)
+    }
+
+    private func syncMapContent(_ mapView: MKMapView, context: Context) {
         context.coordinator.syncAnnotations(
             origin: origin,
             destination: destination,
@@ -48,7 +61,11 @@ struct RouteMapView: UIViewRepresentable {
         let routeFrom = routeStart ?? origin
         let routeTo = routeEnd ?? destination
         if let routeFrom, let routeTo {
-            context.coordinator.updateRoute(from: routeFrom, to: routeTo)
+            if let wp = waypoint {
+                context.coordinator.updateRouteWithWaypoint(from: routeFrom, via: wp, to: routeTo)
+            } else {
+                context.coordinator.updateRoute(from: routeFrom, to: routeTo)
+            }
         }
 
         context.coordinator.fitVisibleRegionIfNeeded(
@@ -87,6 +104,17 @@ struct RouteMapView: UIViewRepresentable {
         private var lastDirectionsOrigin: CLLocationCoordinate2D?
         private var lastDirectionsDestination: CLLocationCoordinate2D?
         private var annotationsByID: [String: MovingPointAnnotation] = [:]
+        private var pendingLayoutRetry = false
+
+        func scheduleLayoutRetry(_ retry: @escaping () -> Void) {
+            guard !pendingLayoutRetry else { return }
+            pendingLayoutRetry = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.pendingLayoutRetry = false
+                retry()
+            }
+        }
 
         func syncAnnotations(
             origin: CLLocationCoordinate2D?,
@@ -196,6 +224,49 @@ struct RouteMapView: UIViewRepresentable {
 
                 if let error {
                     print("[RouteMapView] Directions error: \(error)")
+                }
+            }
+        }
+
+        func updateRouteWithWaypoint(from origin: CLLocationCoordinate2D, via waypoint: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D) {
+            let key = "\(routeKey(origin: origin, destination: waypoint))>\(routeKey(origin: waypoint, destination: destination))"
+            guard key != lastRouteKey else { return }
+            lastRouteKey = key
+            cachedPolyline = nil
+            cachedRouteInfo = nil
+            onRouteUpdated?(nil)
+            currentDirections?.cancel()
+
+            func makeRequest(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> MKDirections {
+                let req = MKDirections.Request()
+                req.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
+                req.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
+                req.transportType = .automobile
+                req.requestsAlternateRoutes = false
+                return MKDirections(request: req)
+            }
+
+            let leg1 = makeRequest(from: origin, to: waypoint)
+            let leg2 = makeRequest(from: waypoint, to: destination)
+
+            leg1.calculate { [weak self] r1, _ in
+                leg2.calculate { [weak self] r2, _ in
+                    guard let self, self.lastRouteKey == key else { return }
+                    let polyline1 = r1?.routes.first?.polyline ?? MKGeodesicPolyline(coordinates: [origin, waypoint], count: 2)
+                    let polyline2 = r2?.routes.first?.polyline ?? MKGeodesicPolyline(coordinates: [waypoint, destination], count: 2)
+                    let totalDistance = (r1?.routes.first?.distance ?? 0) + (r2?.routes.first?.distance ?? 0)
+                    let totalTime = (r1?.routes.first?.expectedTravelTime ?? 0) + (r2?.routes.first?.expectedTravelTime ?? 0)
+                    let info = RouteMapInfo(distanceMeters: totalDistance, expectedTravelTime: totalTime)
+                    self.cachedRouteInfo = info
+                    DispatchQueue.main.async {
+                        guard self.lastRouteKey == key else { return }
+                        if let mapView = self.mapView {
+                            mapView.removeOverlays(mapView.overlays)
+                            mapView.addOverlay(polyline1)
+                            mapView.addOverlay(polyline2)
+                        }
+                        self.onRouteUpdated?(info)
+                    }
                 }
             }
         }

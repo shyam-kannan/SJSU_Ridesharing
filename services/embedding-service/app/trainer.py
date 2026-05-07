@@ -45,13 +45,18 @@ WALKS_PER_NODE  = 10
 # Job store  {job_id: {status, started_at, finished_at, error}}
 # ─────────────────────────────────────────────────────────────────────────────
 job_store: Dict[str, Dict[str, Any]] = {}
+_active_job_id: str | None = None
 
 _lock = threading.Lock()
 
 
 def _set_job(job_id: str, **kwargs: Any) -> None:
+    global _active_job_id
     with _lock:
         job_store.setdefault(job_id, {}).update(kwargs)
+        if kwargs.get("status") in ["done", "error"]:
+            if _active_job_id == job_id:
+                _active_job_id = None
 
 
 def _get_paths(model_dir: str) -> Dict[str, str]:
@@ -106,7 +111,9 @@ def _train_worker(job_id: str, data_dir: str, model_dir: str) -> None:
         logger.info(f"[{job_id}] Training complete.")
 
     except Exception as exc:
-        logger.exception(f"[{job_id}] Training failed: {exc}")
+        import traceback
+        full_trace = traceback.format_exc()
+        logger.error(f"[{job_id}] Training failed:\n{full_trace}")
         _set_job(job_id, status="error", finished_at=datetime.utcnow().isoformat(), error=str(exc))
 
 
@@ -116,7 +123,14 @@ def _train_worker(job_id: str, data_dir: str, model_dir: str) -> None:
 
 def start_training(data_dir: str, model_dir: str) -> str:
     """Launch training in a background thread and return a job_id."""
+    global _active_job_id
+    with _lock:
+        if _active_job_id:
+            logger.info(f"Training already in progress (job {_active_job_id}).")
+            return _active_job_id
+
     job_id = str(uuid.uuid4())
+    _active_job_id = job_id
     _set_job(job_id, status="queued", started_at=None, finished_at=None, error=None)
     t = threading.Thread(target=_train_worker, args=(job_id, data_dir, model_dir), daemon=True)
     t.start()

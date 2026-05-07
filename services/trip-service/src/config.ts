@@ -26,6 +26,7 @@ export const config = {
   notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:3006',
   embeddingServiceUrl: process.env.EMBEDDING_SERVICE_URL || 'http://127.0.0.1:3010',
   costServiceUrl: process.env.COST_SERVICE_URL || 'http://127.0.0.1:3009',
+  routingServiceUrl: process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8002',
 };
 
 // Validate required config

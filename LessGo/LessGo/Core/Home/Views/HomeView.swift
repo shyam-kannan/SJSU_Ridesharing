@@ -72,7 +72,23 @@ struct HomeView: View {
                 selectedTab = .home
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToHomeTab)) { _ in
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                selectedTab = .home
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToBookingsTab)) { _ in
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                selectedTab = .bookings
+            }
+        }
     }
+}
+
+extension Notification.Name {
+    static let navigateToHomeTab = Notification.Name("navigateToHomeTab")
+    static let navigateToBookingsTab = Notification.Name("navigateToBookingsTab")
+    static let openBookingDetail = Notification.Name("openBookingDetail")
 }
 
 // MARK: - Custom Tab Bar

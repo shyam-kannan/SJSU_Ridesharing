@@ -565,6 +565,37 @@ private struct Step2ScheduleView: View {
                             }
                         }
                         .animation(.spring(response: 0.25), value: vm.recurrenceDays)
+
+                        // End date picker
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("END DATE")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.textTertiary)
+                                    .kerning(0.5)
+                                Spacer()
+                                Button(action: {
+                                    vm.recurrenceEndDate = nil
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }) {
+                                    Text("Clear")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.brand)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            DatePicker("Repeat until", selection: Binding(
+                                get: { vm.recurrenceEndDate ?? vm.departureDate },
+                                set: { vm.recurrenceEndDate = $0 }
+                            ), in: vm.departureDate..., displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .tint(.brand)
+                        }
+                        .padding(14)
+                        .background(Color.sheetBackground)
+                        .cornerRadius(12)
                     }
                 }
                 .cardStyle()

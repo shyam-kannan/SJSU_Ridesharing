@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { ValidationError } from '../types';
 
 /**
  * Standard success response format
@@ -6,10 +7,11 @@ import { Response } from 'express';
  * @param data Data to return
  * @param message Success message
  * @param statusCode HTTP status code (default 200)
+ * @returns Express response with JSON body
  */
-export const successResponse = (
+export const successResponse = <T = unknown>(
   res: Response,
-  data: any,
+  data: T,
   message: string = 'Success',
   statusCode: number = 200
 ): Response => {
@@ -26,14 +28,19 @@ export const successResponse = (
  * @param message Error message
  * @param statusCode HTTP status code (default 400)
  * @param errors Optional validation errors object
+ * @returns Express response with JSON body
  */
 export const errorResponse = (
   res: Response,
   message: string,
   statusCode: number = 400,
-  errors?: any
+  errors?: ValidationError[] | Record<string, string>
 ): Response => {
-  const response: any = {
+  const response: {
+    status: 'error';
+    message: string;
+    errors?: ValidationError[] | Record<string, string>;
+  } = {
     status: 'error',
     message,
   };
@@ -53,10 +60,11 @@ export const errorResponse = (
  * @param limit Items per page
  * @param total Total number of items
  * @param message Success message
+ * @returns Express response with JSON body including pagination metadata
  */
-export const paginatedResponse = (
+export const paginatedResponse = <T = unknown>(
   res: Response,
-  data: any[],
+  data: T[],
   page: number,
   limit: number,
   total: number,

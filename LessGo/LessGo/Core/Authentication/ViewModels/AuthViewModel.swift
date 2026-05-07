@@ -65,9 +65,9 @@ class AuthViewModel: ObservableObject {
 
     private func shouldInvalidateSession(for error: NetworkError) -> Bool {
         switch error {
-        case .unauthorized, .forbidden:
+        case .unauthorized:
             return true
-        case .noConnection, .timeout:
+        case .forbidden, .noConnection, .timeout:
             return false
         case .unknown(let underlying):
             if let urlError = underlying as? URLError {

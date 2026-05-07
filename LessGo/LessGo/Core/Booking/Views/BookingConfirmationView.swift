@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import CoreLocation
 import Combine
 
@@ -488,15 +487,35 @@ struct BookingSuccessView: View {
 
 // MARK: - Booking List View
 
+private enum DriverTab { case passengers, postedTrips }
+
 struct BookingListView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var vm = BookingViewModel()
     @State private var showAsDriver = false
+    @State private var driverTab: DriverTab = .passengers
+    @State private var editingTrip: Trip? = nil
     @State private var showAccountMenu = false
     @State private var showReportUser = false
     @State private var reportedUserId: String?
     @State private var reportedUserName: String?
     @State private var reportTripId: String?
+    @State private var deepLinkedBooking: Booking? = nil
+
+    private var filteredBookings: [Booking] {
+        let cutoff = Date().addingTimeInterval(-24 * 3600)
+        return vm.bookings.filter { booking in
+            // Hide bookings whose trip departed more than 24 hours ago
+            if let departure = booking.trip?.departureTime, departure < cutoff {
+                return false
+            }
+            // Hide completed bookings older than 24 hours
+            if booking.status == .completed {
+                return booking.updatedAt >= cutoff
+            }
+            return true
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -506,6 +525,8 @@ struct BookingListView: View {
                 if vm.isLoading {
                     SkeletonTripList().padding(.top, 12)
                     Spacer()
+                } else if showAsDriver && driverTab == .postedTrips {
+                    postedTripsContent
                 } else if let kind = vm.errorKind {
                     // Contextual error state with pull-to-refresh
                     ScrollView {
@@ -513,22 +534,24 @@ struct BookingListView: View {
                             .padding(.top, 60)
                             .padding(.horizontal, AppConstants.pagePadding)
                     }
-                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
-                } else if vm.bookings.isEmpty {
+                    .refreshable { await refreshCurrentTab() }
+                } else if filteredBookings.isEmpty {
                     ScrollView {
                         EmptyStateView(
                             icon: "calendar.badge.plus",
                             title: "No bookings yet",
                             message: showAsDriver ? "Your passengers will appear here" : "Find a ride and get going!",
                             actionTitle: showAsDriver ? nil : "Find Rides"
-                        ) {}
+                        ) {
+                            NotificationCenter.default.post(name: .navigateToHomeTab, object: nil)
+                        }
                         .padding(.top, 60)
                     }
-                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
+                    .refreshable { await refreshCurrentTab() }
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 14) {
-                            ForEach(vm.bookings) { booking in
+                            ForEach(filteredBookings) { booking in
                                 BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
                                     reportedUserId = userId
                                     reportedUserName = userName
@@ -541,7 +564,7 @@ struct BookingListView: View {
                         .padding(.top, 14)
                         .padding(.bottom, 100)
                     }
-                    .refreshable { await vm.loadBookings(asDriver: showAsDriver) }
+                    .refreshable { await refreshCurrentTab() }
                 }
             }
             .background(
@@ -558,24 +581,26 @@ struct BookingListView: View {
             .navigationBarHidden(true)
             .task {
                 if authVM.isDriver { showAsDriver = true }
-                await vm.loadBookings(asDriver: showAsDriver)
+                await refreshCurrentTab()
             }
             .onAppear {
                 Task {
                     if authVM.isDriver, !showAsDriver {
                         showAsDriver = true
-                    } else {
-                        await vm.loadBookings(asDriver: showAsDriver)
                     }
+                    await refreshCurrentTab()
                 }
             }
-            .onChange(of: showAsDriver) { newVal in
-                Task { await vm.loadBookings(asDriver: newVal) }
+            .onChange(of: showAsDriver) { _ in
+                Task { await refreshCurrentTab() }
+            }
+            .onChange(of: driverTab) { _ in
+                Task { await refreshCurrentTab() }
             }
             .onChange(of: authVM.currentUser?.id) { _ in
                 Task {
                     showAsDriver = authVM.isDriver
-                    await vm.loadBookings(asDriver: showAsDriver)
+                    await refreshCurrentTab()
                 }
             }
             .sheet(isPresented: $showReportUser) {
@@ -587,6 +612,78 @@ struct BookingListView: View {
             .sheet(isPresented: $showAccountMenu) {
                 InAppAccountMenuView()
                     .environmentObject(authVM)
+            }
+            .sheet(item: $editingTrip) { trip in
+                EditPostedTripSheet(trip: trip, vm: vm)
+            }
+            .background(
+                NavigationLink(
+                    destination: Group {
+                        if let booking = deepLinkedBooking {
+                            BookingRideDetailView(booking: booking, vm: vm, showAsDriver: false)
+                        }
+                    },
+                    isActive: Binding(
+                        get: { deepLinkedBooking != nil },
+                        set: { if !$0 { deepLinkedBooking = nil } }
+                    )
+                ) { EmptyView() }
+                .hidden()
+            )
+            .onReceive(NotificationCenter.default.publisher(for: .openBookingDetail)) { notification in
+                guard let bookingId = notification.userInfo?["bookingId"] as? String else { return }
+                // Wait briefly to allow the tab switch animation to complete, then reload and open
+                Task {
+                    await vm.loadBookings(asDriver: false)
+                    if let matched = vm.bookings.first(where: { $0.id == bookingId }) {
+                        deepLinkedBooking = matched
+                    }
+                }
+            }
+        }
+    }
+
+    private func refreshCurrentTab() async {
+        if showAsDriver && driverTab == .postedTrips {
+            if let id = authVM.currentUser?.id {
+                await vm.loadPostedTrips(driverId: id)
+            }
+        } else {
+            await vm.loadBookings(asDriver: showAsDriver)
+        }
+    }
+
+    @ViewBuilder
+    private var postedTripsContent: some View {
+        if vm.postedTrips.isEmpty {
+            ScrollView {
+                EmptyStateView(
+                    icon: "car.fill",
+                    title: "No posted trips",
+                    message: "Trips you post will appear here"
+                ) {}
+                .padding(.top, 60)
+            }
+            .refreshable {
+                if let id = authVM.currentUser?.id { await vm.loadPostedTrips(driverId: id) }
+            }
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(vm.postedTrips) { trip in
+                        PostedTripRow(
+                            trip: trip,
+                            onEdit: { editingTrip = trip },
+                            onDelete: { Task { await vm.cancelPostedTrip(id: trip.id) } }
+                        )
+                        .padding(.horizontal, AppConstants.pagePadding)
+                    }
+                }
+                .padding(.top, 14)
+                .padding(.bottom, 100)
+            }
+            .refreshable {
+                if let id = authVM.currentUser?.id { await vm.loadPostedTrips(driverId: id) }
             }
         }
     }
@@ -623,21 +720,41 @@ struct BookingListView: View {
             .padding(.top, 14)
 
             if authVM.isDriver {
-                Picker("View", selection: $showAsDriver) {
-                    Text("As Rider").tag(false)
-                    Text("As Driver").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .padding(4)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.cardBackground)
-                        .overlay(
+                VStack(spacing: 8) {
+                    Picker("View", selection: $showAsDriver) {
+                        Text("As Rider").tag(false)
+                        Text("As Driver").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.cardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                            )
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showAsDriver)
+
+                    if showAsDriver {
+                        Picker("Driver Tab", selection: $driverTab) {
+                            Text("Passengers").tag(DriverTab.passengers)
+                            Text("Posted Trips").tag(DriverTab.postedTrips)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(4)
+                        .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                                .fill(Color.cardBackground)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                                )
                         )
-                )
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showAsDriver)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: driverTab)
+                    }
+                }
                 .padding(.horizontal, AppConstants.pagePadding)
             }
 
@@ -722,6 +839,162 @@ struct BookingListView: View {
     }
 }
 
+// MARK: - Posted Trip Row
+
+private struct PostedTripRow: View {
+    let trip: Trip
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showDeleteConfirm = false
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(trip.origin)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    Text("→ \(trip.destination)")
+                        .font(.system(size: 13))
+                        .foregroundColor(.textSecondary)
+                }
+                Spacer()
+                Text(trip.status.displayName)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(statusColor(trip.status))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(statusColor(trip.status).opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            HStack(spacing: 16) {
+                Label(Self.dateFormatter.string(from: trip.departureTime), systemImage: "clock")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textTertiary)
+                Label("\(trip.seatsAvailable) seat\(trip.seatsAvailable == 1 ? "" : "s")", systemImage: "person.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textTertiary)
+            }
+            HStack(spacing: 10) {
+                Spacer()
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.cardBackground)
+                        .overlay(
+                            Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                        )
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: { showDeleteConfirm = true }) {
+                    Label("Cancel", systemImage: "xmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.08))
+                        .overlay(
+                            Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
+                        )
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(AppConstants.cardPadding)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.5), lineWidth: 1)
+        )
+        .confirmationDialog("Cancel this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Cancel Trip", role: .destructive, action: onDelete)
+            Button("Keep Trip", role: .cancel) {}
+        } message: {
+            Text("This will cancel the trip and notify any passengers.")
+        }
+    }
+
+    private func statusColor(_ status: TripStatus) -> Color {
+        switch status {
+        case .pending:   return .orange
+        case .enRoute, .inProgress, .arrived: return .blue
+        case .completed: return .gray
+        case .cancelled: return .red
+        }
+    }
+}
+
+// MARK: - Edit Posted Trip Sheet
+
+private struct EditPostedTripSheet: View {
+    let trip: Trip
+    @ObservedObject var vm: BookingViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var departureTime: Date
+    @State private var seats: Int
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(trip: Trip, vm: BookingViewModel) {
+        self.trip = trip
+        self.vm = vm
+        _departureTime = State(initialValue: trip.departureTime)
+        _seats = State(initialValue: trip.seatsAvailable)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Departure Time") {
+                    DatePicker("Departure", selection: $departureTime, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                        .datePickerStyle(.graphical)
+                }
+                Section("Seats Available") {
+                    Stepper("\(seats) seat\(seats == 1 ? "" : "s")", value: $seats, in: 1...8)
+                }
+                if let error = errorMessage {
+                    Section {
+                        Text(error).foregroundColor(.red).font(.system(size: 13))
+                    }
+                }
+            }
+            .navigationTitle("Edit Trip")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        Task {
+                            isSaving = true
+                            let ok = await vm.updatePostedTrip(id: trip.id, departureTime: departureTime, seatsAvailable: seats)
+                            isSaving = false
+                            if ok { dismiss() } else { errorMessage = "Failed to update trip. Please try again." }
+                        }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Booking Row
 
 private struct BookingRow: View {
@@ -729,6 +1002,17 @@ private struct BookingRow: View {
     @ObservedObject var vm: BookingViewModel
     let showAsDriver: Bool
     var onReport: ((String, String, String?) -> Void)?
+
+    @State private var showDeleteConfirm = false
+
+    private var chatAvailable: Bool {
+        let activeStates = booking.bookingState == .pending
+            || booking.bookingState == .approved
+            || booking.status == .confirmed
+        let recentlyCompleted = booking.status == .completed
+            && (booking.trip?.departureTime ?? Date()) > Date().addingTimeInterval(-86400)
+        return activeStates || recentlyCompleted
+    }
 
     var statusColor: Color {
         switch booking.status {
@@ -816,7 +1100,7 @@ private struct BookingRow: View {
                     }
                     .foregroundColor(.textSecondary)
                     Spacer()
-                    if let amount = booking.quote?.maxPrice {
+                    if let amount = booking.fare ?? booking.quote?.maxPrice {
                         HStack(spacing: 6) {
                             Text(String(format: "$%.2f", amount))
                                 .font(.system(size: 14, weight: .bold))
@@ -894,8 +1178,8 @@ private struct BookingRow: View {
                 }
             }
 
-            // Chat button for confirmed/completed bookings so riders can reopen chat history
-            if (booking.status == .confirmed || booking.status == .completed), let trip = booking.trip {
+            // Chat button for active/recently-completed bookings so riders can reopen chat history
+            if chatAvailable, let trip = booking.trip {
                 if showAsDriver, let rider = booking.rider {
                     NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
                         HStack(spacing: 8) {
@@ -925,9 +1209,18 @@ private struct BookingRow: View {
                 }
             }
 
-            // Cancel button for pending bookings
-            if booking.status == .pending {
-                Button(action: { Task { await vm.cancelBooking(id: booking.id) } }) {
+            // Cancel button for pending bookings (riders only)
+            if !showAsDriver && booking.status == .pending {
+                Button(action: {
+                    Task {
+                        let success = await vm.cancelBooking(id: booking.id)
+                        if success {
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            // Reload bookings to refresh the list
+                            await vm.loadBookings(asDriver: showAsDriver)
+                        }
+                    }
+                }) {
                     Text("Cancel Booking")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.brandRed)
@@ -955,6 +1248,27 @@ private struct BookingRow: View {
                     .cornerRadius(10)
                 }
             }
+
+            // Remove button for cancelled/rejected bookings
+            if booking.bookingState == .cancelled || booking.bookingState == .rejected {
+                HStack {
+                    Spacer()
+                    Button(action: { showDeleteConfirm = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                            Text("Remove")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.brandRed.opacity(0.7))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.brandRed.opacity(0.07))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(15)
         .background(
@@ -975,12 +1289,23 @@ private struct BookingRow: View {
                 }
         )
         .shadow(color: .black.opacity(0.045), radius: 10, x: 0, y: 4)
+        .confirmationDialog("Remove this booking?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    try? await BookingService.shared.deleteBooking(bookingId: booking.id)
+                    await vm.loadBookings(asDriver: showAsDriver)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the booking from your history.")
+        }
     }
 
     private var paymentStatusLabel: String {
         switch booking.payment?.status {
         case .captured: return "Paid"
-        case .pending: return "Authorized"
+        case .pending: return "Payment Held"
         case .refunded: return "Refunded"
         case .failed: return "Failed"
         case .none: return "Quoted"
@@ -1002,20 +1327,37 @@ private struct BookingRow: View {
 
 private struct BookingRideDetailView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
     let booking: Booking
     @ObservedObject var vm: BookingViewModel
     let showAsDriver: Bool
+
+    @State private var anchorPoints: [AnchorPoint] = []
+    @State private var isLoadingAnchors = true
+    @State private var isAuthorizing = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
                 if let trip = booking.trip {
-                    RouteMapView(
-                        origin: trip.originPoint?.clLocationCoordinate2D,
-                        destination: trip.destinationPoint?.clLocationCoordinate2D,
-                        driver: nil,
-                        showsUserLocation: true
-                    )
+                    Group {
+                        if !anchorPoints.isEmpty {
+                            AnchorRouteMapView(
+                                origin: trip.originPoint?.clLocationCoordinate2D,
+                                destination: trip.destinationPoint?.clLocationCoordinate2D,
+                                driver: nil,
+                                anchorPoints: anchorPoints,
+                                showsUserLocation: true
+                            )
+                        } else {
+                            RouteMapView(
+                                origin: trip.originPoint?.clLocationCoordinate2D,
+                                destination: trip.destinationPoint?.clLocationCoordinate2D,
+                                driver: nil,
+                                showsUserLocation: true
+                            )
+                        }
+                    }
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(alignment: .topLeading) {
@@ -1028,14 +1370,22 @@ private struct BookingRideDetailView: View {
                     )
                     .padding(.horizontal, 20)
 
+                    bookingStatusTimeline
+                        .padding(.horizontal, 20)
+
                     routeCard(trip: trip)
                         .padding(.horizontal, 20)
 
-                    counterpartCard(trip: trip)
-                        .padding(.horizontal, 20)
+                    if showAsDriver {
+                        unifiedRiderCard(trip: trip)
+                            .padding(.horizontal, 20)
+                    } else {
+                        counterpartCard(trip: trip)
+                            .padding(.horizontal, 20)
 
-                    paymentCard
-                        .padding(.horizontal, 20)
+                        paymentCard
+                            .padding(.horizontal, 20)
+                    }
 
                     actionsCard(trip: trip)
                         .padding(.horizontal, 20)
@@ -1055,6 +1405,30 @@ private struct BookingRideDetailView: View {
         .background(Color.appBackground.ignoresSafeArea())
         .navigationTitle("Ride Details")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadAnchorPoints()
+        }
+    }
+
+    private func loadAnchorPoints() async {
+        isLoadingAnchors = true
+        do {
+            anchorPoints = try await TripService.shared.getAnchorPoints(tripId: booking.tripId)
+            isLoadingAnchors = false
+        } catch {
+            print("Error loading anchor points: \(error)")
+            isLoadingAnchors = false
+        }
+    }
+
+    private var bookingStateLabel: String {
+        switch booking.bookingState {
+        case .pending:   return "Awaiting Approval"
+        case .approved:  return booking.payment == nil ? "Approved — Pay Now" : "Approved"
+        case .cancelled: return "Cancelled"
+        case .rejected:  return "Rejected"
+        case .completed: return "Completed"
+        }
     }
 
     private var statusBadge: some View {
@@ -1062,7 +1436,7 @@ private struct BookingRideDetailView: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
-            Text(booking.status.rawValue.capitalized)
+            Text(bookingStateLabel)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(statusColor)
         }
@@ -1072,6 +1446,172 @@ private struct BookingRideDetailView: View {
         .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    private var paymentStatusBadge: some View {
+        let (label, color): (String, Color) = {
+            switch booking.payment?.status {
+            case .captured:  return ("Paid", .brandGreen)
+            case .pending:   return ("Payment Held", .brandOrange)
+            case .refunded:  return ("Refunded", .brand)
+            case .failed:    return ("Failed", .brandRed)
+            case .none:      return ("Quoted", .textSecondary)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private var bookingStatusTimeline: some View {
+        let approvedDone = booking.bookingState == .approved || booking.bookingState == .completed
+        let paymentDone = booking.payment != nil
+        let completeDone = booking.bookingState == .completed
+        let steps: [(String, String, Bool)] = [
+            ("Requested", "paperplane.fill",      true),
+            ("Approved",  "checkmark.circle.fill", approvedDone),
+            ("Payment",   "creditcard.fill",       paymentDone),
+            ("Complete",  "flag.checkered",        completeDone),
+        ]
+        return HStack(spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { idx, step in
+                VStack(spacing: 4) {
+                    ZStack {
+                        Circle()
+                            .fill(step.2 ? Color.brandGreen : Color.sheetBackground)
+                            .frame(width: 30, height: 30)
+                            .overlay(Circle().strokeBorder(step.2 ? Color.brandGreen : DesignSystem.Colors.border, lineWidth: 1.5))
+                        Image(systemName: step.1)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(step.2 ? .white : .textTertiary)
+                    }
+                    Text(step.0)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(step.2 ? .textPrimary : .textTertiary)
+                        .fixedSize()
+                }
+                if idx < steps.count - 1 {
+                    let nextDone = steps[idx + 1].2
+                    Rectangle()
+                        .fill(nextDone ? Color.brandGreen : DesignSystem.Colors.border.opacity(0.5))
+                        .frame(height: 2)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 14)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.cardBackground.cornerRadius(16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
+    }
+
+    private func unifiedRiderCard(trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Color.brand.opacity(0.12)).frame(width: 46, height: 46)
+                    Text((booking.rider?.name ?? "R").prefix(1).uppercased())
+                        .font(.system(size: 18, weight: .bold)).foregroundColor(.brand)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(booking.rider?.name ?? "Rider")
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(.textPrimary)
+                    StarRatingView(rating: booking.rider?.rating ?? 0, size: 12)
+                }
+                Spacer()
+                Text("\(booking.seatsBooked) seat\(booking.seatsBooked == 1 ? "" : "s")")
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.brandGreen).clipShape(Capsule())
+            }
+
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Booking ID")
+                        .font(.system(size: 11)).foregroundColor(.textTertiary)
+                    Text("\(String(booking.id.prefix(8)))…")
+                        .font(.system(size: 13, weight: .medium)).foregroundColor(.textPrimary)
+                }
+                Spacer()
+                paymentStatusBadge
+            }
+
+            if let fare = booking.fare ?? booking.quote?.maxPrice {
+                HStack {
+                    Text("Fare")
+                        .font(.system(size: 13)).foregroundColor(.textSecondary)
+                    Spacer()
+                    Text(String(format: "$%.2f", fare))
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(.brandGreen)
+                }
+            }
+
+            Divider()
+
+            if chatAvailable {
+                NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: booking.rider?.name ?? "Rider", isDriver: true)) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "message.fill")
+                        Text("Chat with \(booking.rider?.name ?? "Rider")")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).opacity(0.55)
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.brand)
+                    .padding(.horizontal, 12).padding(.vertical, 11)
+                    .background(Color.brand.opacity(0.1))
+                    .cornerRadius(10)
+                }
+            }
+
+            if booking.bookingState == .pending {
+                HStack(spacing: 10) {
+                    Button(action: {
+                        Task {
+                            _ = await vm.rejectBooking(id: booking.id)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
+                        }
+                    }) {
+                        Label("Decline", systemImage: "xmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.brandRed)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.brandRed.opacity(0.1))
+                            .cornerRadius(10)
+                    }
+                    Button(action: {
+                        Task {
+                            _ = await vm.approveBooking(id: booking.id)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
+                        }
+                    }) {
+                        Label("Approve", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.brandGreen)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.brandGreen.opacity(0.1))
+                            .cornerRadius(10)
+                    }
+                }
+            }
+        }
+        .cardStyle(padding: 20, cornerRadius: 20)
+    }
+
+    private func authorizePayment() async {
+        isAuthorizing = true
+        _ = try? await BookingService.shared.authorizePayment(bookingId: booking.id)
+        await vm.loadBookings(asDriver: false)
+        isAuthorizing = false
     }
 
     private func routeCard(trip: Trip) -> some View {
@@ -1221,30 +1761,88 @@ private struct BookingRideDetailView: View {
         .cardStyle(padding: 20, cornerRadius: 20)
     }
 
+    private var cancelledBannerInfo: (icon: String, title: String, subtitle: String)? {
+        guard booking.bookingState == .cancelled else { return nil }
+        if let expires = booking.holdExpiresAt, expires < Date() {
+            return ("clock.badge.xmark.fill", "Request Expired", "Driver didn't respond in time")
+        } else {
+            return ("xmark.circle.fill", "Request Cancelled", "You cancelled this booking")
+        }
+    }
+
     @ViewBuilder
     private func actionsCard(trip: Trip) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Actions")
+
+            if let banner = cancelledBannerInfo {
+                HStack(spacing: 12) {
+                    Image(systemName: banner.icon)
+                        .font(.system(size: 20))
+                        .foregroundColor(.brandRed)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(banner.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.brandRed)
+                        Text(banner.subtitle)
+                            .font(.system(size: 12))
+                            .foregroundColor(.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.brandRed.opacity(0.07))
+                .cornerRadius(12)
+            }
+
             if booking.status == .confirmed, [.enRoute, .arrived, .inProgress].contains(trip.status) {
                 NavigationLink(destination: ActiveTripView(trip: trip, booking: booking, isDriver: showAsDriver)) {
                     actionPill(title: "Track Live Ride", icon: "location.fill", fill: Color.brand, fg: .white)
                 }
             }
 
-            if booking.status == .confirmed || booking.status == .completed {
-                if showAsDriver, let rider = booking.rider {
-                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: rider.name, isDriver: true)) {
-                        actionPill(title: "Chat with \(rider.name)", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
-                    }
-                } else if !showAsDriver {
-                    NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: trip.driver?.name ?? "Driver", isDriver: false)) {
-                        actionPill(title: "Chat with Driver", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
-                    }
+            if !showAsDriver && chatAvailable {
+                NavigationLink(destination: ChatView(tripId: trip.id, otherPartyName: trip.driver?.name ?? "Driver", isDriver: false)) {
+                    actionPill(title: "Chat with Driver", icon: "message.fill", fill: Color.brand.opacity(0.1), fg: .brand)
                 }
             }
 
+            // Rider: authorize payment hold after driver approves
+            if !showAsDriver && booking.bookingState == .approved && booking.payment == nil {
+                Button(action: { Task { await authorizePayment() } }) {
+                    actionPill(
+                        title: isAuthorizing ? "Authorizing…" : "Confirm & Pay Hold",
+                        icon: "creditcard.fill",
+                        fill: Color.brandGreen,
+                        fg: .white
+                    )
+                }
+                .disabled(isAuthorizing)
+            }
+
             if !showAsDriver && booking.status == .pending {
-                Button(action: { Task { await vm.cancelBooking(id: booking.id) } }) {
+                Button(action: {
+                    Task {
+                        _ = await vm.cancelBooking(id: booking.id)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dismiss()
+                        }
+                    }
+                }) {
+                    actionPill(title: "Cancel Booking", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
+                }
+            }
+
+            // Driver can cancel any booking on their posted trips (except completed)
+            if showAsDriver && booking.status != .completed && booking.status != .cancelled {
+                Button(action: {
+                    Task {
+                        _ = await vm.cancelBooking(id: booking.id)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            dismiss()
+                        }
+                    }
+                }) {
                     actionPill(title: "Cancel Booking", icon: "xmark.circle.fill", fill: Color.brandRed.opacity(0.08), fg: .brandRed)
                 }
             }
@@ -1313,11 +1911,21 @@ private struct BookingRideDetailView: View {
         }
     }
 
+    private var chatAvailable: Bool {
+        let activeStates = booking.bookingState == .pending
+            || booking.bookingState == .approved
+            || booking.status == .confirmed
+        let recentlyCompleted = booking.status == .completed
+            && (booking.trip?.departureTime ?? Date()) > Date().addingTimeInterval(-86400)
+        return activeStates || recentlyCompleted
+    }
+
     private var statusColor: Color {
-        switch booking.status {
-        case .pending: return .brandOrange
-        case .confirmed: return .brandGreen
+        switch booking.bookingState {
+        case .pending:   return .brandOrange
+        case .approved:  return .brandGreen
         case .cancelled: return .brandRed
+        case .rejected:  return .brandRed
         case .completed: return .textTertiary
         }
     }
@@ -1333,14 +1941,10 @@ private struct BookingRideDetailView: View {
 
     private func paymentStatusLabel(_ status: PaymentStatus) -> String {
         switch status {
-        case .pending:
-            return "Authorized"
-        case .captured:
-            return "Captured"
-        case .refunded:
-            return "Refunded"
-        case .failed:
-            return "Failed"
+        case .pending:  return "Payment Held"
+        case .captured: return "Paid"
+        case .refunded: return "Refunded"
+        case .failed:   return "Failed"
         }
     }
 }

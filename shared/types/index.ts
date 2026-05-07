@@ -31,6 +31,14 @@ export enum BookingStatus {
   Completed = 'completed',
 }
 
+export enum BookingState {
+  Pending = 'pending',      // Awaiting driver approval
+  Approved = 'approved',    // Driver approved the booking
+  Rejected = 'rejected',    // Driver rejected the booking
+  Cancelled = 'cancelled',  // Booking cancelled by rider or driver
+  Completed = 'completed',  // Trip completed
+}
+
 export enum PaymentStatus {
   Pending = 'pending',
   Captured = 'captured',
@@ -101,6 +109,9 @@ export interface Trip {
   seats_available: number;
   recurrence?: string;
   status: TripStatus;
+  featured?: boolean;      // New field for promoting routes
+  max_riders?: number;     // New field for max concurrent bookings
+  pending_booking_count?: number; // Count of pending bookings for driver view
   created_at: Date;
   updated_at: Date;
 }
@@ -120,7 +131,9 @@ export interface Booking {
   trip_id: string;
   rider_id: string;
   status: BookingStatus;
+  booking_state?: BookingState;  // New field for driver approval flow
   seats_booked: number;
+  fare?: number;  // Rider's fare from quotes table (max_price)
   created_at: Date;
   updated_at: Date;
 }
@@ -218,6 +231,8 @@ export interface JWTPayload {
   role: UserRole;
   sjsuIdStatus: SJSUIdStatus;
   type: 'access' | 'refresh';
+  iat?: number;
+  exp?: number;
 }
 
 /**
@@ -249,6 +264,19 @@ export interface SearchTripsRequest {
 export interface CreateBookingRequest {
   trip_id: string;
   seats_booked: number;
+  scost_breakdown?: ScostBreakdown;
+}
+
+/**
+ * Scost breakdown from ML matching algorithm (He et al. eq 9)
+ */
+export interface ScostBreakdown {
+  travel: number;   // Average detour distance per passenger
+  walk: number;     // Walking distance from rider to driver origin
+  detour: number;   // Extra distance penalty for adding passengers
+  advance: number;  // Waiting time
+  social: number;   // Route compatibility score
+  total: number;    // Sum of all components
 }
 
 /**
@@ -272,9 +300,17 @@ export interface DriverSetupRequest {
 // ========== API RESPONSE TYPES ==========
 
 /**
+ * Validation error structure
+ */
+export interface ValidationError {
+  field?: string;
+  message: string;
+}
+
+/**
  * Standard API success response
  */
-export interface APISuccessResponse<T = any> {
+export interface APISuccessResponse<T = unknown> {
   status: 'success';
   message: string;
   data: T;
@@ -286,13 +322,13 @@ export interface APISuccessResponse<T = any> {
 export interface APIErrorResponse {
   status: 'error';
   message: string;
-  errors?: any;
+  errors?: ValidationError[] | Record<string, string>;
 }
 
 /**
  * Paginated response
  */
-export interface PaginatedResponse<T = any> {
+export interface PaginatedResponse<T = unknown> {
   status: 'success';
   message: string;
   data: T[];

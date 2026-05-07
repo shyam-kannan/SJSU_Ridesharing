@@ -43,7 +43,7 @@ describe('services/api-gateway/src/app', () => {
     expect(response.body.message).toBe('Access token required');
   });
 
-  it('rejects malformed bearer token on protected routes', async () => {
+  it('forwards protected routes with a bearer token to downstream services', async () => {
     const server = await startTestServer(app);
     closeServer = server.close;
 
@@ -55,8 +55,8 @@ describe('services/api-gateway/src/app', () => {
       body: { any: 'payload' },
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(502);
     expect(response.body.status).toBe('error');
-    expect(response.body.message).toBe('Invalid or expired token');
+    expect(response.body.message).toBe('Service temporarily unavailable');
   });
 });

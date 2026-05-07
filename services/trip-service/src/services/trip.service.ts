@@ -1,8 +1,16 @@
 import { Pool } from 'pg';
+import axios from 'axios';
 import { config } from '../config';
-import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint } from '@lessgo/shared';
+import { Trip, TripWithDriver, CreateTripRequest, TripStatus, GeoPoint, AppError } from '@lessgo/shared';
 import { geocodeTripLocations } from '../utils/geocoding';
 import { mineFrequentRouteFromTrip } from './frequent_route.service';
+import {
+  rankWithEmbedding,
+  computeScost,
+  haversineMeters,
+  TripRequestRow,
+  CandidateTrip,
+} from './matching.service';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -20,7 +28,9 @@ const checkTripOverlap = async (
   driverId: string,
   originPoint: GeoPoint,
   destinationPoint: GeoPoint,
-  departureTime: Date
+  departureTime: Date,
+  originAddress?: string,
+  destinationAddress?: string
 ): Promise<void> => {
   // Calculate distance using Haversine formula
   const R = 3959; // Earth radius in miles
@@ -44,6 +54,7 @@ const checkTripOverlap = async (
     FROM trips
     WHERE driver_id = $1
       AND status = 'pending'
+      AND deleted_at IS NULL
       AND (
         (departure_time BETWEEN $2 AND ($2 + INTERVAL '${estimatedDurationMinutes} minutes'))
         OR
@@ -63,6 +74,32 @@ const checkTripOverlap = async (
       `You already have a trip scheduled at ${existingTime}. Please choose a different time.`
     );
   }
+
+  // Check for exact duplicate: same origin address, destination address, and departure_time
+  if (originAddress && destinationAddress) {
+    const exactDuplicateQuery = `
+      SELECT trip_id
+      FROM trips
+      WHERE driver_id = $1
+        AND origin = $2
+        AND destination = $3
+        AND departure_time = $4
+        AND status NOT IN ('cancelled')
+        AND deleted_at IS NULL
+      LIMIT 1
+    `;
+
+    const exactResult = await pool.query(exactDuplicateQuery, [
+      driverId,
+      originAddress,
+      destinationAddress,
+      departureTime,
+    ]);
+
+    if (exactResult.rows.length > 0) {
+      throw new AppError('A trip with this exact route and time already exists.', 409);
+    }
+  }
 };
 
 /**
@@ -80,8 +117,8 @@ export const createTrip = async (
   // Geocode origin and destination
   const { originPoint, destinationPoint } = await geocodeTripLocations(origin, destination);
 
-  // Check for overlapping trips
-  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time));
+  // Check for overlapping trips (and exact duplicates)
+  await checkTripOverlap(driverId, originPoint, destinationPoint, new Date(departure_time), origin, destination);
 
   const query = `
     INSERT INTO trips (
@@ -145,11 +182,12 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
       u.rating as driver_rating,
       u.vehicle_info as driver_vehicle_info,
       u.seats_available as driver_seats_available,
+      u.profile_picture_url as driver_profile_picture_url,
       u.created_at as driver_created_at,
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE t.trip_id = $1
+    WHERE t.trip_id = $1 AND t.deleted_at IS NULL
   `;
 
   const result = await pool.query(query, [tripId]);
@@ -182,6 +220,7 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
       rating: row.driver_rating,
       vehicle_info: row.driver_vehicle_info,
       seats_available: row.driver_seats_available,
+      profile_picture_url: row.driver_profile_picture_url,
       created_at: row.driver_created_at,
       updated_at: row.driver_updated_at,
     },
@@ -194,6 +233,8 @@ export const getTripById = async (tripId: string): Promise<TripWithDriver | null
  * @param originLng Origin longitude
  * @param radiusMeters Search radius in meters
  * @param filters Additional filters
+ * @param limit Number of results to return
+ * @param offset Number of results to skip
  * @returns Array of matching trips
  */
 export const searchTripsNearby = async (
@@ -205,7 +246,9 @@ export const searchTripsNearby = async (
     departureAfter?: Date;
     departureBefore?: Date;
     status?: TripStatus;
-  }
+  },
+  limit: number = 10,
+  offset: number = 0
 ): Promise<TripWithDriver[]> => {
   let query = `
     SELECT
@@ -215,7 +258,7 @@ export const searchTripsNearby = async (
       ST_X(t.destination_point::geometry) as destination_lng,
       ST_Y(t.destination_point::geometry) as destination_lat,
       t.departure_time, t.seats_available, t.recurrence, t.status,
-      t.created_at, t.updated_at,
+      t.featured, t.created_at, t.updated_at,
       ST_Distance(
         t.origin_point::geography,
         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
@@ -227,11 +270,12 @@ export const searchTripsNearby = async (
       u.sjsu_id_status as driver_sjsu_id_status,
       u.rating as driver_rating,
       u.vehicle_info as driver_vehicle_info,
+      u.profile_picture_url as driver_profile_picture_url,
       u.created_at as driver_created_at,
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE (
+    WHERE t.deleted_at IS NULL AND (
       ST_DWithin(
         t.origin_point::geography,
         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
@@ -246,7 +290,7 @@ export const searchTripsNearby = async (
     )
   `;
 
-  const values: any[] = [originLng, originLat, radiusMeters];
+  const values: (string | number | Date | TripStatus)[] = [originLng, originLat, radiusMeters];
   let paramIndex = 4;
 
   // Add filters
@@ -278,7 +322,9 @@ export const searchTripsNearby = async (
     paramIndex++;
   }
 
-  query += ` ORDER BY distance_meters ASC LIMIT 50`;
+  query += ` ORDER BY distance_meters ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+  values.push(limit);
+  values.push(offset);
 
   const result = await pool.query(query, values);
 
@@ -293,6 +339,7 @@ export const searchTripsNearby = async (
     seats_available: row.seats_available,
     recurrence: row.recurrence,
     status: row.status,
+    featured: row.featured ?? false,
     created_at: row.created_at,
     updated_at: row.updated_at,
     driver: {
@@ -303,6 +350,7 @@ export const searchTripsNearby = async (
       sjsu_id_status: row.driver_sjsu_id_status,
       rating: row.driver_rating,
       vehicle_info: row.driver_vehicle_info,
+      profile_picture_url: row.driver_profile_picture_url,
       created_at: row.driver_created_at,
       updated_at: row.driver_updated_at,
     },
@@ -329,6 +377,7 @@ export const listTrips = async (filters?: {
       ST_Y(t.destination_point::geometry) as destination_lat,
       t.departure_time, t.seats_available, t.recurrence, t.status,
       t.created_at, t.updated_at,
+      (SELECT COUNT(*) FROM bookings b WHERE b.trip_id = t.trip_id AND b.booking_state = 'pending') AS pending_booking_count,
       u.user_id as driver_user_id,
       u.name as driver_name,
       u.email as driver_email,
@@ -336,11 +385,12 @@ export const listTrips = async (filters?: {
       u.sjsu_id_status as driver_sjsu_id_status,
       u.rating as driver_rating,
       u.vehicle_info as driver_vehicle_info,
+      u.profile_picture_url as driver_profile_picture_url,
       u.created_at as driver_created_at,
       u.updated_at as driver_updated_at
     FROM trips t
     JOIN users u ON t.driver_id = u.user_id
-    WHERE 1=1
+    WHERE t.deleted_at IS NULL
   `;
 
   const values: any[] = [];
@@ -386,6 +436,7 @@ export const listTrips = async (filters?: {
     seats_available: row.seats_available,
     recurrence: row.recurrence,
     status: row.status,
+    pending_booking_count: parseInt(row.pending_booking_count, 10),
     created_at: row.created_at,
     updated_at: row.updated_at,
     driver: {
@@ -396,6 +447,7 @@ export const listTrips = async (filters?: {
       sjsu_id_status: row.driver_sjsu_id_status,
       rating: row.driver_rating,
       vehicle_info: row.driver_vehicle_info,
+      profile_picture_url: row.driver_profile_picture_url,
       created_at: row.driver_created_at,
       updated_at: row.driver_updated_at,
     },
@@ -424,7 +476,7 @@ export const updateTrip = async (
   }
 
   const fields: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | Date | TripStatus | undefined)[] = [];
   let paramIndex = 1;
 
   if (updates.departure_time) {
@@ -701,17 +753,233 @@ export const markMessagesAsRead = async (tripId: string, userId: string): Promis
   await pool.query(query, [tripId, userId]);
 };
 
+/**
+ * Check if a location is near SJSU
+ * @param location Location address string
+ * @param sjsuLat SJSU latitude
+ * @param sjsuLng SJSU longitude
+ * @param radiusMeters Search radius in meters
+ * @returns True if location is within radius of SJSU
+ */
+export const isLocationNearSJSU = async (
+  location: string,
+  sjsuLat: number,
+  sjsuLng: number,
+  radiusMeters: number
+): Promise<boolean> => {
+  try {
+    const { originPoint } = await geocodeTripLocations(location, location);
+
+    // Calculate distance using Haversine formula
+    const R = 3959; // Earth radius in miles
+    const lat1 = (originPoint.lat * Math.PI) / 180;
+    const lat2 = (sjsuLat * Math.PI) / 180;
+    const deltaLat = ((sjsuLat - originPoint.lat) * Math.PI) / 180;
+    const deltaLng = ((sjsuLng - originPoint.lng) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distanceMiles = R * c;
+    const distanceMeters = distanceMiles * 1609.34;
+
+    return distanceMeters <= radiusMeters;
+  } catch (error) {
+    console.error('Error checking SJSU proximity:', error);
+    return false;
+  }
+};
+
+// ── ML-ranked search for posted rides with rerouting ────────────────────────
+
+export interface CostBreakdown {
+  base_fare: number;
+  detour_surcharge: number;
+  per_rider_split: number;
+}
+
+export interface EnrichedTripWithDriver extends TripWithDriver {
+  origin_lat?: number;
+  origin_lng?: number;
+  detour_miles?: number;
+  adjusted_eta_minutes?: number;
+  original_eta_minutes?: number;
+  detour_time_minutes?: number;
+  cost_breakdown?: CostBreakdown;
+}
+
+export const searchTripsWithRerouting = async (
+  originLat: number,
+  originLng: number,
+  destinationLat: number,
+  destinationLng: number,
+  departureTime: Date,
+  filters?: {
+    minSeats?: number;
+    departureAfter?: Date;
+    departureBefore?: Date;
+  },
+  limit: number = 10,
+  offset: number = 0
+): Promise<EnrichedTripWithDriver[]> => {
+  // Stage 1: PostGIS proximity — reuse searchTripsNearby (top 20, 5km radius)
+  const stage1 = await searchTripsNearby(
+    originLat,
+    originLng,
+    5000,
+    filters,
+    20,
+    0
+  );
+
+  if (stage1.length === 0) return [];
+
+  // Build synthetic TripRequestRow for embedding + Scost stages
+  const syntheticReq: TripRequestRow = {
+    request_id: 'search',
+    rider_id:   'search',
+    origin_lat:       originLat,
+    origin_lng:       originLng,
+    destination_lat:  destinationLat,
+    destination_lng:  destinationLng,
+    departure_time:   departureTime,
+    max_scost:        null,
+  };
+
+  // Map TripWithDriver → CandidateTrip shape expected by matching utilities
+  const candidates: CandidateTrip[] = stage1.map(t => ({
+    trip_id:           t.trip_id,
+    driver_id:         t.driver_id,
+    origin_lat:        t.origin_point.lat,
+    origin_lng:        t.origin_point.lng,
+    destination_lat:   t.destination_point.lat,
+    destination_lng:   t.destination_point.lng,
+    departure_time:    new Date(t.departure_time),
+    seats_available:   t.seats_available,
+    distance_to_rider_m: haversineMeters(originLat, originLng, t.origin_point.lat, t.origin_point.lng),
+    route_score:       0,
+  }));
+
+  // Stage 2: embedding ranking
+  const ranked = await rankWithEmbedding(syntheticReq, candidates);
+
+  // Stage 3: Scost filter + sort
+  const scored: Array<{ trip: TripWithDriver; candidate: CandidateTrip; scostTotal: number }> = [];
+
+  for (const candidate of ranked) {
+    const bd = computeScost(syntheticReq, candidate, 0, false);
+    if (bd.total === Infinity) continue;
+
+    const original = stage1.find(t => t.trip_id === candidate.trip_id);
+    if (!original) continue;
+
+    scored.push({ trip: original, candidate, scostTotal: bd.total });
+  }
+
+  scored.sort((a, b) => a.scostTotal - b.scostTotal);
+
+  // Apply pagination after ML ranking
+  const page = scored.slice(offset, offset + limit);
+
+  // Enrich each result with detour_miles, adjusted_eta_minutes, cost_breakdown
+  const enriched: EnrichedTripWithDriver[] = await Promise.all(
+    page.map(async ({ trip, candidate }) => {
+      const detourMeters = haversineMeters(originLat, originLng, candidate.origin_lat, candidate.origin_lng);
+      const detourMiles = detourMeters / 1609.34;
+
+      let adjustedEtaMinutes: number | undefined;
+      let originalEtaMinutes: number | undefined;
+      let detourTimeMinutes: number | undefined;
+      try {
+        // Two-leg ETA: driver_origin → rider_pickup + rider_pickup → destination
+        const [leg1, leg2] = await Promise.all([
+          axios.post(`${config.routingServiceUrl}/route/calculate`, {
+            origin:      `${candidate.origin_lat},${candidate.origin_lng}`,
+            destination: `${originLat},${originLng}`,
+          }, { timeout: 4000 }),
+          axios.post(`${config.routingServiceUrl}/route/calculate`, {
+            origin:      `${originLat},${originLng}`,
+            destination: `${destinationLat},${destinationLng}`,
+          }, { timeout: 4000 }),
+        ]);
+        detourTimeMinutes   = Math.round((leg1.data?.duration_seconds ?? 0) / 60);
+        originalEtaMinutes  = Math.round((leg2.data?.duration_seconds ?? 0) / 60);
+        adjustedEtaMinutes  = detourTimeMinutes + originalEtaMinutes;
+      } catch {
+        // Routing service unavailable — omit ETA
+      }
+
+      const baseFare = 5.00; // default base fare; cost-calculation-service can refine this
+      const detourSurcharge = parseFloat((detourMiles * 0.50).toFixed(2));
+      const perRiderSplit = parseFloat((baseFare + detourSurcharge).toFixed(2));
+
+      return {
+        ...trip,
+        driver_name: trip.driver.name,
+        driver_rating: trip.driver.rating,
+        vehicle_info: trip.driver.vehicle_info,
+        driver_photo_url: trip.driver.profile_picture_url,
+        estimated_cost: perRiderSplit,
+        origin_lat: candidate.origin_lat,
+        origin_lng: candidate.origin_lng,
+        detour_miles: parseFloat(detourMiles.toFixed(2)),
+        adjusted_eta_minutes: adjustedEtaMinutes,
+        original_eta_minutes: originalEtaMinutes,
+        detour_time_minutes: detourTimeMinutes,
+        cost_breakdown: {
+          base_fare: baseFare,
+          detour_surcharge: detourSurcharge,
+          per_rider_split: perRiderSplit,
+        },
+      };
+    })
+  );
+
+  return enriched;
+};
+
+/**
+ * Soft delete a trip (set deleted_at = NOW())
+ * Only allowed if status = 'cancelled' and requester is the driver
+ * @param tripId Trip's UUID
+ * @param driverId Requesting user's UUID
+ */
+export const deleteTrip = async (tripId: string, driverId: string): Promise<void> => {
+  const trip = await getTripById(tripId);
+  if (!trip) {
+    throw new Error('Trip not found');
+  }
+
+  if (trip.driver_id !== driverId) {
+    throw new AppError('Forbidden: You are not the driver of this trip', 403);
+  }
+
+  if (trip.status !== TripStatus.Cancelled && trip.status !== TripStatus.Completed) {
+    throw new AppError('Trip can only be deleted when cancelled or completed', 400);
+  }
+
+  await pool.query(
+    'UPDATE trips SET deleted_at = NOW() WHERE trip_id = $1',
+    [tripId]
+  );
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
   createTrip,
   getTripById,
   searchTripsNearby,
+  searchTripsWithRerouting,
   listTrips,
   updateTrip,
   cancelTrip,
+  deleteTrip,
   updateTripState,
   sendMessage,
   getTripMessages,
   markMessagesAsRead,
+  isLocationNearSJSU,
 };

@@ -9,6 +9,8 @@ class KeychainManager {
     private init() {}
 
     private let service = "com.lessgo.app"
+    private let defaults = UserDefaults.standard
+    private let fallbackPrefix = "keychain_fallback_"
 
     private enum Key: String {
         case accessToken
@@ -110,7 +112,15 @@ class KeychainManager {
         SecItemDelete(query as CFDictionary)
 
         // Add new item
-        SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess {
+            defaults.set(value, forKey: fallbackKey(for: account))
+        } else {
+            #if DEBUG
+            print("[KeychainManager] Failed to save '\(account)' to keychain: \(status). Falling back to UserDefaults.")
+            #endif
+            defaults.set(value, forKey: fallbackKey(for: account))
+        }
     }
 
     private func get(for key: Key) -> String? {
@@ -129,13 +139,19 @@ class KeychainManager {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            return nil
+        if status == errSecSuccess,
+           let data = result as? Data,
+           let value = String(data: data, encoding: .utf8) {
+            return value
         }
 
-        return value
+        let fallbackValue = defaults.string(forKey: fallbackKey(for: account))
+        #if DEBUG
+        if status != errSecSuccess, fallbackValue != nil {
+            print("[KeychainManager] Using fallback storage for '\(account)' after keychain read status: \(status)")
+        }
+        #endif
+        return fallbackValue
     }
 
     private func delete(for key: Key) {
@@ -150,5 +166,10 @@ class KeychainManager {
         ]
 
         SecItemDelete(query as CFDictionary)
+        defaults.removeObject(forKey: fallbackKey(for: account))
+    }
+
+    private func fallbackKey(for account: String) -> String {
+        fallbackPrefix + account
     }
 }

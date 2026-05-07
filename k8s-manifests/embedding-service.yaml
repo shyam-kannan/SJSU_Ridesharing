@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: embedding-service-ksa
+  namespace: lessgo
+  annotations:
+    iam.gke.io/gcp-service-account: embedding-service-gsa@lessgo-492322.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-service
+  namespace: lessgo
+  labels:
+    app: embedding-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedding-service
+  template:
+    metadata:
+      labels:
+        app: embedding-service
+        tier: backend
+    spec:
+      serviceAccountName: embedding-service-ksa
+      enableServiceLinks: false
+      containers:
+        - name: embedding-service
+          image: us-west1-docker.pkg.dev/lessgo-492322/microservices-images/embedding-service:${COMMIT_SHA}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3010
+              name: http
+          env:
+            - name: EMBEDDING_SERVICE_PORT
+              value: "3010"
+            - name: DATA_DIR
+              value: "/app/data/nyc_taxi"
+            - name: MODEL_DIR
+              value: "/app/models"
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          envFrom:
+            - configMapRef:
+                name: lessgo-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3010
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3010
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: lessgo-secrets-provider
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-service
+  namespace: lessgo
+  labels:
+    app: embedding-service
+spec:
+  selector:
+    app: embedding-service
+  ports:
+    - protocol: TCP
+      port: 3010
+      targetPort: 3010
+      name: http
+  type: ClusterIP

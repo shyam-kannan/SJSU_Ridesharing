@@ -10,8 +10,8 @@ class BookingService {
 
     // MARK: - Create Booking
 
-    func createBooking(tripId: String, seatsBooked: Int) async throws -> CreateBookingResponse {
-        let request = CreateBookingRequest(tripId: tripId, seatsBooked: seatsBooked)
+    func createBooking(tripId: String, seatsBooked: Int, fare: Double? = nil) async throws -> CreateBookingResponse {
+        let request = CreateBookingRequest(tripId: tripId, seatsBooked: seatsBooked, fare: fare)
 
         let response: CreateBookingResponse = try await network.request(
             endpoint: "/bookings",
@@ -101,5 +101,75 @@ class BookingService {
         )
 
         return booking
+    }
+
+    // MARK: - Approve Booking (Driver Only)
+
+    func approveBooking(id: String) async throws -> Booking {
+        let booking: Booking = try await network.request(
+            endpoint: "/bookings/\(id)/approve",
+            method: .patch
+        )
+        return booking
+    }
+
+    // MARK: - Reject Booking (Driver Only)
+
+    func rejectBooking(id: String) async throws -> Booking {
+        let booking: Booking = try await network.request(
+            endpoint: "/bookings/\(id)/reject",
+            method: .patch
+        )
+        return booking
+    }
+
+    // MARK: - Delete Booking
+
+    func deleteBooking(bookingId: String) async throws {
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/bookings/\(bookingId)",
+            method: .delete
+        )
+    }
+
+    // MARK: - Authorize Payment (Rider Only)
+
+    func authorizePayment(bookingId: String) async throws -> [String: Any] {
+        struct AuthorizePaymentResponse: Codable {
+            let status: String
+            let data: AuthorizePaymentData?
+            struct AuthorizePaymentData: Codable {
+                let clientSecret: String
+                let paymentIntentId: String
+                enum CodingKeys: String, CodingKey {
+                    case clientSecret = "clientSecret"
+                    case paymentIntentId = "paymentIntentId"
+                }
+            }
+        }
+
+        let response: AuthorizePaymentResponse = try await network.request(
+            endpoint: "/bookings/\(bookingId)/authorize-payment",
+            method: .post
+        )
+
+        guard let data = response.data else {
+            throw NetworkError.serverError(APIError(status: "error", message: "No payment data returned", errors: nil))
+        }
+
+        return [
+            "clientSecret": data.clientSecret,
+            "paymentIntentId": data.paymentIntentId,
+        ]
+    }
+
+    // MARK: - Get Booking for Trip
+
+    func getBookingForTrip(tripId: String) async throws -> Booking? {
+        let response: BookingListResponse = try await network.request(
+            endpoint: "/bookings/trip/\(tripId)",
+            method: .get
+        )
+        return response.bookings.first
     }
 }

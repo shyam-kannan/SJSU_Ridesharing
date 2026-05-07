@@ -36,7 +36,7 @@ const RHO = 0.1;
 const MAX_PASSENGER_DETOUR_RATIO = 0.30;
 
 // ── Haversine helper ─────────────────────────────────────────────────────────
-function haversineMeters(
+export function haversineMeters(
   lat1: number, lng1: number,
   lat2: number, lng2: number
 ): number {
@@ -52,7 +52,7 @@ function haversineMeters(
 }
 
 // ── Types ───────────────────────────────────────────────────────────────────
-interface TripRequestRow {
+export interface TripRequestRow {
   request_id: string;
   rider_id: string;
   origin_lat: number;
@@ -63,7 +63,7 @@ interface TripRequestRow {
   max_scost: number | null;  // rider-preference ceiling (He et al. §4.2); null = no gate
 }
 
-interface CandidateTrip {
+export interface CandidateTrip {
   trip_id: string;
   driver_id: string;
   origin_lat: number;
@@ -187,7 +187,7 @@ async function fetchCandidates(req: TripRequestRow): Promise<CandidateTrip[]> {
 }
 
 // ── Stage 2: call embedding service for similarity ranking ───────────────────
-async function rankWithEmbedding(
+export async function rankWithEmbedding(
   req: TripRequestRow,
   candidates: CandidateTrip[]
 ): Promise<CandidateTrip[]> {
@@ -252,11 +252,11 @@ async function rankWithEmbedding(
 //   He et al. treats immediate requests (depTime ≈ now) as a valid booking
 //   mode with no advance-time penalty. We zero term4 when the rider's
 //   requested departure is within 5 minutes of the current time.
-interface ScostBreakdown {
+export interface ScostBreakdown {
   travel: number; walk: number; detour: number; advance: number; social: number; total: number;
 }
 
-function computeScost(
+export function computeScost(
   req: TripRequestRow,
   trip: CandidateTrip,
   existingPassengers: number,
@@ -314,13 +314,14 @@ async function insertPendingMatch(
   tripId: string,
   driverId: string,
   score: number,
-  attempt: number
+  attempt: number,
+  scostBreakdown?: ScostBreakdown
 ): Promise<string> {
   const result = await pool.query(
-    `INSERT INTO pending_matches (request_id, trip_id, driver_id, score, attempt)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO pending_matches (request_id, trip_id, driver_id, score, attempt, scost_breakdown)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING match_id`,
-    [requestId, tripId, driverId, score, attempt]
+    [requestId, tripId, driverId, score, attempt, scostBreakdown ? JSON.stringify(scostBreakdown) : null]
   );
   return result.rows[0].match_id as string;
 }
@@ -472,7 +473,7 @@ export async function matchRider(
   );
   const tripInfo = tripInfoResult.rows[0];
 
-  const matchId = await insertPendingMatch(requestId, bestTrip.trip_id, bestTrip.driver_id, bestScost, attempt);
+  const matchId = await insertPendingMatch(requestId, bestTrip.trip_id, bestTrip.driver_id, bestScost, attempt, bestBreakdown);
   await notifyDriver(bestTrip.driver_id, matchId, requestId, bestTrip.trip_id, riderInfo, {
     origin: tripInfo.origin,
     destination: tripInfo.destination,
@@ -511,13 +512,13 @@ export async function acceptMatch(matchId: string, driverId: string): Promise<vo
     `UPDATE pending_matches
      SET status = 'accepted'
      WHERE match_id = $1 AND driver_id = $2 AND status = 'pending' AND expires_at > NOW()
-     RETURNING request_id, trip_id`,
+     RETURNING request_id, trip_id, scost_breakdown`,
     [matchId, driverId]
   );
   if (result.rows.length === 0) {
     throw new Error('Match not found, already expired, or not owned by this driver.');
   }
-  const { request_id, trip_id } = result.rows[0];
+  const { request_id, trip_id, scost_breakdown } = result.rows[0];
 
   // Get rider ID from request
   const reqRow = await pool.query<{ rider_id: string }>(
@@ -526,7 +527,29 @@ export async function acceptMatch(matchId: string, driverId: string): Promise<vo
     [request_id, trip_id]
   );
 
-  console.log(`[matching] Match ${matchId} accepted. Rider ${reqRow.rows[0]?.rider_id} → trip ${trip_id}`);
+  const riderId = reqRow.rows[0]?.rider_id;
+
+  console.log(`[matching] Match ${matchId} accepted. Rider ${riderId} → trip ${trip_id}`);
+
+  // Create booking with Scost breakdown (default to 1 seat for on-demand requests)
+  try {
+    await axios.post(`${config.bookingServiceUrl}/bookings`, {
+      trip_id,
+      seats_booked: 1,
+      scost_breakdown
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        // Note: In production, this should include proper authentication
+        // For now, we're calling the booking service directly without auth
+        // since this is an internal service-to-service call
+      }
+    });
+    console.log(`[matching] Booking created for rider ${riderId} on trip ${trip_id}`);
+  } catch (error) {
+    console.error(`[matching] Failed to create booking:`, error);
+    // Don't throw here - the match is still accepted, booking creation can be retried
+  }
 }
 
 /**

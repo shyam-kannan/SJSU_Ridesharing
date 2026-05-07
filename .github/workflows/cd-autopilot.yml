@@ -1,9 +1,10 @@
 name: CD - Build and Push Images
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["CI - Unit Tests"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,7 @@ env:
 
 jobs:
   build-and-push:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -40,8 +42,8 @@ jobs:
             dockerfile: services/notification-service/Dockerfile
           - service: cost-calculation-service
             dockerfile: services/cost-calculation-service/Dockerfile
-          - service: grouping-service
-            dockerfile: services/grouping-service/Dockerfile
+          - service: embedding-service
+            dockerfile: services/embedding-service/Dockerfile
           - service: routing-service
             dockerfile: services/routing-service/Dockerfile
           - service: safety-service
@@ -57,7 +59,7 @@ jobs:
         id: changed
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "push" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -144,7 +146,7 @@ jobs:
         id: changed
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "push" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed_files=__ALL__" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -152,28 +154,9 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' '|')
           echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
-      - name: Detect k8s manifest changes
-        id: k8s-changed
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" != "push" ]; then
-            echo "k8s_changed=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Check if any k8s-manifest files changed
-          if echo "$CHANGED_FILES" | grep -q "^k8s-manifests/"; then
-            echo "k8s_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "k8s_changed=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
-          EVENT_NAME: ${{ github.event_name }}
-
       - name: Validate GKE configuration
         run: |
-          if [ -z "${PROJECT_ID}" ] || [ -z "${GKE_CLUSTER}" ] || [ -z "${GKE_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
+          if [ -z "${PROJECT_ID}" ] || [ -z "${AR_REPO_NAME}" ] || [ -z "${AR_LOCATION}" ] || [ -z "${GKE_CLUSTER}" ] || [ -z "${GKE_LOCATION}" ] || [ -z "${GCP_DEPLOYER_SA}" ] || [ -z "${GCP_WIF_PROVIDER}" ]; then
             echo "Missing required GitHub variables or secrets for GKE deployment."
             exit 1
           fi
@@ -204,7 +187,7 @@ jobs:
         run: gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$PROJECT_ID"
 
       - name: Deploy Kubernetes manifests
-        if: steps.auth.outcome == 'success' && (steps.k8s-changed.outputs.k8s_changed == 'true' || github.event_name != 'push')
+        if: steps.auth.outcome == 'success'
         env:
           COMMIT_SHA: ${{ github.sha }}
           CHANGED_FILES: ${{ steps.changed.outputs.changed_files }}
@@ -219,13 +202,21 @@ jobs:
           kubectl apply -f k8s-manifests/secretproviderclass.yaml
 
           # List of services to deploy
-          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service grouping-service routing-service safety-service"
+          services="api-gateway auth-service user-service trip-service booking-service payment-service notification-service cost-calculation-service embedding-service routing-service safety-service"
 
           for svc in $services; do
-            # Deploy if it's a workflow_dispatch or if the service files changed
-            if [ "$EVENT_NAME" != "push" ] || echo "$CHANGED_FILES" | tr '|' '\n' | grep -q "^services/$svc/"; then
+            service_changed=false
+            if [ "$CHANGED_FILES" = "__ALL__" ] || echo "$CHANGED_FILES" | tr '|' '\n' | grep -Eq "^(services/$svc/|k8s-manifests/$svc\.yaml$)"; then
+              service_changed=true
+            fi
+
+            if [ "$service_changed" = "true" ]; then
               # Use sed to substitute COMMIT_SHA placeholder with actual value
               sed "s/\${COMMIT_SHA}/$COMMIT_SHA/g" "k8s-manifests/$svc.yaml" | kubectl apply -f -
+              kubectl set image "deployment/$svc" "$svc=${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/$svc:$COMMIT_SHA" -n lessgo
+              kubectl rollout status "deployment/$svc" -n lessgo --timeout=180s
               echo "Deployed $svc with commit SHA: $COMMIT_SHA"
+            else
+              echo "Skipped $svc; no changes in services/$svc/ or k8s-manifests/$svc.yaml"
             fi
           done

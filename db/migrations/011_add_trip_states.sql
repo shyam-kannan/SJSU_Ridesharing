@@ -1,6 +1,8 @@
 -- Add enhanced trip states for real-time ride tracking
 -- States: pending, en_route, arrived, in_progress, completed, cancelled
 
+BEGIN;
+
 -- First, convert column to VARCHAR to allow manipulation
 ALTER TABLE trips
   ALTER COLUMN status TYPE VARCHAR(20);
@@ -37,6 +39,16 @@ ALTER TABLE trips
   ADD COLUMN IF NOT EXISTS pickup_completed_at TIMESTAMP,
   ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
 
+-- Add CHECK constraints for timestamp ordering
+ALTER TABLE trips
+  ADD CONSTRAINT check_trip_timestamp_ordering
+  CHECK (
+    -- If timestamps are set, they must be in chronological order
+    (started_at IS NULL OR arrived_at IS NULL OR started_at <= arrived_at) AND
+    (arrived_at IS NULL OR pickup_completed_at IS NULL OR arrived_at <= pickup_completed_at) AND
+    (pickup_completed_at IS NULL OR completed_at IS NULL OR pickup_completed_at <= completed_at)
+  );
+
 COMMENT ON COLUMN trips.started_at IS 'When driver started heading to pickup';
 COMMENT ON COLUMN trips.arrived_at IS 'When driver arrived at pickup location';
 COMMENT ON COLUMN trips.pickup_completed_at IS 'When rider got in car';
@@ -45,3 +57,5 @@ COMMENT ON COLUMN trips.completed_at IS 'When trip was completed';
 -- Create index for querying active trips
 CREATE INDEX IF NOT EXISTS idx_trips_status ON trips(status);
 CREATE INDEX IF NOT EXISTS idx_trips_driver_status ON trips(driver_id, status);
+
+COMMIT;

@@ -8,13 +8,16 @@ struct Booking: Codable, Identifiable {
     let riderId: String
     let seatsBooked: Int
     let status: BookingStatus
+    let bookingState: BookingState
     let createdAt: Date
     let updatedAt: Date
+    let holdExpiresAt: Date?
     let trip: Trip?
     let rider: User?
     let pickupLocation: PickupLocation?
     let quote: Quote?
     let payment: Payment?
+    let fare: Double?
 
     enum CodingKeys: String, CodingKey {
         case id = "booking_id"
@@ -22,11 +25,40 @@ struct Booking: Codable, Identifiable {
         case riderId = "rider_id"
         case seatsBooked = "seats_booked"
         case status
+        case bookingState = "booking_state"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case holdExpiresAt = "hold_expires_at"
         case trip, rider
         case pickupLocation = "pickup_location"
-        case quote, payment
+        case quote, payment, fare
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        tripId = try c.decode(String.self, forKey: .tripId)
+        riderId = try c.decode(String.self, forKey: .riderId)
+        seatsBooked = try c.decode(Int.self, forKey: .seatsBooked)
+        status = try c.decode(BookingStatus.self, forKey: .status)
+        // backend may omit booking_state for older endpoints — default to .pending
+        bookingState = try c.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        holdExpiresAt = try c.decodeIfPresent(Date.self, forKey: .holdExpiresAt)
+        trip = try c.decodeIfPresent(Trip.self, forKey: .trip)
+        rider = try c.decodeIfPresent(User.self, forKey: .rider)
+        pickupLocation = try c.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
+        quote = try c.decodeIfPresent(Quote.self, forKey: .quote)
+        payment = try c.decodeIfPresent(Payment.self, forKey: .payment)
+        // fare = max_price from the quotes table, returned directly on the booking by some endpoints
+        if let fareDouble = try? c.decode(Double.self, forKey: .fare) {
+            fare = fareDouble
+        } else if let fareString = try? c.decode(String.self, forKey: .fare), let parsed = Double(fareString) {
+            fare = parsed
+        } else {
+            fare = nil
+        }
     }
 }
 
@@ -35,6 +67,46 @@ enum BookingStatus: String, Codable {
     case confirmed
     case cancelled
     case completed
+}
+
+// MARK: - Booking State (for driver approval flow)
+
+enum BookingState: String, Codable {
+    case pending = "pending"
+    case approved = "approved"
+    case rejected = "rejected"
+    case cancelled = "cancelled"
+    case completed = "completed"
+
+    var displayName: String {
+        switch self {
+        case .pending: return "Awaiting Approval"
+        case .approved: return "Confirmed"
+        case .rejected: return "Declined"
+        case .cancelled: return "Cancelled"
+        case .completed: return "Completed"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .pending: return "clock.fill"
+        case .approved: return "checkmark.circle.fill"
+        case .rejected: return "xmark.circle.fill"
+        case .cancelled: return "xmark.circle"
+        case .completed: return "checkmark.seal.fill"
+        }
+    }
+
+    var color: String {
+        switch self {
+        case .pending: return "brandGold"
+        case .approved: return "brandGreen"
+        case .rejected: return "brandRed"
+        case .cancelled: return "brandRed"
+        case .completed: return "brandGreen"
+        }
+    }
 }
 
 struct Quote: Codable {
@@ -75,10 +147,12 @@ struct Quote: Codable {
 struct CreateBookingRequest: Codable {
     let tripId: String
     let seatsBooked: Int
+    let fare: Double?
 
     enum CodingKeys: String, CodingKey {
         case tripId = "trip_id"
         case seatsBooked = "seats_booked"
+        case fare
     }
 }
 
@@ -133,8 +207,13 @@ struct BookingWithRider: Codable, Identifiable {
     let riderPicture: String?
     let seatsBooked: Int
     let status: BookingStatus
+    let bookingState: BookingState
     let pickupLocation: PickupLocation?
     let createdAt: Date
+    let holdExpiresAt: Date?
+    let scostBreakdown: ScostBreakdown?
+    let fare: Double?
+    let paymentIntentId: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -147,8 +226,13 @@ struct BookingWithRider: Codable, Identifiable {
         case riderPicture = "rider_picture"
         case seatsBooked = "seats_booked"
         case status
+        case bookingState = "booking_state"
         case pickupLocation = "pickup_location"
         case createdAt = "created_at"
+        case holdExpiresAt = "hold_expires_at"
+        case scostBreakdown = "scost_breakdown"
+        case fare
+        case paymentIntentId = "payment_intent_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -162,8 +246,19 @@ struct BookingWithRider: Codable, Identifiable {
         riderPicture = try container.decodeIfPresent(String.self, forKey: .riderPicture)
         seatsBooked = try container.decode(Int.self, forKey: .seatsBooked)
         status = try container.decode(BookingStatus.self, forKey: .status)
+        bookingState = try container.decodeIfPresent(BookingState.self, forKey: .bookingState) ?? .pending
         pickupLocation = try container.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        holdExpiresAt = try container.decodeIfPresent(Date.self, forKey: .holdExpiresAt)
+        scostBreakdown = try container.decodeIfPresent(ScostBreakdown.self, forKey: .scostBreakdown)
+        paymentIntentId = try container.decodeIfPresent(String.self, forKey: .paymentIntentId)
+        if let fareDouble = try? container.decode(Double.self, forKey: .fare) {
+            fare = fareDouble
+        } else if let fareString = try? container.decode(String.self, forKey: .fare), let parsed = Double(fareString) {
+            fare = parsed
+        } else {
+            fare = nil
+        }
 
         // Backend sends rating as String ("0.00") or occasionally as Double
         if let ratingDouble = try? container.decode(Double.self, forKey: .riderRating) {
@@ -181,6 +276,17 @@ struct PickupLocation: Codable {
     let lat: Double
     let lng: Double
     let address: String?
+}
+
+// MARK: - Scost Breakdown Models
+
+struct ScostBreakdown: Codable {
+    let travel: Double
+    let walk: Double
+    let detour: Double
+    let advance: Double
+    let social: Double
+    let total: Double
 }
 
 // Response wrapper for trip bookings endpoint

@@ -12,6 +12,7 @@ enum BookingErrorKind {
 @MainActor
 class BookingViewModel: ObservableObject {
     @Published var bookings: [Booking] = []
+    @Published var postedTrips: [Trip] = []
     @Published var currentBooking: Booking?
     @Published var currentPayment: Payment?
     @Published var isLoading = false
@@ -47,6 +48,51 @@ class BookingViewModel: ObservableObject {
             #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             errorKind = .other
+        }
+    }
+
+    func loadPostedTrips(driverId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let response = try await TripService.shared.listTrips(driverId: driverId, limit: 50)
+            let cutoff = Date().addingTimeInterval(-24 * 3600)
+
+            // Auto-cancel pending trips whose departure time is more than 24 hours ago
+            for trip in response.trips where trip.status == .pending && trip.departureTime < cutoff {
+                _ = try? await TripService.shared.cancelTrip(id: trip.id)
+            }
+
+            // Filter: only show pending trips, hide anything departed > 24 hrs ago
+            withAnimation {
+                postedTrips = response.trips.filter { trip in
+                    guard trip.departureTime >= cutoff else { return false }
+                    return trip.status == .pending
+                }
+            }
+        } catch {
+            postedTrips = []
+        }
+    }
+
+    func cancelPostedTrip(id: String) async {
+        _ = try? await TripService.shared.cancelTrip(id: id)
+        postedTrips.removeAll { $0.id == id }
+    }
+
+    func updatePostedTrip(id: String, departureTime: Date, seatsAvailable: Int) async -> Bool {
+        do {
+            let updated = try await TripService.shared.updateTrip(
+                id: id,
+                departureTime: departureTime,
+                seatsAvailable: seatsAvailable
+            )
+            if let index = postedTrips.firstIndex(where: { $0.id == id }) {
+                postedTrips[index] = updated
+            }
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -143,6 +189,66 @@ class BookingViewModel: ObservableObject {
         } catch {
             #if DEBUG
             print("[BookingViewModel] Failed to cancel booking: \(error)")
+            #endif
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
+            return false
+        }
+    }
+
+    // MARK: - Approve Booking (Driver Only)
+
+    func approveBooking(id: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let booking = try await bookingService.approveBooking(id: id)
+            // Update in list
+            if let index = bookings.firstIndex(where: { $0.id == id }) {
+                bookings[index] = booking
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            return true
+        } catch let error as NetworkError {
+            #if DEBUG
+            print("[BookingViewModel] Failed to approve booking: \(error)")
+            #endif
+            errorMessage = error.userMessage
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return false
+        } catch {
+            #if DEBUG
+            print("[BookingViewModel] Failed to approve booking: \(error)")
+            #endif
+            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
+            return false
+        }
+    }
+
+    // MARK: - Reject Booking (Driver Only)
+
+    func rejectBooking(id: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let booking = try await bookingService.rejectBooking(id: id)
+            // Update in list
+            if let index = bookings.firstIndex(where: { $0.id == id }) {
+                bookings[index] = booking
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            return true
+        } catch let error as NetworkError {
+            #if DEBUG
+            print("[BookingViewModel] Failed to reject booking: \(error)")
+            #endif
+            errorMessage = error.userMessage
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return false
+        } catch {
+            #if DEBUG
+            print("[BookingViewModel] Failed to reject booking: \(error)")
             #endif
             errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
             return false

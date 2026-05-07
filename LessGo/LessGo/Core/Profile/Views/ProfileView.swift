@@ -1516,18 +1516,70 @@ private struct VehicleSpecsCard: View {
                     }
                 }
             } else {
-                // MPG unavailable — show manual entry
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MPG NOT FOUND — ENTER MANUALLY").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary)
-                    HStack {
-                        Image(systemName: "fuelpump.fill").foregroundColor(.brand).frame(width: 20)
-                        let binding = Binding<Double>(
-                            get: { vm.mpgOverride ?? vm.mpg },
-                            set: { vm.mpgOverride = $0 }
-                        )
-                        TextField("e.g. 30", value: binding, format: .number).keyboardType(.decimalPad)
+                // MPG unavailable — show specific error message with retry option
+                VStack(alignment: .leading, spacing: 12) {
+                    // Error message with icon
+                    HStack(spacing: 8) {
+                        Image(systemName: errorIcon(for: specs.errorType))
+                            .foregroundColor(.brandGold)
+                            .font(.system(size: 16))
+                        Text(errorTitle(for: specs.errorType))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.textTertiary)
                     }
-                    .cardStyle()
+
+                    // Detailed error message
+                    if let errorMessage = specs.errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 13))
+                            .foregroundColor(.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Suggestion text
+                    if let suggestion = specs.suggestion {
+                        Text(suggestion)
+                            .font(.system(size: 12))
+                            .foregroundColor(.brand)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Retry button for transient errors
+                    if specs.isTransient == true {
+                        Button(action: {
+                            Task {
+                                await vm.retrySpecsLookup()
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 14))
+                                Text("Try Again")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundColor(.brand)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.brand.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                    }
+
+                    // Manual MPG entry
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Or enter MPG manually:")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.textSecondary)
+                        HStack {
+                            Image(systemName: "fuelpump.fill").foregroundColor(.brand).frame(width: 20)
+                            let binding = Binding<Double>(
+                                get: { vm.mpgOverride ?? vm.mpg },
+                                set: { vm.mpgOverride = $0 }
+                            )
+                            TextField("e.g. 30", value: binding, format: .number).keyboardType(.decimalPad)
+                        }
+                        .cardStyle()
+                    }
                 }
             }
 
@@ -1619,6 +1671,41 @@ private struct VehicleSpecsCard: View {
             )
     }
 
+    // Helper functions for error display
+    private func errorIcon(for errorType: String?) -> String {
+        switch errorType {
+        case "timeout":
+            return "clock.fill"
+        case "not_found":
+            return "exclamationmark.triangle.fill"
+        case "rate_limited":
+            return "hourglass"
+        case "network_error":
+            return "wifi.exclamationmark"
+        case "parsing_error":
+            return "doc.text.magnifyingglass"
+        default:
+            return "exclamationmark.circle.fill"
+        }
+    }
+
+    private func errorTitle(for errorType: String?) -> String {
+        switch errorType {
+        case "timeout":
+            return "LOOKUP TIMED OUT"
+        case "not_found":
+            return "MPG DATA NOT AVAILABLE"
+        case "rate_limited":
+            return "TOO MANY REQUESTS"
+        case "network_error":
+            return "CONNECTION ISSUE"
+        case "parsing_error":
+            return "DATA ERROR"
+        default:
+            return "MPG LOOKUP FAILED"
+        }
+    }
+
     private func mpgCell(label: String, value: Int) -> some View {
         VStack(spacing: 2) {
             Text(String(value)).font(.system(size: 17, weight: .bold)).foregroundColor(.textPrimary)
@@ -1696,7 +1783,7 @@ struct TripHistoryView: View {
                 else if vm.bookings.isEmpty {
                     EmptyStateView(icon: "clock.arrow.circlepath", title: "No history", message: "Your completed trips will appear here")
                 } else {
-                    List(vm.bookings) { booking in
+                    List(vm.bookings.filter { $0.trip?.departureTime ?? Date() < Date().addingTimeInterval(-86400) }) { booking in
                         if let trip = booking.trip {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("\(trip.origin) → \(trip.destination)")
@@ -1728,6 +1815,12 @@ extension View {
                         .padding(.top, 8)
                         .padding(.bottom, 8)
                         .transition(.move(edge: .top).combined(with: .opacity))
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                                // Message will auto-dismiss after 2.5 seconds
+                                // This is handled by the view model clearing the message
+                            }
+                        }
                 }
             }
         }

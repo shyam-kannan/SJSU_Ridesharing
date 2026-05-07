@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { getSecretValue } from '../utils/secrets';
+import { JWTPayload } from '../types';
+import { errorResponse } from '../utils/response';
 
 /**
  * Extended Express Request interface with user data from JWT
@@ -17,6 +19,9 @@ export interface AuthRequest extends Request {
 /**
  * Middleware to authenticate JWT token
  * Verifies the token and attaches user data to the request object
+ * @param req Express request object with AuthRequest extension
+ * @param res Express response object
+ * @param next Express next function
  */
 export const authenticateToken = (
   req: AuthRequest,
@@ -27,10 +32,7 @@ export const authenticateToken = (
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
   if (!token) {
-    res.status(401).json({
-      status: 'error',
-      message: 'Access token required',
-    });
+    errorResponse(res, 'Access token required', 401);
     return;
   }
 
@@ -40,14 +42,11 @@ export const authenticateToken = (
       throw new Error('JWT_SECRET not configured');
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as any;
+    const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
 
     // Check if token is access token (not refresh token)
     if (decoded.type !== 'access') {
-      res.status(403).json({
-        status: 'error',
-        message: 'Invalid token type. Access token required',
-      });
+      errorResponse(res, 'Invalid token type. Access token required', 403);
       return;
     }
 
@@ -62,25 +61,16 @@ export const authenticateToken = (
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
-      res.status(401).json({
-        status: 'error',
-        message: 'Token expired',
-      });
+      errorResponse(res, 'Token expired', 401);
       return;
     }
 
     if (error instanceof jwt.JsonWebTokenError) {
-      res.status(403).json({
-        status: 'error',
-        message: 'Invalid token',
-      });
+      errorResponse(res, 'Invalid token', 403);
       return;
     }
 
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error during authentication',
-    });
+    errorResponse(res, 'Internal server error during authentication', 500);
   }
 };
 
@@ -91,6 +81,10 @@ export const authenticateToken = (
  * DEV BYPASS: In non-production environments, accounts whose email starts with
  * "sim-" or "devtools-" skip this check so simulation/devtools flows work
  * without real SJSU credentials.
+ *
+ * @param req Express request object with AuthRequest extension
+ * @param res Express response object
+ * @param next Express next function
  */
 export const requireVerifiedStudent = (
   req: AuthRequest,
@@ -98,10 +92,7 @@ export const requireVerifiedStudent = (
   next: NextFunction
 ): void => {
   if (!req.user) {
-    res.status(401).json({
-      status: 'error',
-      message: 'Authentication required',
-    });
+    errorResponse(res, 'Authentication required', 401);
     return;
   }
 
@@ -117,11 +108,12 @@ export const requireVerifiedStudent = (
   }
 
   if (req.user.sjsuIdStatus !== 'verified') {
-    res.status(403).json({
-      status: 'error',
-      message: 'SJSU ID verification required to access this resource',
-      sjsuIdStatus: req.user.sjsuIdStatus,
-    });
+    errorResponse(
+      res,
+      'SJSU ID verification required to access this resource',
+      403,
+      { sjsuIdStatus: req.user.sjsuIdStatus || 'unverified' }
+    );
     return;
   }
 
@@ -131,6 +123,9 @@ export const requireVerifiedStudent = (
 /**
  * Middleware to verify user is a driver
  * Must be used after authenticateToken
+ * @param req Express request object with AuthRequest extension
+ * @param res Express response object
+ * @param next Express next function
  */
 export const requireDriver = (
   req: AuthRequest,
@@ -138,18 +133,12 @@ export const requireDriver = (
   next: NextFunction
 ): void => {
   if (!req.user) {
-    res.status(401).json({
-      status: 'error',
-      message: 'Authentication required',
-    });
+    errorResponse(res, 'Authentication required', 401);
     return;
   }
 
   if (req.user.role !== 'Driver') {
-    res.status(403).json({
-      status: 'error',
-      message: 'Driver role required to access this resource',
-    });
+    errorResponse(res, 'Driver role required to access this resource', 403);
     return;
   }
 

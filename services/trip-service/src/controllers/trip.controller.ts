@@ -42,6 +42,34 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
 
     const tripData: CreateTripRequest = req.body;
 
+    // Validate SJSU requirement
+    const sjsuCoordinates = { lat: 37.3352, lng: -121.8811 };
+    const sjsuRadiusMeters = 800; // ~0.5 miles
+
+    // Check if origin or destination is within SJSU radius
+    const isOriginSJSU = await tripService.isLocationNearSJSU(
+      tripData.origin,
+      sjsuCoordinates.lat,
+      sjsuCoordinates.lng,
+      sjsuRadiusMeters
+    );
+
+    const isDestinationSJSU = await tripService.isLocationNearSJSU(
+      tripData.destination,
+      sjsuCoordinates.lat,
+      sjsuCoordinates.lng,
+      sjsuRadiusMeters
+    );
+
+    if (!isOriginSJSU && !isDestinationSJSU) {
+      errorResponse(
+        res,
+        'All LessGo trips must connect to SJSU. Please ensure either your origin or destination is near San Jose State University.',
+        400
+      );
+      return;
+    }
+
     const trip = await tripService.createTrip(req.user.userId, tripData);
 
     successResponse(res, trip, 'Trip created successfully', 201);
@@ -108,10 +136,14 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
     const {
       origin_lat,
       origin_lng,
+      destination_lat,
+      destination_lng,
       radius_meters,
       min_seats,
       departure_after,
       departure_before,
+      limit,
+      offset,
     } = req.query;
 
     // Validate required parameters
@@ -146,7 +178,22 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
       filters.departureBefore = new Date(departure_before as string);
     }
 
-    const trips = await tripService.searchTripsNearby(lat, lng, radius, filters);
+    // Pagination parameters
+    const limitValue = limit ? Math.min(parseInt(limit as string), 50) : 10;
+    const offsetValue = offset ? parseInt(offset as string) : 0;
+
+    const destLat = destination_lat ? parseFloat(destination_lat as string) : NaN;
+    const destLng = destination_lng ? parseFloat(destination_lng as string) : NaN;
+    const hasDestCoords = !isNaN(destLat) && !isNaN(destLng);
+
+    const departureTime = filters.departureAfter ?? new Date();
+
+    const trips = hasDestCoords
+      ? await tripService.searchTripsWithRerouting(lat, lng, destLat, destLng, departureTime, filters, limitValue, offsetValue)
+      : await tripService.searchTripsNearby(lat, lng, radius, filters, limitValue, offsetValue);
+
+    // Calculate if there are more results
+    const hasMore = trips.length === limitValue;
 
     successResponse(
       res,
@@ -154,10 +201,18 @@ export const searchTrips = async (req: AuthRequest, res: Response): Promise<void
         trips,
         search_params: {
           origin: { lat, lng },
+          destination: destination_lat && destination_lng
+            ? { lat: parseFloat(destination_lat as string), lng: parseFloat(destination_lng as string) }
+            : undefined,
           radius_meters: radius,
           filters,
+          pagination: {
+            limit: limitValue,
+            offset: offsetValue,
+          },
         },
         total: trips.length,
+        has_more: hasMore,
       },
       'Trips found successfully'
     );
@@ -268,6 +323,39 @@ export const cancelTrip = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
     throw new AppError('Failed to cancel trip', 500);
+  }
+};
+
+/**
+ * Soft delete a trip (driver only, only when cancelled)
+ * DELETE /trips/:id/delete
+ */
+export const deleteTrip = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    await tripService.deleteTrip(id, req.user.userId);
+
+    successResponse(res, null, 'Trip deleted successfully');
+  } catch (error) {
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      if (error.message === 'Trip not found') {
+        errorResponse(res, 'Trip not found', 404);
+        return;
+      }
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to delete trip', 500);
   }
 };
 

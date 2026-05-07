@@ -6,8 +6,7 @@ struct DriverHomeView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @StateObject private var profileVM = ProfileViewModel()
 
-    // ── Availability & Incoming Requests ───────────────────────────────────────
-    @State private var isAvailableForRides = false
+    // ── Incoming Requests ──────────────────────────────────────────────────────
     @State private var incomingRequest: IncomingMatchPayload? = nil
     @State private var showIncomingRequest = false
     @State private var isOnlinePulsing = false
@@ -15,6 +14,11 @@ struct DriverHomeView: View {
     // ── Accepted trip navigation ───────────────────────────────────────────────
     @State private var acceptedActiveTrip: Trip? = nil
     @State private var showAcceptedTripNav = false
+
+    // ── Posted rides navigation ────────────────────────────────────────────────
+    @State private var showCreateTrip = false
+    @State private var selectedTripForDetail: Trip? = nil
+    @State private var selectedDriverTab: Int = 0
 
     // ── Notifications ──────────────────────────────────────────────────────────
     @State private var showAccountMenu = false
@@ -25,6 +29,10 @@ struct DriverHomeView: View {
     // ── Today stats ────────────────────────────────────────────────────────────
     @State private var todayTripCount = 0
     @AppStorage("hasCompletedFirstTrip") private var hasCompletedFirstTrip = false
+
+    // ── Delete cancelled trip ──────────────────────────────────────────────────
+    @State private var tripPendingDelete: Trip? = nil
+    @State private var showDeleteTripConfirm = false
 
     // ── Timers ─────────────────────────────────────────────────────────────────
     private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
@@ -57,7 +65,11 @@ struct DriverHomeView: View {
                         .padding(.horizontal, AppConstants.pagePadding)
                         .padding(.top, 14)
 
-                    availabilityToggleCard
+                    // Post a Ride button
+                    postRideButton
+                        .padding(.horizontal, AppConstants.pagePadding)
+
+                    postedRidesSection
                         .padding(.horizontal, AppConstants.pagePadding)
 
                     if let user = authVM.currentUser {
@@ -144,7 +156,7 @@ struct DriverHomeView: View {
                 Task { await refreshNotificationBadge() }
             }
             .onReceive(matchPollingTimer) { _ in
-                guard isAvailableForRides, !showIncomingRequest,
+                guard !showIncomingRequest,
                       let driverId = authVM.currentUser?.id else { return }
                 Task {
                     if let payload = await MatchingService.shared.checkForIncomingRequest(driverId: driverId) {
@@ -202,6 +214,16 @@ struct DriverHomeView: View {
                 if let trip = currentActiveTrip {
                     activeRideBanner(trip: trip)
                 }
+            }
+            // ── Navigation Modifiers ─────────────────────────────────────────────
+            .fullScreenCover(isPresented: $showCreateTrip, onDismiss: {
+                Task { await refreshDashboardData() }
+            }) {
+                CreateTripView()
+            }
+            .sheet(item: $selectedTripForDetail) { trip in
+                DriverTripDetailsView(trip: trip)
+                    .environmentObject(authVM)
             }
         }
     }
@@ -269,13 +291,6 @@ struct DriverHomeView: View {
                 .foregroundColor(.textPrimary)
 
             VStack(spacing: 0) {
-                howItWorksRow(
-                    icon: "toggle.power",
-                    title: "Toggle \"Available\" above",
-                    subtitle: "Turn on availability to start receiving ride requests"
-                )
-                Divider()
-                    .padding(.leading, 74)
                 howItWorksRow(
                     icon: "bell.badge",
                     title: "Wait for a ride request",
@@ -409,7 +424,7 @@ struct DriverHomeView: View {
                 Text("Driver Dashboard")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
-                if isAvailableForRides {
+                if isOnlinePulsing {
                     HStack(spacing: 6) {
                         ZStack {
                             Circle()
@@ -486,43 +501,6 @@ struct DriverHomeView: View {
         )
     }
 
-    // MARK: - Availability Toggle Card
-
-    private var availabilityToggleCard: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(isAvailableForRides ? Color.brandGreen.opacity(0.15) : Color.textSecondary.opacity(0.1))
-                    .frame(width: 44, height: 44)
-                Image(systemName: isAvailableForRides ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                    .font(.system(size: 18))
-                    .foregroundColor(isAvailableForRides ? .brandGreen : .textSecondary)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isAvailableForRides ? "Available for rides" : "Not available")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-                Text(isAvailableForRides ? "You'll receive on-demand ride requests" : "Toggle to receive ride requests")
-                    .font(.system(size: 12))
-                    .foregroundColor(.textSecondary)
-            }
-            Spacer()
-            Toggle("", isOn: $isAvailableForRides)
-                .labelsHidden()
-                .tint(.brandGreen)
-                .onChange(of: isAvailableForRides) { available in
-                    guard let userId = authVM.currentUser?.id else { return }
-                    Task {
-                        try? await UserService.shared.updateAvailability(userId: userId, available: available)
-                    }
-                }
-        }
-        .padding(16)
-        .background(Color.cardBackground)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 4)
-    }
-
     // MARK: - Stats Row
 
     private func statsRow(user: User) -> some View {
@@ -542,6 +520,299 @@ struct DriverHomeView: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 4)
         .luxuryCard(cornerRadius: 22)
+    }
+
+    // MARK: - Your Posted Rides Section
+
+    private var scheduledTrips: [Trip] {
+        profileVM.driverTrips.filter { $0.status == .pending }
+    }
+
+    private var cancelledTrips: [Trip] {
+        profileVM.driverTrips.filter { $0.status == .cancelled }
+    }
+
+    private var completedTrips: [Trip] {
+        profileVM.driverTrips.filter { $0.status == .completed }
+    }
+
+    private var tripsWithPassengers: [Trip] {
+        scheduledTrips.filter { trip in
+            guard let maxRiders = trip.maxRiders else { return false }
+            return trip.seatsAvailable < maxRiders
+        }
+    }
+
+    private var postedRidesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Posted Rides")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.textPrimary)
+
+            Picker("", selection: $selectedDriverTab) {
+                Text("Passengers").tag(0)
+                Text("Posted Trips").tag(1)
+            }
+            .pickerStyle(.segmented)
+
+            if selectedDriverTab == 0 {
+                passengersTabContent
+            } else {
+                postedTripsTabContent
+            }
+        }
+        .confirmationDialog("Remove this trip?", isPresented: $showDeleteTripConfirm, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                guard let trip = tripPendingDelete else { return }
+                Task {
+                    try? await TripService.shared.deleteTrip(tripId: trip.id)
+                    tripPendingDelete = nil
+                    await refreshDashboardData()
+                }
+            }
+            Button("Cancel", role: .cancel) { tripPendingDelete = nil }
+        } message: {
+            Text("This will permanently remove the trip from your history.")
+        }
+    }
+
+    private var passengersTabContent: some View {
+        Group {
+            if tripsWithPassengers.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.slash")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color.brand.opacity(0.5))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No confirmed passengers yet")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text("Passengers appear here once you approve their requests")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.cardBackground)
+                )
+            } else {
+                ForEach(tripsWithPassengers) { trip in
+                    Button(action: { selectedTripForDetail = trip }) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(trip.origin) → \(trip.destination)")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if let maxRiders = trip.maxRiders {
+                                let confirmedCount = maxRiders - trip.seatsAvailable
+                                HStack(spacing: 4) {
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 11))
+                                    Text("\(confirmedCount)")
+                                        .font(.system(size: 12, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.brandGreen)
+                                .clipShape(Capsule())
+                            }
+                            if let count = trip.pendingBookingCount, count > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock.fill")
+                                    Text("\(count) pending")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Color.red)
+                                .clipShape(Capsule())
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.cardBackground)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var postedTripsTabContent: some View {
+        Group {
+            if scheduledTrips.isEmpty && cancelledTrips.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "car.rear.road.lane.dashed")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color.brand.opacity(0.5))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No posted rides yet")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text("Tap 'Post a Ride' to get started")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.cardBackground)
+                )
+            } else {
+                ForEach(scheduledTrips) { trip in
+                    Button(action: { selectedTripForDetail = trip }) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(trip.origin) → \(trip.destination)")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                + Text(" · \(trip.seatsAvailable) seat\(trip.seatsAvailable == 1 ? "" : "s") left")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.cardBackground)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if !cancelledTrips.isEmpty {
+                    Text("Cancelled Trips")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    ForEach(cancelledTrips) { trip in
+                        archivedTripRow(trip: trip, label: "Cancelled", labelColor: .red)
+                    }
+                }
+
+                if !completedTrips.isEmpty {
+                    Text("Completed Trips")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    ForEach(completedTrips) { trip in
+                        archivedTripRow(trip: trip, label: "Completed", labelColor: .brandGreen)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func archivedTripRow(trip: Trip, label: String, labelColor: Color) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(trip.origin) → \(trip.destination)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(labelColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(labelColor.opacity(0.10))
+                .clipShape(Capsule())
+            Button(action: {
+                tripPendingDelete = trip
+                showDeleteTripConfirm = true
+            }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.red)
+                    .padding(8)
+                    .background(Color.red.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.cardBackground)
+        )
+    }
+
+    // MARK: - Post Ride Button
+
+    private var postRideButton: some View {
+        Button(action: { showCreateTrip = true }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Post a Ride")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Create a scheduled trip for riders to book")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.75))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.brand, Color.brand.opacity(0.85)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: Color.brand.opacity(0.35), radius: 12, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -772,12 +1043,6 @@ private struct DriverNotificationsSheet: View {
         default:                   return .brand
         }
     }
-}
-
-private struct DriverNotificationChatDestination: Identifiable {
-    let tripId: String
-    let otherPartyName: String
-    var id: String { tripId }
 }
 
 // MARK: - Driver Stat Card

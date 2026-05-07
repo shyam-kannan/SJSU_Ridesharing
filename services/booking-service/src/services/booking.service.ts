@@ -1,6 +1,9 @@
 import { Pool } from 'pg';
 import axios from 'axios';
+import Stripe from 'stripe';
 import { config } from '../config';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2024-04-10' as any });
 import {
   Booking,
   BookingWithDetails,
@@ -9,6 +12,7 @@ import {
   Rating,
   CreateBookingRequest,
   CreateRatingRequest,
+  AppError,
 } from '@lessgo/shared';
 
 const pool = new Pool({
@@ -25,14 +29,14 @@ export const createBooking = async (
   riderId: string,
   bookingData: CreateBookingRequest
 ): Promise<{ booking: Booking; quote: Quote }> => {
-  const { trip_id, seats_booked } = bookingData;
-  // pickup_location is not in CreateBookingRequest type but may be sent by clients
-  // (e.g. dev-tools simulation for detour testing). Store it if present.
+  const { trip_id, seats_booked, scost_breakdown } = bookingData;
+  // pickup_location and fare are not in CreateBookingRequest type but may be sent by clients.
   const pickupLocation = (bookingData as any).pickup_location ?? null;
+  const clientFare: number | null = (bookingData as any).fare ?? null;
 
   // Check trip availability
   const tripQuery = `
-    SELECT trip_id, driver_id, origin, destination, seats_available, status
+    SELECT trip_id, driver_id, origin, destination, seats_available, status, departure_time
     FROM trips
     WHERE trip_id = $1
   `;
@@ -57,41 +61,95 @@ export const createBooking = async (
     throw new Error('Drivers cannot book their own trips');
   }
 
-  // Create booking (store pickup_location if provided for detour-aware settlement)
-  const bookingQuery = `
-    INSERT INTO bookings (trip_id, rider_id, seats_booked, status, pickup_location)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING *
-  `;
-  const bookingResult = await pool.query(bookingQuery, [
-    trip_id,
-    riderId,
-    seats_booked,
-    BookingStatus.Pending,
-    pickupLocation ? JSON.stringify(pickupLocation) : null,
-  ]);
-  const booking = bookingResult.rows[0];
+  // Idempotency: return existing active booking if one already exists
+  const existingQuery = await pool.query(
+    `SELECT booking_id FROM bookings
+     WHERE trip_id = $1 AND rider_id = $2
+       AND booking_state NOT IN ('cancelled', 'rejected')`,
+    [trip_id, riderId]
+  );
+  if (existingQuery.rows.length > 0) {
+    const existingBooking = await getBookingById(existingQuery.rows[0].booking_id);
+    const existingQuote = await pool.query(
+      `SELECT * FROM quotes WHERE booking_id = $1`,
+      [existingQuery.rows[0].booking_id]
+    );
+    return { booking: existingBooking as any, quote: existingQuote.rows[0] };
+  }
 
-  // Generate quote via Cost Calculation Service (with fallback)
+  // Atomically decrement seats and insert booking in a transaction
+  const client = await pool.connect();
+  let booking: any;
+  try {
+    await client.query('BEGIN');
+
+    // Decrement seats atomically with capacity guard
+    const seatUpdate = await client.query(
+      `UPDATE trips
+       SET seats_available = seats_available - $1, updated_at = current_timestamp
+       WHERE trip_id = $2
+         AND status = 'pending'
+         AND seats_available >= $1`,
+      [seats_booked, trip_id]
+    );
+    if (seatUpdate.rowCount === 0) {
+      throw new Error('Not enough seats available');
+    }
+
+    // Compute hold expiry: MIN(NOW() + 2h, departure_time - 1h)
+    const holdExpiresAt = `LEAST(NOW() + INTERVAL '2 hours', $8::timestamptz - INTERVAL '1 hour')`;
+
+    // Create booking (store pickup_location if provided for detour-aware settlement)
+    const bookingQuery = `
+      INSERT INTO bookings (trip_id, rider_id, seats_booked, status, booking_state, pickup_location, scost_breakdown, hold_expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, ${holdExpiresAt})
+      RETURNING *
+    `;
+    const bookingResult = await client.query(bookingQuery, [
+      trip_id,
+      riderId,
+      seats_booked,
+      BookingStatus.Pending,
+      'pending',  // booking_state for driver approval flow
+      pickupLocation ? JSON.stringify(pickupLocation) : null,
+      scost_breakdown ? JSON.stringify(scost_breakdown) : null,
+      trip.departure_time,
+    ]);
+    booking = bookingResult.rows[0];
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  // Generate quote via Cost Calculation Service (with fallback).
+  // If the client provided a fare (from the search-results quote), prefer it for consistency.
   let maxPrice: number;
 
-  try {
-    const costResponse = await axios.post(`${config.costServiceUrl}/cost/calculate`, {
-      origin: trip.origin,
-      destination: trip.destination,
-      num_riders: seats_booked,
-      trip_id: trip_id,
-    });
+  if (clientFare !== null && clientFare > 0) {
+    maxPrice = clientFare;
+  } else {
+    try {
+      const costResponse = await axios.post(`${config.costServiceUrl}/cost/calculate`, {
+        origin: trip.origin,
+        destination: trip.destination,
+        num_riders: seats_booked,
+        trip_id: trip_id,
+      });
 
-    maxPrice = costResponse.data.data.max_price;
-  } catch (error) {
-    // Fallback: calculate price locally if cost service is unavailable
-    console.warn('Cost service unavailable, using fallback pricing');
-    const basePricePerRider = 5.0;
-    const estimatedDistanceMiles = 10;
-    const pricePerMile = 0.5;
-    const totalTripCost = basePricePerRider + estimatedDistanceMiles * pricePerMile;
-    maxPrice = parseFloat((totalTripCost / seats_booked).toFixed(2));
+      maxPrice = costResponse.data.data.max_price;
+    } catch (error) {
+      // Fallback: calculate price locally if cost service is unavailable
+      console.warn('Cost service unavailable, using fallback pricing');
+      const basePricePerRider = 5.0;
+      const estimatedDistanceMiles = 10;
+      const pricePerMile = 0.5;
+      const totalTripCost = basePricePerRider + estimatedDistanceMiles * pricePerMile;
+      maxPrice = parseFloat((totalTripCost / seats_booked).toFixed(2));
+    }
   }
 
   try {
@@ -134,7 +192,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
       r.user_id as rider_user_id, r.name as rider_name, r.email as rider_email,
       r.role as rider_role, r.sjsu_id_status as rider_sjsu_id_status, r.rating as rider_rating,
       r.created_at as rider_created_at, r.updated_at as rider_updated_at,
-      q.quote_id, q.max_price, q.final_price, q.created_at as quote_created_at,
+      q.quote_id, q.max_price, q.max_price AS fare, q.final_price, q.created_at as quote_created_at,
       p.payment_id, p.stripe_payment_intent_id, p.amount, p.status as payment_status,
       p.created_at as payment_created_at, p.updated_at as payment_updated_at
     FROM bookings b
@@ -143,7 +201,7 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     JOIN users r ON b.rider_id = r.user_id
     LEFT JOIN quotes q ON b.booking_id = q.booking_id
     LEFT JOIN payments p ON b.booking_id = p.booking_id
-    WHERE b.booking_id = $1
+    WHERE b.booking_id = $1 AND b.deleted_at IS NULL
   `;
 
   const result = await pool.query(query, [bookingId]);
@@ -152,14 +210,62 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     return null;
   }
 
-  const row = result.rows[0];
+  let row = result.rows[0];
+
+  // Lazy expiry: if booking is pending and hold has expired, expire it now
+  if (
+    row.booking_state === 'pending' &&
+    row.hold_expires_at &&
+    new Date(row.hold_expires_at) < new Date()
+  ) {
+    const expireClient = await pool.connect();
+    try {
+      await expireClient.query('BEGIN');
+      const expireResult = await expireClient.query(
+        `UPDATE bookings
+         SET booking_state = 'cancelled', updated_at = current_timestamp
+         WHERE booking_id = $1 AND booking_state = 'pending'
+         RETURNING booking_state`,
+        [bookingId]
+      );
+      if (expireResult.rowCount && expireResult.rowCount > 0) {
+        // Restore seats on the trip atomically
+        await expireClient.query(
+          `UPDATE trips
+           SET seats_available = seats_available + $1, updated_at = current_timestamp
+           WHERE trip_id = $2`,
+          [row.seats_booked, row.trip_id]
+        );
+        row = { ...row, booking_state: 'cancelled' };
+
+        // Notify the rider that their request expired (fire-and-forget)
+        axios.post(`${config.notificationServiceUrl}/notifications/send`, {
+          user_id: row.rider_id,
+          type: 'booking_expired',
+          title: 'Request Expired',
+          message: "Driver didn't respond — your request expired. Browse other rides.",
+          data: { booking_id: bookingId },
+        }).catch((notifErr: unknown) => {
+          console.warn(`[LAZY_EXPIRY] Failed to send expiry notification for booking ${bookingId}:`, notifErr);
+        });
+      }
+      await expireClient.query('COMMIT');
+    } catch (expireErr) {
+      await expireClient.query('ROLLBACK');
+      console.error(`[LAZY_EXPIRY] Failed to expire booking ${bookingId}:`, expireErr);
+    } finally {
+      expireClient.release();
+    }
+  }
 
   return {
     booking_id: row.booking_id,
     trip_id: row.trip_id,
     rider_id: row.rider_id,
     status: row.status,
+    booking_state: row.booking_state || 'pending',
     seats_booked: row.seats_booked,
+    fare: row.fare != null ? parseFloat(row.fare) : undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
     trip: {
@@ -228,8 +334,8 @@ export const listUserBookings = async (
   asDriver: boolean = false
 ): Promise<BookingWithDetails[]> => {
   const query = asDriver
-    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 ORDER BY b.created_at DESC`
-    : `SELECT booking_id FROM bookings WHERE rider_id = $1 ORDER BY created_at DESC`;
+    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 AND b.deleted_at IS NULL ORDER BY b.created_at DESC`
+    : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`;
 
   const result = await pool.query(query, [userId]);
 
@@ -301,6 +407,7 @@ export const confirmBooking = async (
     }
 
     // Update booking status only if still pending (prevents double-confirm race)
+    // Note: seat decrement already happened at createBooking time
     const bookingUpdate = await client.query(
       `UPDATE bookings
        SET status = $1, updated_at = current_timestamp
@@ -309,19 +416,6 @@ export const confirmBooking = async (
     );
     if (bookingUpdate.rowCount === 0) {
       throw new Error('Booking is not pending');
-    }
-
-    // Reduce trip seats atomically with capacity guard (prevents overbooking race)
-    const tripUpdate = await client.query(
-      `UPDATE trips
-       SET seats_available = seats_available - $1, updated_at = current_timestamp
-       WHERE trip_id = $2
-         AND status = 'pending'
-         AND seats_available >= $1`,
-      [bookingData.seats_booked, bookingData.trip_id]
-    );
-    if (tripUpdate.rowCount === 0) {
-      throw new Error('Not enough seats available');
     }
 
     await client.query('COMMIT');
@@ -381,6 +475,23 @@ export const cancelBooking = async (
     }
 
     const wasConfirmed = bookingData.status === BookingStatus.Confirmed;
+    const wasPending = bookingData.status === BookingStatus.Pending;
+
+    // If a Stripe PaymentIntent hold exists on the booking, cancel it to release the hold
+    const paymentIntentIdResult = await client.query(
+      'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+      [bookingId]
+    );
+    const paymentIntentId = paymentIntentIdResult.rows[0]?.payment_intent_id;
+    if (paymentIntentId) {
+      try {
+        await stripe.paymentIntents.cancel(paymentIntentId);
+        console.log(`[CANCEL] Released Stripe hold for PaymentIntent ${paymentIntentId}`);
+      } catch (stripeErr: any) {
+        // Log but don't block cancellation if Stripe cancel fails (e.g. already cancelled)
+        console.warn(`[CANCEL] Stripe cancel failed for ${paymentIntentId}:`, stripeErr.message);
+      }
+    }
 
     // If confirmed with a payment, handle based on payment status
     if (wasConfirmed && bookingData.payment) {
@@ -395,12 +506,12 @@ export const cancelBooking = async (
 
     // Update booking status
     await client.query(
-      'UPDATE bookings SET status = $1, updated_at = current_timestamp WHERE booking_id = $2',
+      'UPDATE bookings SET status = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
       [BookingStatus.Cancelled, bookingId]
     );
 
-    // Restore trip seats only if they were deducted previously (confirmed bookings)
-    if (wasConfirmed) {
+    // Restore trip seats if they were previously deducted (pending or confirmed bookings)
+    if (wasConfirmed || wasPending) {
       await client.query(
         'UPDATE trips SET seats_available = seats_available + $1, updated_at = current_timestamp WHERE trip_id = $2',
         [bookingData.seats_booked, bookingData.trip_id]
@@ -528,9 +639,9 @@ export const updatePickupLocation = async (
 /**
  * Get all bookings for a specific trip
  * @param tripId Trip UUID
- * @returns Array of bookings with rider details
+ * @returns Object with bookings array (including fare) and totalFare for approved/confirmed bookings
  */
-export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
+export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: any[]; totalFare: number }> => {
   const query = `
     SELECT
       b.booking_id as id,
@@ -538,19 +649,286 @@ export const getBookingsByTripId = async (tripId: string): Promise<any[]> => {
       b.rider_id,
       b.seats_booked,
       b.status,
+      b.booking_state,
       b.pickup_location,
+      b.scost_breakdown,
+      b.hold_expires_at,
       b.created_at,
       u.name as rider_name,
       u.email as rider_email,
-      u.rating as rider_rating
+      u.rating as rider_rating,
+      u.profile_picture_url as rider_picture,
+      b.payment_intent_id,
+      q.max_price AS fare
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
-    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending')
+    LEFT JOIN quotes q ON q.booking_id = b.booking_id
+    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending') AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `;
 
   const result = await pool.query(query, [tripId]);
-  return result.rows;
+  const bookings = result.rows.map((row) => ({
+    ...row,
+    fare: row.fare !== null && row.fare !== undefined ? parseFloat(row.fare) : undefined,
+  }));
+
+  const totalFare = bookings
+    .filter((b) => b.booking_state === 'approved' || b.status === 'confirmed')
+    .reduce((sum, b) => sum + (b.fare ?? 0), 0);
+
+  return { bookings, totalFare: parseFloat(totalFare.toFixed(2)) };
+};
+
+/**
+ * Approve a booking (driver only)
+ * @param bookingId Booking's UUID
+ * @param driverId Driver's UUID (for authorization)
+ * @returns Updated booking
+ */
+export const approveBooking = async (
+  bookingId: string,
+  driverId: string
+): Promise<BookingWithDetails> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Get booking with trip details
+    const bookingData = await getBookingById(bookingId);
+    if (!bookingData) {
+      throw new Error('Booking not found');
+    }
+
+    // Verify user is the driver of the trip
+    if (bookingData.trip.driver_id !== driverId) {
+      throw new Error('Unauthorized: You must be the driver of this trip');
+    }
+
+    if (bookingData.booking_state === 'approved') {
+      throw new Error('Booking is already approved');
+    }
+
+    if (bookingData.booking_state === 'rejected' || bookingData.booking_state === 'cancelled') {
+      throw new Error('Cannot approve a rejected or cancelled booking');
+    }
+
+    // Update booking state and clear hold_expires_at (seat is now permanently held)
+    await client.query(
+      'UPDATE bookings SET booking_state = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
+      ['approved', bookingId]
+    );
+
+    await client.query('COMMIT');
+
+    const updatedBooking = await getBookingById(bookingId);
+    return updatedBooking!;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Reject a booking (driver only)
+ * @param bookingId Booking's UUID
+ * @param driverId Driver's UUID (for authorization)
+ * @returns Updated booking
+ */
+export const rejectBooking = async (
+  bookingId: string,
+  driverId: string
+): Promise<BookingWithDetails> => {
+  // Get booking with trip details
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new Error('Booking not found');
+  }
+
+  // Verify user is the driver of the trip
+  if (bookingData.trip.driver_id !== driverId) {
+    throw new Error('Unauthorized: You must be the driver of this trip');
+  }
+
+  if (bookingData.booking_state === 'rejected') {
+    throw new Error('Booking is already rejected');
+  }
+
+  if (bookingData.booking_state === 'approved') {
+    throw new Error('Cannot reject an approved booking');
+  }
+
+  // Update booking state and restore seats atomically
+  const rejectClient = await pool.connect();
+  try {
+    await rejectClient.query('BEGIN');
+
+    await rejectClient.query(
+      `UPDATE bookings
+       SET booking_state = $1, updated_at = current_timestamp
+       WHERE booking_id = $2`,
+      ['rejected', bookingId]
+    );
+
+    // Restore seats since they were decremented at createBooking time
+    await rejectClient.query(
+      `UPDATE trips
+       SET seats_available = seats_available + $1, updated_at = current_timestamp
+       WHERE trip_id = $2`,
+      [bookingData.seats_booked, bookingData.trip_id]
+    );
+
+    await rejectClient.query('COMMIT');
+  } catch (error) {
+    await rejectClient.query('ROLLBACK');
+    throw error;
+  } finally {
+    rejectClient.release();
+  }
+
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
+};
+
+/**
+ * Soft delete a booking (set deleted_at = NOW())
+ * Only allowed if booking_state IN ('cancelled', 'rejected') and requester is the rider
+ * @param bookingId Booking's UUID
+ * @param userId Requesting user's UUID
+ */
+export const deleteBooking = async (bookingId: string, userId: string): Promise<void> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new Error('Booking not found');
+  }
+
+  if (bookingData.rider_id !== userId) {
+    throw new AppError('Forbidden: You are not the rider of this booking', 403);
+  }
+
+  if (!['cancelled', 'rejected'].includes(bookingData.booking_state || '')) {
+    throw new AppError('Booking can only be deleted when cancelled or rejected', 400);
+  }
+
+  await pool.query(
+    'UPDATE bookings SET deleted_at = NOW() WHERE booking_id = $1',
+    [bookingId]
+  );
+};
+
+/**
+ * Authorize payment for an approved booking (rider only)
+ * Creates a Stripe PaymentIntent with capture_method: 'manual' (card hold)
+ * @param bookingId Booking's UUID
+ * @param riderId Rider's UUID (for authorization)
+ * @returns { clientSecret, paymentIntentId }
+ */
+export const authorizePayment = async (
+  bookingId: string,
+  riderId: string
+): Promise<{ clientSecret: string; paymentIntentId: string }> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new AppError('Booking not found', 404);
+  }
+
+  if (bookingData.rider_id !== riderId) {
+    throw new AppError('Unauthorized', 403);
+  }
+
+  if (bookingData.booking_state !== 'approved') {
+    throw new AppError('Booking must be approved before payment can be authorized', 400);
+  }
+
+  // Don't create a duplicate PaymentIntent
+  const existingResult = await pool.query(
+    'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+    [bookingId]
+  );
+  if (existingResult.rows[0]?.payment_intent_id) {
+    // Return existing PaymentIntent client secret
+    const existing = await stripe.paymentIntents.retrieve(existingResult.rows[0].payment_intent_id);
+    return {
+      clientSecret: existing.client_secret!,
+      paymentIntentId: existing.id,
+    };
+  }
+
+  // Determine fare amount in cents
+  const fareUsd = bookingData.fare ?? bookingData.quote?.max_price ?? 0;
+  const amountCents = Math.round(fareUsd * 100);
+
+  if (amountCents <= 0) {
+    throw new AppError('Cannot authorize payment: fare amount is zero or unknown', 400);
+  }
+
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amountCents,
+    currency: 'usd',
+    capture_method: 'manual',
+    metadata: {
+      booking_id: bookingId,
+      rider_id: riderId,
+    },
+  });
+
+  // Persist PaymentIntent on the booking row
+  await pool.query(
+    `UPDATE bookings
+     SET payment_intent_id = $1, payment_authorized_at = NOW(), updated_at = current_timestamp
+     WHERE booking_id = $2`,
+    [paymentIntent.id, bookingId]
+  );
+
+  return {
+    clientSecret: paymentIntent.client_secret!,
+    paymentIntentId: paymentIntent.id,
+  };
+};
+
+/**
+ * Capture authorized payment when trip completes (driver or server-side)
+ * @param bookingId Booking's UUID
+ * @param driverId Driver's UUID (for authorization) — pass undefined for server-side calls
+ * @returns Updated booking
+ */
+export const capturePayment = async (
+  bookingId: string,
+  driverId: string
+): Promise<BookingWithDetails> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new AppError('Booking not found', 404);
+  }
+
+  if (bookingData.trip.driver_id !== driverId) {
+    throw new AppError('Unauthorized: Only the driver can capture payment', 403);
+  }
+
+  const intentIdResult = await pool.query(
+    'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+    [bookingId]
+  );
+  const paymentIntentId = intentIdResult.rows[0]?.payment_intent_id;
+
+  if (!paymentIntentId) {
+    throw new AppError('No authorized payment found for this booking', 400);
+  }
+
+  await stripe.paymentIntents.capture(paymentIntentId);
+
+  await pool.query(
+    `UPDATE bookings
+     SET booking_state = 'completed', updated_at = current_timestamp
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
 };
 
 export default {
@@ -562,4 +940,9 @@ export default {
   createRating,
   updatePickupLocation,
   getBookingsByTripId,
+  approveBooking,
+  rejectBooking,
+  deleteBooking,
+  authorizePayment,
+  capturePayment,
 };

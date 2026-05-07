@@ -20,7 +20,7 @@ export const config = {
 
   // JWT
   jwtSecret: requireSecret('JWT_SECRET'),
-  jwtAccessExpiry: getSecretValue('JWT_ACCESS_EXPIRY') ?? '15m',
+  jwtAccessExpiry: getSecretValue('JWT_ACCESS_EXPIRY') ?? '2h',
   jwtRefreshExpiry: getSecretValue('JWT_REFRESH_EXPIRY') ?? '7d',
 
   // Bcrypt

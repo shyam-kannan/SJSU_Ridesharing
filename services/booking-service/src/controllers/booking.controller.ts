@@ -300,9 +300,9 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
     }
 
     // Get all bookings for this trip
-    const bookings = await bookingService.getBookingsByTripId(tripId);
+    const { bookings, totalFare } = await bookingService.getBookingsByTripId(tripId);
 
-    successResponse(res, bookings, 'Trip bookings retrieved successfully');
+    successResponse(res, { bookings, totalFare }, 'Trip bookings retrieved successfully');
   } catch (error) {
     console.error('Get trip bookings error:', error);
     if (error instanceof Error) {
@@ -310,5 +310,190 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
       return;
     }
     throw new AppError('Failed to get trip bookings', 500);
+  }
+};
+
+/**
+ * Approve a booking (driver only)
+ * PATCH /api/bookings/:id/approve
+ */
+export const approveBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    const booking = await bookingService.approveBooking(id, req.user.userId);
+
+    successResponse(res, booking, 'Booking approved successfully');
+
+    // Fire notification to rider
+    if (booking.rider && booking.trip) {
+      const depTime = new Date(booking.trip.departure_time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+      fireInAppNotification({
+        user_id: booking.rider.user_id,
+        type: 'booking_approved',
+        title: 'Ride Confirmed',
+        message: `Your ride from ${booking.trip.origin} to ${booking.trip.destination} is confirmed`,
+        data: {
+          trip_id: booking.trip.trip_id,
+          booking_id: booking.booking_id,
+          driver_name: booking.trip.driver?.name,
+        },
+      });
+
+      fireEmail('/notifications/send/booking-confirmation', {
+        email: booking.rider.email,
+        riderName: booking.rider.name,
+        origin: booking.trip.origin,
+        destination: booking.trip.destination,
+        departureTime: depTime,
+        seats: booking.seats_booked,
+        amount: booking.quote?.max_price ?? 0,
+        bookingId: booking.booking_id,
+      });
+    }
+  } catch (error) {
+    console.error('Approve booking error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to approve booking', 500);
+  }
+};
+
+/**
+ * Soft delete a booking (rider only, only when cancelled or rejected)
+ * DELETE /api/bookings/:id
+ */
+export const deleteBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    await bookingService.deleteBooking(id, req.user.userId);
+
+    successResponse(res, null, 'Booking deleted successfully');
+  } catch (error) {
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      if (error.message === 'Booking not found') {
+        errorResponse(res, error.message, 404);
+        return;
+      }
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to delete booking', 500);
+  }
+};
+
+/**
+ * Authorize payment for an approved booking (rider only)
+ * POST /api/bookings/:id/authorize-payment
+ */
+export const authorizePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+    const result = await bookingService.authorizePayment(id, req.user.userId);
+
+    successResponse(res, result, 'Payment authorized successfully');
+  } catch (error) {
+    console.error('Authorize payment error:', error);
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to authorize payment', 500);
+  }
+};
+
+/**
+ * Capture authorized payment when trip completes (driver only)
+ * POST /api/bookings/:id/capture-payment
+ */
+export const capturePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+    const booking = await bookingService.capturePayment(id, req.user.userId);
+
+    successResponse(res, booking, 'Payment captured successfully');
+  } catch (error) {
+    console.error('Capture payment error:', error);
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to capture payment', 500);
+  }
+};
+
+/**
+ * Reject a booking (driver only)
+ * PATCH /api/bookings/:id/reject
+ */
+export const rejectBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    const booking = await bookingService.rejectBooking(id, req.user.userId);
+
+    successResponse(res, booking, 'Booking rejected successfully');
+
+    // Fire notification to rider
+    if (booking.rider) {
+      fireInAppNotification({
+        user_id: booking.rider.user_id,
+        type: 'booking_rejected',
+        title: 'Request Declined',
+        message: 'Your request was declined. Browse other rides.',
+        data: {
+          trip_id: booking.trip_id,
+          booking_id: booking.booking_id,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Reject booking error:', error);
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to reject booking', 500);
   }
 };

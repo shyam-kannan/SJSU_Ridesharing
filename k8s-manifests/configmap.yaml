@@ -5,6 +5,7 @@ metadata:
   namespace: lessgo
 data:
   NODE_ENV: "production"
+  JWT_ACCESS_EXPIRY: "2h"
   RATE_LIMIT_WINDOW_MS: "900000"
   RATE_LIMIT_MAX_REQUESTS: "100"
   ROUTE_CACHE_TTL: "3600"
@@ -16,6 +17,6 @@ data:
   PAYMENT_SERVICE_URL: "http://payment-service:3005"
   NOTIFICATION_SERVICE_URL: "http://notification-service:3006"
   COST_SERVICE_URL: "http://cost-calculation-service:3009"
-  GROUPING_SERVICE_URL: "http://grouping-service:8000"
+  EMBEDDING_SERVICE_URL: "http://embedding-service:3010"
   ROUTING_SERVICE_URL: "http://routing-service:8000"
   SAFETY_SERVICE_URL: "http://safety-service:8000"

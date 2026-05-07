@@ -131,7 +131,7 @@ enum NetworkError: Error {
         }
 
         // Generic - use backend message if it's short and clear enough
-        if apiError.message.count < 80 && !msg.contains("error") {
+        if apiError.message.count < 160 && !msg.contains("error") {
             return apiError.message
         }
 

@@ -71,8 +71,15 @@ Thumbs.db
 
 # Embedding service data and trained models
 services/embedding-service/data/
-services/embedding-service/models/
+# services/embedding-service/models/
 
 # Grouping service (deprecated - not in use)
 services/grouping-service/
 k8s-manifests/grouping-service.yaml
+.Rhistory
+LessGo/LessGo.xcodeproj/project.pbxproj
+LessGo/LessGo.xcodeproj/xcshareddata/xcschemes/LessGo.xcscheme
+LessGo/LessGo.xcodeproj/project.xcworkspace/xcuserdata/sriram.xcuserdatad/UserInterfaceState.xcuserstate
+LessGo/LessGo.xcodeproj/xcuserdata/sriram.xcuserdatad/xcschemes/xcschememanagement.plist
+*.xcuserstate
+.worktrees/

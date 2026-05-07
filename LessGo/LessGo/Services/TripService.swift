@@ -9,6 +9,21 @@ class TripService {
 
     private init() {}
 
+    // MARK: - Helper Methods
+
+    /// Builds query string from URLQueryItems
+    private func buildQueryString(from items: [URLQueryItem]) -> String {
+        guard !items.isEmpty else { return "" }
+        var components = URLComponents()
+        components.queryItems = items
+        return components.string ?? ""
+    }
+
+    /// Formats a Date as ISO8601 string
+    private func formatDate(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
+    }
+
     // MARK: - Create Trip
 
     func createTrip(
@@ -87,21 +102,66 @@ class TripService {
             queryItems.append(URLQueryItem(name: "status", value: status.rawValue))
         }
         if let departureAfter = departureAfter {
-            let formatter = ISO8601DateFormatter()
-            queryItems.append(URLQueryItem(name: "departure_after", value: formatter.string(from: departureAfter)))
+            queryItems.append(URLQueryItem(name: "departure_after", value: formatDate(departureAfter)))
         }
         if let limit = limit {
             queryItems.append(URLQueryItem(name: "limit", value: "\(limit)"))
         }
 
-        var endpoint = "/trips"
-        if !queryItems.isEmpty {
-            var components = URLComponents()
-            components.queryItems = queryItems
-            endpoint += components.string ?? ""
+        let endpoint = "/trips" + buildQueryString(from: queryItems)
+
+        // Require authentication when requesting driver-specific trips
+        let needsAuth = driverId != nil
+        let response: TripListResponse = try await network.request(
+            endpoint: endpoint,
+            method: .get,
+            requiresAuth: needsAuth
+        )
+
+        return response
+    }
+
+    // MARK: - Search Trips (Posted Rides)
+
+    func searchPostedTrips(
+        direction: String,
+        originLat: Double,
+        originLng: Double,
+        destinationLat: Double? = nil,
+        destinationLng: Double? = nil,
+        departureAfter: Date? = nil,
+        departureBefore: Date? = nil,
+        minSeats: Int? = nil,
+        limit: Int = 10,
+        offset: Int = 0
+    ) async throws -> TripSearchResultsResponse {
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "sjsu_direction", value: direction),
+            URLQueryItem(name: "origin_lat", value: "\(originLat)"),
+            URLQueryItem(name: "origin_lng", value: "\(originLng)"),
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "offset", value: "\(offset)")
+        ]
+
+        if let destinationLat = destinationLat {
+            queryItems.append(URLQueryItem(name: "destination_lat", value: "\(destinationLat)"))
+        }
+        if let destinationLng = destinationLng {
+            queryItems.append(URLQueryItem(name: "destination_lng", value: "\(destinationLng)"))
+        }
+        if let minSeats = minSeats {
+            queryItems.append(URLQueryItem(name: "min_seats", value: "\(minSeats)"))
+        }
+        if let departureAfter = departureAfter {
+            queryItems.append(URLQueryItem(name: "departure_after", value: formatDate(departureAfter)))
+        }
+        if let departureBefore = departureBefore {
+            queryItems.append(URLQueryItem(name: "departure_before", value: formatDate(departureBefore)))
         }
 
-        let response: TripListResponse = try await network.request(
+        let endpoint = "/trips/search" + buildQueryString(from: queryItems)
+
+        let response: TripSearchResultsResponse = try await network.request(
             endpoint: endpoint,
             method: .get,
             requiresAuth: false
@@ -110,7 +170,7 @@ class TripService {
         return response
     }
 
-    // MARK: - Search Trips
+    // MARK: - Search Trips (Legacy On-Demand)
 
     func searchTrips(params: TripSearchParams) async throws -> TripListResponse {
         var queryItems: [URLQueryItem] = [
@@ -124,18 +184,14 @@ class TripService {
         }
 
         if let departureAfter = params.departureAfter {
-            let formatter = ISO8601DateFormatter()
-            queryItems.append(URLQueryItem(name: "departure_after", value: formatter.string(from: departureAfter)))
+            queryItems.append(URLQueryItem(name: "departure_after", value: formatDate(departureAfter)))
         }
 
         if let departureBefore = params.departureBefore {
-            let formatter = ISO8601DateFormatter()
-            queryItems.append(URLQueryItem(name: "departure_before", value: formatter.string(from: departureBefore)))
+            queryItems.append(URLQueryItem(name: "departure_before", value: formatDate(departureBefore)))
         }
 
-        var components = URLComponents()
-        components.queryItems = queryItems
-        let endpoint = "/trips/search" + (components.string ?? "")
+        let endpoint = "/trips/search" + buildQueryString(from: queryItems)
 
         let response: TripListResponse = try await network.request(
             endpoint: endpoint,
@@ -266,6 +322,15 @@ class TripService {
             endpoint: "/trips/\(tripId)/decline-match",
             method: .post,
             body: Body(match_id: matchId)
+        )
+    }
+
+    // MARK: - Delete Trip (permanent removal, distinct from cancel)
+
+    func deleteTrip(tripId: String) async throws {
+        let _: EmptyResponse = try await network.request(
+            endpoint: "/trips/\(tripId)/delete",
+            method: .delete
         )
     }
 
