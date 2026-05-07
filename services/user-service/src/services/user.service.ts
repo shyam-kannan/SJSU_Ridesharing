@@ -1,6 +1,12 @@
 import { Pool } from 'pg';
 import { config } from '../config';
 import { SafeUser, Rating, RatingWithUsers, DriverSetupRequest, UserRole } from '@lessgo/shared';
+import Stripe from 'stripe';
+
+function getStripe(): Stripe {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not set');
+  return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
+}
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -463,4 +469,48 @@ export default {
   createReport,
   getUserReports,
   updateUserRole,
+};
+
+export const createStripeConnectOnboardingUrl = async (
+  userId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<{ url: string; accountId: string }> => {
+  const user = await getUserById(userId);
+  if (!user) throw new Error('User not found');
+
+  // Reuse existing account if already created
+  let accountId: string | null = (user as any).stripe_connect_account_id ?? null;
+  if (!accountId) {
+    const stripe = getStripe();
+    const account = await stripe.accounts.create({
+      type: 'express',
+      email: user.email,
+      metadata: { userId },
+    });
+    accountId = account.id;
+    await pool.query(
+      'UPDATE users SET stripe_connect_account_id = $1 WHERE user_id = $2',
+      [accountId, userId]
+    );
+  }
+
+  const stripe = getStripe();
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
+    type: 'account_onboarding',
+  });
+
+  return { url: accountLink.url, accountId };
+};
+
+export const getStripeConnectDashboardUrl = async (userId: string): Promise<string> => {
+  const user = await getUserById(userId);
+  const accountId = (user as any)?.stripe_connect_account_id as string | null;
+  if (!accountId) throw new Error('No Stripe Connect account found');
+  const stripe = getStripe();
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  return loginLink.url;
 };

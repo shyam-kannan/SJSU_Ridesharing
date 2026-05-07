@@ -537,3 +537,43 @@ export const debugDelete = async (req: AuthRequest, res: Response): Promise<void
 
   successResponse(res, { user_id: userId }, 'Dev: user deleted');
 };
+
+/**
+ * POST /driver/stripe-onboard
+ * Create or retrieve Stripe Connect onboarding URL for driver.
+ */
+export const stripeOnboard = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+    const userId = req.user.userId;
+    const returnUrl = `${process.env.APP_SCHEME ?? 'lessgo'}://stripe-return`;
+    const refreshUrl = `${process.env.APP_SCHEME ?? 'lessgo'}://stripe-refresh`;
+    const result = await userService.createStripeConnectOnboardingUrl(userId, returnUrl, refreshUrl);
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    console.error('Stripe onboard error:', err);
+    throw new AppError('Failed to create Stripe onboarding URL', 500);
+  }
+};
+
+/**
+ * GET /driver/stripe-dashboard
+ * Get Stripe Connect dashboard login link for driver.
+ */
+export const stripeDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+    const userId = req.user.userId;
+    const url = await userService.getStripeConnectDashboardUrl(userId);
+    res.json({ status: 'success', data: { url } });
+  } catch (err) {
+    console.error('Stripe dashboard error:', err);
+    throw new AppError('Failed to get Stripe dashboard URL', 500);
+  }
+};
