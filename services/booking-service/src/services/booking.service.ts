@@ -237,6 +237,17 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
           [row.seats_booked, row.trip_id]
         );
         row = { ...row, booking_state: 'cancelled' };
+
+        // Notify the rider that their request expired (fire-and-forget)
+        axios.post(`${config.notificationServiceUrl}/notifications/send`, {
+          user_id: row.rider_id,
+          type: 'booking_expired',
+          title: 'Request Expired',
+          message: "Driver didn't respond — your request expired. Browse other rides.",
+          data: { booking_id: bookingId },
+        }).catch((notifErr: unknown) => {
+          console.warn(`[LAZY_EXPIRY] Failed to send expiry notification for booking ${bookingId}:`, notifErr);
+        });
       }
       await expireClient.query('COMMIT');
     } catch (expireErr) {
