@@ -21,6 +21,8 @@ struct ProfileView: View {
     @State private var selectedProfileImage: UIImage?
     @State private var showStripeOnboarding = false
     @State private var stripeOnboardingURL: URL? = nil
+    @State private var isLoadingStripeURL = false
+    @State private var stripeError: String? = nil
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("emailNotificationsEnabled") private var emailNotificationsEnabled = true
     @AppStorage("locationShareEnabled") private var locationShareEnabled = true
@@ -96,11 +98,14 @@ struct ProfileView: View {
                     if authVM.isDriver && authVM.currentUser?.stripeConnectAccountId == nil {
                         do {
                             let url = try await UserService.shared.startStripeOnboarding()
+                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s — allows iOS 16 sheet dismiss to finish
                             await MainActor.run {
                                 stripeOnboardingURL = url
                                 showStripeOnboarding = true
                             }
-                        } catch {}
+                        } catch {
+                            await MainActor.run { stripeError = error.localizedDescription }
+                        }
                     }
                 }
             }) {
@@ -112,6 +117,14 @@ struct ProfileView: View {
                 if let url = stripeOnboardingURL {
                     SafariView(url: url)
                 }
+            }
+            .alert("Payout Setup Failed", isPresented: Binding(
+                get: { stripeError != nil },
+                set: { if !$0 { stripeError = nil } }
+            )) {
+                Button("OK") { stripeError = nil }
+            } message: {
+                Text(stripeError ?? "")
             }
             .sheet(isPresented: $showIDVerification) {
                 IDVerificationView().environmentObject(authVM)
@@ -730,8 +743,11 @@ struct ProfileView: View {
                             .foregroundColor(hasStripeAccount ? .brandGreen : .brandOrange)
                     }
                     Spacer()
-                    Button(hasStripeAccount ? "Edit" : "Setup") {
+                    Button(action: {
+                        guard !isLoadingStripeURL else { return }
                         Task {
+                            isLoadingStripeURL = true
+                            defer { isLoadingStripeURL = false }
                             do {
                                 let url = hasStripeAccount
                                     ? try await UserService.shared.getStripeDashboardUrl()
@@ -741,16 +757,24 @@ struct ProfileView: View {
                                     showStripeOnboarding = true
                                 }
                             } catch {
-                                // silent — surface this in a future improvement
+                                await MainActor.run { stripeError = error.localizedDescription }
                             }
                         }
+                    }) {
+                        if isLoadingStripeURL {
+                            ProgressView()
+                                .frame(width: 44, height: 28)
+                        } else {
+                            Text(hasStripeAccount ? "Edit" : "Setup")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(hasStripeAccount ? .brand : .brandOrange)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
+                                .background((hasStripeAccount ? Color.brand : Color.brandOrange).opacity(0.1))
+                                .cornerRadius(10)
+                        }
                     }
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(hasStripeAccount ? .brand : .brandOrange)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background((hasStripeAccount ? Color.brand : Color.brandOrange).opacity(0.1))
-                    .cornerRadius(10)
+                    .disabled(isLoadingStripeURL)
                 }
                 .padding(AppConstants.cardPadding)
             }
