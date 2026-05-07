@@ -549,6 +549,12 @@ export const stripeOnboard = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
     const userId = req.user.userId;
+    // Check that the calling user is a driver
+    const callingUser = await userService.getUserById(userId);
+    if (!callingUser || callingUser.role !== 'Driver') {
+      res.status(403).json({ status: 'error', message: 'Only drivers can set up payouts' });
+      return;
+    }
     const returnUrl = `${process.env.APP_SCHEME ?? 'lessgo'}://stripe-return`;
     const refreshUrl = `${process.env.APP_SCHEME ?? 'lessgo'}://stripe-refresh`;
     const result = await userService.createStripeConnectOnboardingUrl(userId, returnUrl, refreshUrl);
@@ -570,6 +576,12 @@ export const stripeDashboard = async (req: AuthRequest, res: Response): Promise<
       return;
     }
     const userId = req.user.userId;
+    // Check that the calling user is a driver
+    const callingUser = await userService.getUserById(userId);
+    if (!callingUser || callingUser.role !== 'Driver') {
+      res.status(403).json({ status: 'error', message: 'Only drivers can set up payouts' });
+      return;
+    }
     const url = await userService.getStripeConnectDashboardUrl(userId);
     res.json({ status: 'success', data: { url } });
   } catch (err) {

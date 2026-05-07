@@ -62,6 +62,8 @@ npm run bootstrap:db
 npm run bootstrap:db -- --fresh
 ```
 
+> **Note on `--no-check-order`:** The `migrate:up` script uses the `--no-check-order` flag because a migration (`20260419000001_create_messages_table`) was applied to the database but its local file was subsequently deleted. This flag suppresses the resulting out-of-order migration warnings. Future migrations will continue to work normally; the flag simply prevents node-pg-migrate from halting on the detected gap.
+
 > The bootstrap script targets your hosted Supabase database. Redis is still started separately.
 
 ---

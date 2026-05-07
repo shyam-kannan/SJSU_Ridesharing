@@ -83,6 +83,7 @@ export interface SafeUser {
   earnings?: number;
   profile_picture_url?: string | null;
   mpg?: number;
+  stripe_connect_account_id?: string | null;
   created_at: Date;
   updated_at: Date;
 }

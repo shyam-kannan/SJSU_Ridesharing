@@ -3,9 +3,13 @@ import { config } from '../config';
 import { SafeUser, Rating, RatingWithUsers, DriverSetupRequest, UserRole } from '@lessgo/shared';
 import Stripe from 'stripe';
 
+let _stripe: Stripe | null = null;
 function getStripe(): Stripe {
-  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not set');
-  return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
+  if (!_stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not set');
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
+  }
+  return _stripe;
 }
 
 const pool = new Pool({
@@ -480,7 +484,7 @@ export const createStripeConnectOnboardingUrl = async (
   if (!user) throw new Error('User not found');
 
   // Reuse existing account if already created
-  let accountId: string | null = (user as any).stripe_connect_account_id ?? null;
+  let accountId: string | null = user.stripe_connect_account_id ?? null;
   if (!accountId) {
     const stripe = getStripe();
     const account = await stripe.accounts.create({
@@ -508,7 +512,7 @@ export const createStripeConnectOnboardingUrl = async (
 
 export const getStripeConnectDashboardUrl = async (userId: string): Promise<string> => {
   const user = await getUserById(userId);
-  const accountId = (user as any)?.stripe_connect_account_id as string | null;
+  const accountId = user?.stripe_connect_account_id ?? null;
   if (!accountId) throw new Error('No Stripe Connect account found');
   const stripe = getStripe();
   const loginLink = await stripe.accounts.createLoginLink(accountId);
