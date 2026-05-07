@@ -535,7 +535,7 @@ struct BookingListView: View {
                             .padding(.horizontal, AppConstants.pagePadding)
                     }
                     .refreshable { await refreshCurrentTab() }
-                } else if filteredBookings.isEmpty {
+                } else if (showAsDriver && driverTab == .passengers) ? vm.bookingsGroupedByTrip.isEmpty : filteredBookings.isEmpty {
                     ScrollView {
                         EmptyStateView(
                             icon: "calendar.badge.plus",
