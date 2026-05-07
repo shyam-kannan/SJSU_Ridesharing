@@ -240,7 +240,7 @@ export const getUserStats = async (
     const tripStatsQuery = `
       SELECT COUNT(*) as total_trips
       FROM trips
-      WHERE driver_id = $1
+      WHERE driver_id = $1 AND status = 'completed'
     `;
 
     const tripStats = await pool.query(tripStatsQuery, [userId]);
@@ -252,6 +252,7 @@ export const getUserStats = async (
     SELECT COUNT(*) as total_bookings
     FROM bookings
     WHERE rider_id = $1
+      AND status = 'completed'
   `;
 
   const bookingStats = await pool.query(bookingStatsQuery, [userId]);
