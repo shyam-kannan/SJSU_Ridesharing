@@ -9,6 +9,8 @@ struct DriverTripDetailsView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var chatDestination: DriverNotificationChatDestination?
+    @State private var showCancelTripConfirm = false
+    @State private var isCancellingTrip = false
 
     private var totalSeatsBooked: Int {
         passengers.reduce(0) { $0 + $1.seatsBooked }
@@ -312,6 +314,27 @@ struct DriverTripDetailsView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.textPrimary)
                 }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showCancelTripConfirm = true }) {
+                        if isCancellingTrip {
+                            ProgressView().scaleEffect(0.8)
+                        } else {
+                            Text("Cancel Trip")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.brandRed)
+                        }
+                    }
+                    .disabled(isCancellingTrip)
+                }
+            }
+            .confirmationDialog("Cancel this trip?", isPresented: $showCancelTripConfirm, titleVisibility: .visible) {
+                Button("Cancel Trip", role: .destructive) {
+                    Task { await cancelTrip() }
+                }
+                Button("Keep Trip", role: .cancel) {}
+            } message: {
+                Text("This will cancel the trip and notify all passengers.")
             }
         }
         .task {
@@ -419,6 +442,19 @@ struct DriverTripDetailsView: View {
             otherPartyName: passenger.riderName
         )
     }
+
+    private func cancelTrip() async {
+        isCancellingTrip = true
+        do {
+            _ = try await TripService.shared.cancelTrip(id: trip.id)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = "Failed to cancel trip. Please try again."
+        }
+        isCancellingTrip = false
+    }
 }
 
 // MARK: - Stat Item Component
@@ -521,6 +557,9 @@ private struct PendingBookingCard: View {
                     }
                     .padding(.top, 4)
                 }
+
+                // Payment status badge
+                paymentBadge(for: passenger)
             }
 
             Spacer()
@@ -592,6 +631,23 @@ private struct PendingBookingCard: View {
                 )
         )
     }
+}
+
+// MARK: - Payment Badge Helper
+
+private func paymentBadge(for passenger: BookingWithRider) -> some View {
+    let held = passenger.paymentIntentId != nil
+    return HStack(spacing: 4) {
+        Image(systemName: held ? "lock.shield.fill" : "clock.badge.exclamationmark.fill")
+            .font(.system(size: 10))
+        Text(held ? "Payment Held" : "Awaiting Payment")
+            .font(.system(size: 11, weight: .semibold))
+    }
+    .foregroundColor(held ? .brandGreen : .brandGold)
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background((held ? Color.brandGreen : Color.brandGold).opacity(0.12))
+    .cornerRadius(8)
 }
 
 // MARK: - Helper Functions

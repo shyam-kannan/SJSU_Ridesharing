@@ -209,6 +209,7 @@ struct BookingWithRider: Codable, Identifiable {
     let createdAt: Date
     let scostBreakdown: ScostBreakdown?
     let fare: Double?
+    let paymentIntentId: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -226,6 +227,7 @@ struct BookingWithRider: Codable, Identifiable {
         case createdAt = "created_at"
         case scostBreakdown = "scost_breakdown"
         case fare
+        case paymentIntentId = "payment_intent_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -243,6 +245,7 @@ struct BookingWithRider: Codable, Identifiable {
         pickupLocation = try container.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         scostBreakdown = try container.decodeIfPresent(ScostBreakdown.self, forKey: .scostBreakdown)
+        paymentIntentId = try container.decodeIfPresent(String.self, forKey: .paymentIntentId)
         if let fareDouble = try? container.decode(Double.self, forKey: .fare) {
             fare = fareDouble
         } else if let fareString = try? container.decode(String.self, forKey: .fare), let parsed = Double(fareString) {
