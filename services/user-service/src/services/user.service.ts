@@ -252,7 +252,7 @@ export const getUserStats = async (
     SELECT COUNT(*) as total_bookings
     FROM bookings
     WHERE rider_id = $1
-      AND status = 'completed'
+      AND booking_state = 'completed'
   `;
 
   const bookingStats = await pool.query(bookingStatsQuery, [userId]);
