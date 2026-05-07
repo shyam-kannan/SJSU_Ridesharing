@@ -39,6 +39,18 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.onRouteUpdated = onRouteUpdated
         mapView.showsUserLocation = showsUserLocation
 
+        guard mapView.bounds.width > 0, mapView.bounds.height > 0 else {
+            context.coordinator.scheduleLayoutRetry {
+                guard mapView.bounds.width > 0, mapView.bounds.height > 0 else { return }
+                self.syncMapContent(mapView, context: context)
+            }
+            return
+        }
+
+        syncMapContent(mapView, context: context)
+    }
+
+    private func syncMapContent(_ mapView: MKMapView, context: Context) {
         context.coordinator.syncAnnotations(
             origin: origin,
             destination: destination,
@@ -92,6 +104,17 @@ struct RouteMapView: UIViewRepresentable {
         private var lastDirectionsOrigin: CLLocationCoordinate2D?
         private var lastDirectionsDestination: CLLocationCoordinate2D?
         private var annotationsByID: [String: MovingPointAnnotation] = [:]
+        private var pendingLayoutRetry = false
+
+        func scheduleLayoutRetry(_ retry: @escaping () -> Void) {
+            guard !pendingLayoutRetry else { return }
+            pendingLayoutRetry = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.pendingLayoutRetry = false
+                retry()
+            }
+        }
 
         func syncAnnotations(
             origin: CLLocationCoordinate2D?,
