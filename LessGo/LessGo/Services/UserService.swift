@@ -157,6 +157,46 @@ class UserService {
         return user
     }
 
+    // MARK: - Stripe Connect
+
+    func startStripeOnboarding() async throws -> URL {
+        struct OnboardResponse: Decodable {
+            let status: String
+            let data: OnboardData
+            struct OnboardData: Decodable {
+                let url: String
+            }
+        }
+        let response: OnboardResponse = try await network.request(
+            endpoint: "/users/driver/stripe-onboard",
+            method: .post,
+            requiresAuth: true
+        )
+        guard let url = URL(string: response.data.url) else {
+            throw NetworkError.decodingError(NSError(domain: "Invalid Stripe onboarding URL", code: 0))
+        }
+        return url
+    }
+
+    func getStripeDashboardUrl() async throws -> URL {
+        struct DashResponse: Decodable {
+            let status: String
+            let data: DashData
+            struct DashData: Decodable {
+                let url: String
+            }
+        }
+        let response: DashResponse = try await network.request(
+            endpoint: "/users/driver/stripe-dashboard",
+            method: .get,
+            requiresAuth: true
+        )
+        guard let url = URL(string: response.data.url) else {
+            throw NetworkError.decodingError(NSError(domain: "Invalid Stripe dashboard URL", code: 0))
+        }
+        return url
+    }
+
     // MARK: - Driver Availability
 
     func updateAvailability(userId: String, available: Bool) async throws {

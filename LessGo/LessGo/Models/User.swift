@@ -16,6 +16,7 @@ struct User: Codable, Identifiable {
     let profilePicture: String?
     let createdAt: Date?
     let updatedAt: Date?
+    let stripeConnectAccountId: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "user_id"
@@ -29,6 +30,7 @@ struct User: Codable, Identifiable {
         case profilePicture = "profile_picture_url"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case stripeConnectAccountId = "stripe_connect_account_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -44,6 +46,7 @@ struct User: Codable, Identifiable {
         profilePicture = try container.decodeIfPresent(String.self, forKey: .profilePicture)
         createdAt    = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         updatedAt    = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        stripeConnectAccountId = try container.decodeIfPresent(String.self, forKey: .stripeConnectAccountId)
 
         // Backend sends rating as a String ("0.00") or occasionally as a Double.
         if let ratingDouble = try? container.decode(Double.self, forKey: .rating) {

@@ -19,6 +19,8 @@ struct ProfileView: View {
     @State private var showAccountMenu = false
     @State private var showImagePicker = false
     @State private var selectedProfileImage: UIImage?
+    @State private var showStripeOnboarding = false
+    @State private var stripeOnboardingURL: URL? = nil
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("emailNotificationsEnabled") private var emailNotificationsEnabled = true
     @AppStorage("locationShareEnabled") private var locationShareEnabled = true
@@ -88,9 +90,28 @@ struct ProfileView: View {
                 EditProfileView(vm: vm, userId: authVM.currentUser?.id ?? "")
                     .onDisappear { Task { await authVM.refreshCurrentUser() } }
             }
-            .sheet(isPresented: $showDriverSetup) {
+            .sheet(isPresented: $showDriverSetup, onDismiss: {
+                Task {
+                    await authVM.refreshCurrentUser()
+                    if authVM.isDriver && authVM.currentUser?.stripeConnectAccountId == nil {
+                        do {
+                            let url = try await UserService.shared.startStripeOnboarding()
+                            await MainActor.run {
+                                stripeOnboardingURL = url
+                                showStripeOnboarding = true
+                            }
+                        } catch {}
+                    }
+                }
+            }) {
                 DriverSetupView(vm: vm, userId: authVM.currentUser?.id ?? "")
-                    .onDisappear { Task { await authVM.refreshCurrentUser() } }
+            }
+            .sheet(isPresented: $showStripeOnboarding, onDismiss: {
+                Task { await authVM.refreshCurrentUser() }
+            }) {
+                if let url = stripeOnboardingURL {
+                    SafariView(url: url)
+                }
             }
             .sheet(isPresented: $showIDVerification) {
                 IDVerificationView().environmentObject(authVM)
@@ -688,7 +709,66 @@ struct ProfileView: View {
             )
             .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
             .padding(.horizontal, AppConstants.pagePadding)
+
+            // Payout Setup Card
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill((hasStripeAccount ? Color.brandGreen : Color.brandOrange).opacity(0.12))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: hasStripeAccount ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(hasStripeAccount ? .brandGreen : .brandOrange)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Payout Setup")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                        Text(hasStripeAccount ? "Bank account connected" : "Required to receive payments")
+                            .font(.system(size: 13))
+                            .foregroundColor(hasStripeAccount ? .brandGreen : .brandOrange)
+                    }
+                    Spacer()
+                    Button(hasStripeAccount ? "Edit" : "Setup") {
+                        Task {
+                            do {
+                                let url = hasStripeAccount
+                                    ? try await UserService.shared.getStripeDashboardUrl()
+                                    : try await UserService.shared.startStripeOnboarding()
+                                await MainActor.run {
+                                    stripeOnboardingURL = url
+                                    showStripeOnboarding = true
+                                }
+                            } catch {
+                                // silent — surface this in a future improvement
+                            }
+                        }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(hasStripeAccount ? .brand : .brandOrange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background((hasStripeAccount ? Color.brand : Color.brandOrange).opacity(0.1))
+                    .cornerRadius(10)
+                }
+                .padding(AppConstants.cardPadding)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.panelGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder((hasStripeAccount ? Color.brandGreen : Color.brandOrange).opacity(0.2), lineWidth: 1)
+                    )
+            )
+            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+            .padding(.horizontal, AppConstants.pagePadding)
         }
+    }
+
+    private var hasStripeAccount: Bool {
+        authVM.currentUser?.stripeConnectAccountId != nil
     }
 
     // MARK: - Quick Actions
