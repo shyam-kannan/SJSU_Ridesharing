@@ -146,7 +146,13 @@ class TripDetailViewModel: ObservableObject {
         defer { isAuthorizing = false }
 
         do {
+            // Step 1: Create PaymentIntent on backend (authorize / card hold)
             _ = try await bookingService.authorizePayment(bookingId: bookingId)
+
+            // Step 2: Confirm the PaymentIntent server-side so it moves to
+            // requires_capture, ready for driver-triggered capture at trip end.
+            try await bookingService.confirmPayment(bookingId: bookingId)
+
             paymentAuthorized = true
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {

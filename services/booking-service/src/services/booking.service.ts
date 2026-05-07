@@ -943,6 +943,62 @@ export const authorizePayment = async (
 };
 
 /**
+ * Confirm a PaymentIntent server-side (rider calls after authorize-payment)
+ * This attaches a payment method and confirms the intent so it moves to
+ * requires_capture, ready for driver-triggered capture.
+ * @param bookingId Booking's UUID
+ * @param riderId  Rider's UUID (for authorization)
+ * @returns Updated booking
+ */
+export const confirmPayment = async (
+  bookingId: string,
+  riderId: string
+): Promise<BookingWithDetails> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new AppError('Booking not found', 404);
+  }
+
+  if (bookingData.rider_id !== riderId) {
+    throw new AppError('Unauthorized', 403);
+  }
+
+  const intentIdResult = await pool.query(
+    'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+    [bookingId]
+  );
+  const paymentIntentId = intentIdResult.rows[0]?.payment_intent_id;
+
+  if (!paymentIntentId) {
+    throw new AppError('No authorized payment found — call authorize-payment first', 400);
+  }
+
+  // Retrieve current state; skip confirm if already confirmed
+  const existing = await stripe.paymentIntents.retrieve(paymentIntentId);
+  if (existing.status !== 'requires_payment_method' && existing.status !== 'requires_confirmation') {
+    // Already confirmed (requires_capture) or in another terminal state — return booking as-is
+    const updatedBooking = await getBookingById(bookingId);
+    return updatedBooking!;
+  }
+
+  // Confirm with a test payment method (pm_card_visa works in Stripe test mode)
+  await stripe.paymentIntents.confirm(paymentIntentId, {
+    payment_method: 'pm_card_visa',
+  });
+
+  // Mark booking_state as 'confirmed' so the driver can proceed to capture
+  await pool.query(
+    `UPDATE bookings
+     SET booking_state = 'confirmed', updated_at = current_timestamp
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
+};
+
+/**
  * Capture authorized payment when trip completes (driver or server-side)
  * @param bookingId Booking's UUID
  * @param driverId Driver's UUID (for authorization) — pass undefined for server-side calls
@@ -997,5 +1053,6 @@ export default {
   rejectBooking,
   deleteBooking,
   authorizePayment,
+  confirmPayment,
   capturePayment,
 };

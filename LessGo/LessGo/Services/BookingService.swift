@@ -134,17 +134,18 @@ class BookingService {
 
     // MARK: - Authorize Payment (Rider Only)
 
-    func authorizePayment(bookingId: String) async throws -> [String: Any] {
+    struct AuthorizeResult {
+        let clientSecret: String
+        let paymentIntentId: String
+    }
+
+    func authorizePayment(bookingId: String) async throws -> AuthorizeResult {
         struct AuthorizePaymentResponse: Codable {
             let status: String
             let data: AuthorizePaymentData?
             struct AuthorizePaymentData: Codable {
                 let clientSecret: String
                 let paymentIntentId: String
-                enum CodingKeys: String, CodingKey {
-                    case clientSecret = "clientSecret"
-                    case paymentIntentId = "paymentIntentId"
-                }
             }
         }
 
@@ -157,10 +158,20 @@ class BookingService {
             throw NetworkError.serverError(APIError(status: "error", message: "No payment data returned", errors: nil))
         }
 
-        return [
-            "clientSecret": data.clientSecret,
-            "paymentIntentId": data.paymentIntentId,
-        ]
+        return AuthorizeResult(clientSecret: data.clientSecret, paymentIntentId: data.paymentIntentId)
+    }
+
+    // MARK: - Confirm Payment (Rider Only)
+
+    func confirmPayment(bookingId: String) async throws {
+        struct ConfirmPaymentResponse: Codable {
+            let status: String
+        }
+
+        let _: ConfirmPaymentResponse = try await network.request(
+            endpoint: "/bookings/\(bookingId)/confirm-payment",
+            method: .post
+        )
     }
 
     // MARK: - Get Booking for Trip
