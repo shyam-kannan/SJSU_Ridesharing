@@ -111,6 +111,7 @@ export interface Trip {
   status: TripStatus;
   featured?: boolean;      // New field for promoting routes
   max_riders?: number;     // New field for max concurrent bookings
+  pending_booking_count?: number; // Count of pending bookings for driver view
   created_at: Date;
   updated_at: Date;
 }

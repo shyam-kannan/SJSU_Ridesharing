@@ -626,6 +626,17 @@ struct DriverHomeView: View {
                                 .background(Color.brandGreen)
                                 .clipShape(Capsule())
                             }
+                            if let count = trip.pendingBookingCount, count > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock.fill")
+                                    Text("\(count) pending")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Color.red)
+                                .clipShape(Capsule())
+                            }
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(.secondary)
