@@ -310,6 +310,9 @@ struct DriverTripDetailsView: View {
                     Spacer().frame(height: 96)
                 }
             }
+            .refreshable {
+                await loadPassengers()
+            }
             .background(
                 ZStack {
                     Color.appBackground.ignoresSafeArea()
@@ -364,6 +367,9 @@ struct DriverTripDetailsView: View {
         }
         .task {
             await loadPassengers()
+        }
+        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
+            Task { await loadPassengers() }
         }
         .sheet(item: $chatDestination) { destination in
             ChatView(

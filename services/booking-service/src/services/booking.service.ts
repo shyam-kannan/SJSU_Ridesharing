@@ -646,7 +646,8 @@ export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: a
       u.name as rider_name,
       u.email as rider_email,
       u.rating as rider_rating,
-      u.profile_picture_url as rider_profile_picture_url,
+      u.profile_picture_url as rider_picture,
+      b.payment_intent_id,
       q.max_price AS fare
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
