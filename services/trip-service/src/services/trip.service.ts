@@ -378,6 +378,23 @@ export const listTrips = async (filters?: {
       t.departure_time, t.seats_available, t.max_riders, t.recurrence, t.status,
       t.created_at, t.updated_at,
       (SELECT COUNT(*) FROM bookings b WHERE b.trip_id = t.trip_id AND b.booking_state = 'pending') AS pending_booking_count,
+      COALESCE((
+        SELECT SUM(p.amount)
+        FROM payments p
+        JOIN bookings b ON p.booking_id = b.booking_id
+        WHERE b.trip_id = t.trip_id AND p.status = 'captured'
+      ), 0) AS total_payout,
+      COALESCE((
+        SELECT SUM(q.max_price)
+        FROM quotes q
+        JOIN bookings b ON q.booking_id = b.booking_id
+        WHERE b.trip_id = t.trip_id
+          AND b.booking_state = 'approved'
+          AND NOT EXISTS (
+            SELECT 1 FROM payments p2
+            WHERE p2.booking_id = b.booking_id AND p2.status = 'captured'
+          )
+      ), 0) AS total_quoted,
       u.user_id as driver_user_id,
       u.name as driver_name,
       u.email as driver_email,
@@ -438,6 +455,8 @@ export const listTrips = async (filters?: {
     recurrence: row.recurrence,
     status: row.status,
     pending_booking_count: parseInt(row.pending_booking_count, 10),
+    total_payout: parseFloat(row.total_payout || '0'),
+    total_quoted: parseFloat(row.total_quoted || '0'),
     created_at: row.created_at,
     updated_at: row.updated_at,
     driver: {

@@ -882,6 +882,22 @@ private struct PostedTripRow: View {
                     .font(.system(size: 12))
                     .foregroundColor(.textTertiary)
             }
+            let payout = trip.totalPayout ?? 0
+            let quoted = trip.totalQuoted ?? 0
+            if payout > 0 || quoted > 0 {
+                HStack(spacing: 12) {
+                    if payout > 0 {
+                        Label(String(format: "$%.2f payout", payout), systemImage: "dollarsign.circle.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.brandGreen)
+                    }
+                    if quoted > 0 {
+                        Label(String(format: "$%.2f quoted", quoted), systemImage: "clock.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.brandOrange)
+                    }
+                }
+            }
             HStack(spacing: 10) {
                 Spacer()
                 Button(action: onEdit) {

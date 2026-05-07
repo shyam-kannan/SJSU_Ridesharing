@@ -14,6 +14,8 @@ struct Trip: Codable, Identifiable {
     let seatsAvailable: Int
     let maxRiders: Int?
     let pendingBookingCount: Int?
+    let totalPayout: Double?
+    let totalQuoted: Double?
     let recurrence: String?
     let status: TripStatus
     let createdAt: Date
@@ -31,6 +33,8 @@ struct Trip: Codable, Identifiable {
         seatsAvailable: Int,
         maxRiders: Int? = nil,
         pendingBookingCount: Int? = nil,
+        totalPayout: Double? = nil,
+        totalQuoted: Double? = nil,
         recurrence: String?,
         status: TripStatus,
         createdAt: Date,
@@ -47,6 +51,8 @@ struct Trip: Codable, Identifiable {
         self.seatsAvailable = seatsAvailable
         self.maxRiders = maxRiders
         self.pendingBookingCount = pendingBookingCount
+        self.totalPayout = totalPayout
+        self.totalQuoted = totalQuoted
         self.recurrence = recurrence
         self.status = status
         self.createdAt = createdAt
@@ -64,6 +70,8 @@ struct Trip: Codable, Identifiable {
         case seatsAvailable = "seats_available"
         case maxRiders = "max_riders"
         case pendingBookingCount = "pending_booking_count"
+        case totalPayout = "total_payout"
+        case totalQuoted = "total_quoted"
         case recurrence, status
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -82,6 +90,8 @@ struct Trip: Codable, Identifiable {
         seatsAvailable = try container.decode(Int.self, forKey: .seatsAvailable)
         maxRiders = try container.decodeIfPresent(Int.self, forKey: .maxRiders)
         pendingBookingCount = try container.decodeIfPresent(Int.self, forKey: .pendingBookingCount)
+        totalPayout = try container.decodeIfPresent(Double.self, forKey: .totalPayout)
+        totalQuoted = try container.decodeIfPresent(Double.self, forKey: .totalQuoted)
         recurrence = try container.decodeIfPresent(String.self, forKey: .recurrence)
         status = try Self.decodeStatus(from: container)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
