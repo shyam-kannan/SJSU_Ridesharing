@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import Combine
+import StripePaymentSheet
 
 enum BookingErrorKind {
     case noConnection
@@ -21,6 +22,8 @@ class BookingViewModel: ObservableObject {
     @Published var errorKind: BookingErrorKind? = nil
     @Published var showSuccess = false
     @Published var bookingSuccessMessage = ""
+    @Published var shouldPresentPaymentSheet = false
+    private(set) var pendingBookingIdForPayment: String?
 
     private let bookingService = BookingService.shared
 
@@ -161,33 +164,51 @@ class BookingViewModel: ObservableObject {
     // MARK: - Confirm Booking + Create Payment Intent
 
     func confirmAndPay(bookingId: String, amount: Double) async -> Bool {
-        _ = amount // Kept for call-site compatibility; backend computes/creates payment on confirm.
+        _ = amount
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
         do {
-            // Backend confirm flow creates/returns payment intent and updates booking status.
-            let booking = try await bookingService.confirmBooking(id: bookingId)
-            currentBooking = booking
-            currentPayment = booking.payment
-
-            showSuccess = true
-            bookingSuccessMessage = "Your ride is confirmed!"
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            let result = try await bookingService.authorizePayment(bookingId: bookingId)
+            StripePaymentManager.shared.preparePaymentSheet(clientSecret: result.clientSecret)
+            pendingBookingIdForPayment = bookingId
+            shouldPresentPaymentSheet = true
+            isLoading = false
             return true
         } catch let error as NetworkError {
-            #if DEBUG
-            print("[BookingViewModel] Failed to confirm booking: \(error)")
-            #endif
             errorMessage = error.userMessage
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            isLoading = false
             return false
         } catch {
-            #if DEBUG
-            print("[BookingViewModel] Failed to confirm booking: \(error)")
-            #endif
-            errorMessage = (error as? NetworkError)?.userMessage ?? "Something went wrong. Please try again."
+            errorMessage = error.localizedDescription
+            isLoading = false
             return false
+        }
+    }
+
+    @MainActor
+    func handlePaymentResult(_ result: PaymentSheetResult) async {
+        guard let bookingId = pendingBookingIdForPayment else { return }
+        pendingBookingIdForPayment = nil
+        shouldPresentPaymentSheet = false
+
+        switch result {
+        case .completed:
+            isLoading = true
+            do {
+                try await bookingService.confirmPayment(bookingId: bookingId)
+                showSuccess = true
+                bookingSuccessMessage = "Your ride is confirmed!"
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } catch {
+                errorMessage = "Payment confirmed but server update failed: \(error.localizedDescription)"
+            }
+            isLoading = false
+
+        case .canceled:
+            break
+
+        case .failed(let error):
+            errorMessage = "Payment failed: \(error.localizedDescription)"
         }
     }
 
