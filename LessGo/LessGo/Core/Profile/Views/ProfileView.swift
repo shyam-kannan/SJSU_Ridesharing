@@ -2779,9 +2779,9 @@ class DevToolsViewModel: ObservableObject {
                 var detail: String
                 if def.detour {
                     let paid = riderPaid.map { String(format: "$%.2f", $0) } ?? "?"
-                    detail = "rate=\(String(format:"%.4f",actualRate)) ≈\(String(format:"%.4f",expectedRate)) | base=$\(String(format:"%.2f",baseCost)) paid=\(paid) detour_mi=\(String(format:"%.2f",detourMilesActual)) surcharge:\(detourOk ? "✓" : "✗")"
+                    detail = "base=$\(String(format:"%.2f",baseCost)) paid=\(paid) detour_mi=\(String(format:"%.2f",detourMilesActual)) surcharge:\(detourOk ? "✓" : "✗")"
                 } else {
-                    detail = "rate=\(String(format:"%.4f",actualRate)) ≈\(String(format:"%.4f",expectedRate)) | cost=$\(String(format:"%.2f",actualCPR)) exp=$\(String(format:"%.2f",expectedCPR))"
+                    detail = "cost=$\(String(format:"%.2f",actualCPR)) exp=$\(String(format:"%.2f",expectedCPR)) dist=\(String(format:"%.2f",distMi))mi dur=\(String(format:"%.4f",durHrs))h"
                 }
                 csStep(n, passed ? .success : .error, detail)
                 costSimScenarios[idx].status      = passed ? .success : .error
