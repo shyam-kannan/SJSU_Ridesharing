@@ -310,44 +310,66 @@ struct TripDetailView: View {
     // MARK: - Cost Section
 
     private func costSection(trip: TripWithDriver) -> some View {
-        let total = trip.estimatedCost
-        return VStack(spacing: 12) {
+        VStack(spacing: 12) {
             HStack {
-                Text("Estimated Fare")
-                    .font(.system(size: 15, weight: .medium))
+                Text("Fare Breakdown")
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text("Up to \(formatPrice(total))")
+                Text(formatPrice(trip.costBreakdown?.perRiderSplit ?? trip.estimatedCost))
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.brand)
             }
 
             Divider()
 
-            costBreakdownRow(
-                label: "Distance & time",
-                value: formatPrice(trip.costBreakdown?.tripCost ?? total)
-            )
-            if let detourFee = trip.costBreakdown?.detourFee, detourFee > 0.01 {
-                costBreakdownRow(label: "Rerouting fee", value: formatPrice(detourFee))
-            }
+            if let bd = trip.costBreakdown {
+                let timeCost = bd.durationHours * 15.0
+                let distCost = max(bd.tripCost - timeCost, 0)
 
-            Divider()
+                costBreakdownRow(
+                    label: String(format: "%.1f mi × $0.67/mi", distCost / 0.67),
+                    value: formatPrice(distCost)
+                )
+                costBreakdownRow(
+                    label: String(format: "%.0f min × $0.25/min", bd.durationHours * 60),
+                    value: formatPrice(timeCost)
+                )
+                if bd.detourFee > 0.01 {
+                    costBreakdownRow(
+                        label: String(format: "Detour %.1f mi × $0.84/mi", bd.detourFee / (0.67 * 1.25)),
+                        value: formatPrice(bd.detourFee)
+                    )
+                }
 
-            HStack {
-                Text("Up to")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-                Spacer()
-                Text(formatPrice(total))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.brand)
+                Divider()
+
+                HStack {
+                    Text("Your share")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    Spacer()
+                    Text(formatPrice(bd.perRiderSplit))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.brand)
+                }
+            } else {
+                costBreakdownRow(label: "Estimated fare", value: formatPrice(trip.estimatedCost))
+                Divider()
+                HStack {
+                    Text("Your share")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    Spacer()
+                    Text(formatPrice(trip.estimatedCost))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.brand)
+                }
             }
 
             Text("Final charge split among confirmed riders — you'll only pay your share.")
                 .font(.system(size: 12))
                 .foregroundColor(.textSecondary)
-                .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)

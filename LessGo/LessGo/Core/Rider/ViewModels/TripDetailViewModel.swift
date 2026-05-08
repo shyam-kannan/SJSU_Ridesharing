@@ -53,22 +53,32 @@ class TripDetailViewModel: ObservableObject {
 
         do {
             let loadedTrip = try await tripService.getTrip(id: tripId)
-            // Convert Trip to TripWithDriver (simplified for now)
-            trip = TripWithDriver(
-                id: loadedTrip.id,
-                driverId: loadedTrip.driverId,
-                driverName: loadedTrip.driver?.name ?? "Driver",
-                driverRating: loadedTrip.driver?.rating ?? 0.0,
-                driverPhotoUrl: loadedTrip.driver?.profilePicture,
-                vehicleInfo: loadedTrip.driver?.vehicleInfo,
-                origin: loadedTrip.origin,
-                destination: loadedTrip.destination,
-                departureTime: loadedTrip.departureTime,
-                seatsAvailable: loadedTrip.seatsAvailable,
-                estimatedCost: 10.0,
-                featured: false,
-                status: loadedTrip.status.rawValue
-            )
+            // Preserve the original TripWithDriver (which has costBreakdown from search),
+            // only refreshing mutable fields that may have changed since search.
+            if let existing = trip {
+                trip = TripWithDriver(
+                    id: existing.id,
+                    driverId: existing.driverId,
+                    driverName: loadedTrip.driver?.name ?? existing.driverName,
+                    driverRating: loadedTrip.driver?.rating ?? existing.driverRating,
+                    driverPhotoUrl: loadedTrip.driver?.profilePicture ?? existing.driverPhotoUrl,
+                    vehicleInfo: loadedTrip.driver?.vehicleInfo ?? existing.vehicleInfo,
+                    origin: existing.origin,
+                    destination: existing.destination,
+                    departureTime: existing.departureTime,
+                    seatsAvailable: loadedTrip.seatsAvailable,
+                    estimatedCost: existing.estimatedCost,
+                    featured: existing.featured,
+                    status: loadedTrip.status.rawValue,
+                    originLat: existing.originLat,
+                    originLng: existing.originLng,
+                    detourMiles: existing.detourMiles,
+                    adjustedEtaMinutes: existing.adjustedEtaMinutes,
+                    originalEtaMinutes: existing.originalEtaMinutes,
+                    detourTimeMinutes: existing.detourTimeMinutes,
+                    costBreakdown: existing.costBreakdown
+                )
+            }
 
             // Check for existing booking
             await checkExistingBooking()
