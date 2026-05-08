@@ -1,0 +1,129 @@
+<h2>Design Overview — 4 Fixes</h2>
+<p class="subtitle">Here's what we're building and why</p>
+
+<div class="section">
+  <h3>1. Multi-rider → Same Trip (Trips Tab)</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">❌ Now: Passengers Tab (driver view)</div>
+      <div class="mockup-body" style="padding:12px;font-size:12px">
+        <div style="background:#2c2c2e;border-radius:10px;padding:12px;margin-bottom:8px">
+          <div style="font-weight:600;color:#fff">Alex K. → SJSU → Willow Glen</div>
+          <div style="color:#aaa;margin-top:4px">1 seat · $8.50 · Pending</div>
+        </div>
+        <div style="background:#2c2c2e;border-radius:10px;padding:12px;margin-bottom:8px">
+          <div style="font-weight:600;color:#fff">Jamie L. → SJSU → Willow Glen</div>
+          <div style="color:#aaa;margin-top:4px">1 seat · $8.50 · Pending</div>
+        </div>
+        <div style="color:#666;text-align:center;font-size:11px;padding:8px">Same trip shown twice — one row per booking</div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">✅ Fix: Group by trip_id</div>
+      <div class="mockup-body" style="padding:12px;font-size:12px">
+        <div style="background:#2c2c2e;border-radius:10px;padding:12px;margin-bottom:8px">
+          <div style="font-weight:600;color:#fff">SJSU → Willow Glen · Today 8:30 AM</div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <span style="background:#ff9f0a22;color:#ff9f0a;padding:2px 8px;border-radius:20px;font-size:11px">2 pending</span>
+            <span style="background:#30d15822;color:#30d158;padding:2px 8px;border-radius:20px;font-size:11px">2 seats taken</span>
+          </div>
+          <div style="color:#aaa;margin-top:6px;font-size:11px">Alex K. · Jamie L.</div>
+        </div>
+        <div style="color:#666;text-align:center;font-size:11px;padding:8px">One trip card → tap to see both riders in DriverTripDetailsView</div>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:13px;margin-top:8px"><strong>Root cause:</strong> BookingListView's Passengers tab iterates <code>vm.bookings</code> (one per booking). Fix: group by <code>trip_id</code> and render one trip card per trip with aggregate rider names and booking counts.</p>
+</div>
+
+<div class="section">
+  <h3>2. Remove "Your Posted Rides" from Driver Home</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">❌ Now: DriverHomeView</div>
+      <div class="mockup-body" style="padding:12px;font-size:12px">
+        <div style="background:#ff3b3022;border:1px solid #ff3b30;border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="color:#ff3b30;font-size:11px;font-weight:600">REMOVE THIS ENTIRE SECTION</div>
+          <div style="color:#aaa;margin-top:4px">"Your Posted Rides" with Passengers/Posted Trips tabs</div>
+        </div>
+        <div style="background:#2c2c2e;border-radius:8px;padding:10px">
+          <div style="color:#fff;font-size:11px">Map, availability toggle, Post Ride button</div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">✅ Fix: Trips Tab handles it</div>
+      <div class="mockup-body" style="padding:12px;font-size:12px">
+        <div style="background:#2c2c2e;border-radius:8px;padding:10px;margin-bottom:6px">
+          <div style="color:#fff;font-size:11px">DriverHomeView = map + toggle + Post Ride</div>
+        </div>
+        <div style="background:#30d15822;border:1px solid #30d158;border-radius:8px;padding:10px">
+          <div style="color:#30d158;font-size:11px;font-weight:600">Trips Tab (BookingListView)</div>
+          <div style="color:#aaa;margin-top:4px;font-size:11px">Passengers tab: grouped trip cards<br>Posted Trips tab: all posted trips<br>Tap → DriverTripDetailsView ✓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="font-size:13px;margin-top:8px"><strong>Change:</strong> Delete <code>postedRidesSection</code> and related state from DriverHomeView. The Trips tab already has a "Posted Trips" segmented control that does the same thing.</p>
+</div>
+
+<div class="section">
+  <h3>3. Rider Payment Button</h3>
+  <div class="mockup">
+    <div class="mockup-header">Payment Flow Fix</div>
+    <div class="mockup-body" style="padding:14px;font-size:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="background:#30d158;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;font-size:11px;flex-shrink:0">1</div>
+        <div style="color:#fff">Rider taps "Confirm & Pay" → calls <code>POST /bookings/{id}/authorize-payment</code></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="background:#30d158;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;font-size:11px;flex-shrink:0">2</div>
+        <div style="color:#fff">Backend returns <code>clientSecret</code> ← this already works</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="background:#ff3b30;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;flex-shrink:0">3</div>
+        <div style="color:#ff6060">❌ MISSING: iOS never calls Stripe SDK to confirm payment with the clientSecret</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="background:#30d158;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;font-size:11px;flex-shrink:0">3</div>
+        <div style="color:#fff">✅ FIX: Use <code>STPPaymentHandler</code> with the clientSecret to collect card & confirm</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="background:#30d158;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;font-size:11px;flex-shrink:0">4</div>
+        <div style="color:#fff">On success → mark <code>paymentAuthorized = true</code> in the view</div>
+      </div>
+      <div style="margin-top:12px;padding:10px;background:#1c1c1e;border-radius:8px;color:#aaa;font-size:11px">
+        Requires Stripe iOS SDK (StripePaymentSheet) already in Podfile/SPM, plus a publishable key configured at app launch
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. Driver Stripe Connect Onboarding</h3>
+  <div class="mockup">
+    <div class="mockup-header">Onboarding Flow (after driver profile setup)</div>
+    <div class="mockup-body" style="padding:14px;font-size:12px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="background:#2c2c2e;padding:8px 12px;border-radius:8px;color:#fff;font-size:11px;text-align:center">
+          <div>Sign Up</div><div style="color:#aaa;font-size:10px">name/email/pass</div>
+        </div>
+        <div style="color:#aaa;align-self:center">→</div>
+        <div style="background:#2c2c2e;padding:8px 12px;border-radius:8px;color:#fff;font-size:11px;text-align:center">
+          <div>SJSU ID</div><div style="color:#aaa;font-size:10px">Verification</div>
+        </div>
+        <div style="color:#aaa;align-self:center">→</div>
+        <div style="background:#2c2c2e;padding:8px 12px;border-radius:8px;color:#fff;font-size:11px;text-align:center">
+          <div>Driver Profile</div><div style="color:#aaa;font-size:10px">vehicle, plate</div>
+        </div>
+        <div style="color:#aaa;align-self:center">→</div>
+        <div style="background:#30d15833;border:1px solid #30d158;padding:8px 12px;border-radius:8px;color:#30d158;font-size:11px;text-align:center">
+          <div>💳 Set Up Payouts</div><div style="color:#30d15899;font-size:10px">Stripe Connect</div>
+        </div>
+      </div>
+      <div style="color:#aaa;font-size:11px;margin-bottom:8px"><strong style="color:#fff">Backend:</strong> New endpoint <code>POST /users/driver/stripe-onboard</code> → creates Stripe Express account → returns hosted onboarding URL</div>
+      <div style="color:#aaa;font-size:11px;margin-bottom:8px"><strong style="color:#fff">iOS:</strong> Open onboarding URL in <code>SFSafariViewController</code> → on return, mark driver as payout-ready</div>
+      <div style="color:#aaa;font-size:11px"><strong style="color:#fff">DB:</strong> Add <code>stripe_connect_account_id</code> column to users/driver_profiles table</div>
+    </div>
+  </div>
+</div>

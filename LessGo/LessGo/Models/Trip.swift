@@ -3,7 +3,7 @@ import CoreLocation
 
 // MARK: - Trip Models
 
-struct Trip: Decodable, Identifiable {
+struct Trip: Codable, Identifiable {
     let id: String
     let driverId: String
     let origin: String
@@ -97,6 +97,27 @@ struct Trip: Decodable, Identifiable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         driver = try container.decodeIfPresent(User.self, forKey: .driver)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(driverId, forKey: .driverId)
+        try c.encode(origin, forKey: .origin)
+        try c.encode(destination, forKey: .destination)
+        try c.encodeIfPresent(originPoint, forKey: .originPoint)
+        try c.encodeIfPresent(destinationPoint, forKey: .destinationPoint)
+        try c.encode(departureTime, forKey: .departureTime)
+        try c.encode(seatsAvailable, forKey: .seatsAvailable)
+        try c.encodeIfPresent(maxRiders, forKey: .maxRiders)
+        try c.encodeIfPresent(pendingBookingCount, forKey: .pendingBookingCount)
+        try c.encodeIfPresent(totalPayout, forKey: .totalPayout)
+        try c.encodeIfPresent(totalQuoted, forKey: .totalQuoted)
+        try c.encodeIfPresent(recurrence, forKey: .recurrence)
+        try c.encode(status, forKey: .status)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(driver, forKey: .driver)
     }
 
     private static func decodeStatus(from container: KeyedDecodingContainer<CodingKeys>) throws -> TripStatus {
@@ -206,7 +227,7 @@ struct TripSearchParams {
     let departureBefore: Date?
 }
 
-struct TripListResponse: Decodable {
+struct TripListResponse: Codable {
     let trips: [Trip]
     let total: Int
 }
@@ -421,7 +442,7 @@ struct RiderSettlement: Codable {
 
 // MARK: - Trip State Update Response (wraps trip + optional settlement)
 
-struct TripStateUpdateResponse: Decodable {
+struct TripStateUpdateResponse: Codable {
     let trip: Trip
     let settlement: TripSettlement?
 }

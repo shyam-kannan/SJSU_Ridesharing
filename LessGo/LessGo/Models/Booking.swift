@@ -63,6 +63,26 @@ struct Booking: Codable, Identifiable {
             fare = nil
         }
     }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(tripId, forKey: .tripId)
+        try c.encode(riderId, forKey: .riderId)
+        try c.encode(seatsBooked, forKey: .seatsBooked)
+        try c.encode(status, forKey: .status)
+        try c.encode(bookingState, forKey: .bookingState)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(holdExpiresAt, forKey: .holdExpiresAt)
+        try c.encodeIfPresent(trip, forKey: .trip)
+        try c.encodeIfPresent(rider, forKey: .rider)
+        try c.encodeIfPresent(pickupLocation, forKey: .pickupLocation)
+        try c.encodeIfPresent(quote, forKey: .quote)
+        try c.encodeIfPresent(payment, forKey: .payment)
+        try c.encodeIfPresent(fare, forKey: .fare)
+        try c.encodeIfPresent(paymentIntentId, forKey: .paymentIntentId)
+    }
 }
 
 enum BookingStatus: String, Codable {
@@ -142,6 +162,15 @@ struct Quote: Codable {
         if let v = try? c.decode(Double.self, forKey: key) { return v }
         if let s = try? c.decode(String.self, forKey: key) { return Double(s) }
         return nil
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(bookingId, forKey: .bookingId)
+        try c.encode(maxPrice, forKey: .maxPrice)
+        try c.encodeIfPresent(finalPrice, forKey: .finalPrice)
+        try c.encode(createdAt, forKey: .createdAt)
     }
 }
 
@@ -272,6 +301,27 @@ struct BookingWithRider: Codable, Identifiable {
         } else {
             riderRating = 0.0
         }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(tripId, forKey: .tripId)
+        try c.encode(riderId, forKey: .riderId)
+        try c.encode(riderName, forKey: .riderName)
+        try c.encodeIfPresent(riderEmail, forKey: .riderEmail)
+        try c.encodeIfPresent(riderPhone, forKey: .riderPhone)
+        try c.encode(riderRating, forKey: .riderRating)
+        try c.encodeIfPresent(riderPicture, forKey: .riderPicture)
+        try c.encode(seatsBooked, forKey: .seatsBooked)
+        try c.encode(status, forKey: .status)
+        try c.encode(bookingState, forKey: .bookingState)
+        try c.encodeIfPresent(pickupLocation, forKey: .pickupLocation)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(holdExpiresAt, forKey: .holdExpiresAt)
+        try c.encodeIfPresent(scostBreakdown, forKey: .scostBreakdown)
+        try c.encodeIfPresent(fare, forKey: .fare)
+        try c.encodeIfPresent(paymentIntentId, forKey: .paymentIntentId)
     }
 }
 

@@ -160,10 +160,10 @@ class UserService {
     // MARK: - Stripe Connect
 
     func startStripeOnboarding() async throws -> URL {
-        struct OnboardResponse: Decodable {
+        struct OnboardResponse: Codable {
             let status: String
             let data: OnboardData
-            struct OnboardData: Decodable {
+            struct OnboardData: Codable {
                 let url: String
             }
         }
@@ -179,10 +179,10 @@ class UserService {
     }
 
     func getStripeDashboardUrl() async throws -> URL {
-        struct DashResponse: Decodable {
+        struct DashResponse: Codable {
             let status: String
             let data: DashData
-            struct DashData: Decodable {
+            struct DashData: Codable {
                 let url: String
             }
         }

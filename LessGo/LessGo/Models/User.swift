@@ -68,6 +68,24 @@ struct User: Codable, Identifiable {
             mpg = nil
         }
     }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(email, forKey: .email)
+        try c.encode(role, forKey: .role)
+        try c.encode(sjsuIdStatus, forKey: .sjsuIdStatus)
+        try c.encode(rating, forKey: .rating)
+        try c.encodeIfPresent(vehicleInfo, forKey: .vehicleInfo)
+        try c.encodeIfPresent(seatsAvailable, forKey: .seatsAvailable)
+        try c.encodeIfPresent(licensePlate, forKey: .licensePlate)
+        try c.encodeIfPresent(mpg, forKey: .mpg)
+        try c.encodeIfPresent(profilePicture, forKey: .profilePicture)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(stripeConnectAccountId, forKey: .stripeConnectAccountId)
+    }
 }
 
 enum UserRole: String, Codable {
