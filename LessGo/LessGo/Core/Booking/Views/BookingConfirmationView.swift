@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreLocation
 import Combine
+import StripePaymentSheet
 
 struct BookingConfirmationView: View {
     @EnvironmentObject var authVM: AuthViewModel
