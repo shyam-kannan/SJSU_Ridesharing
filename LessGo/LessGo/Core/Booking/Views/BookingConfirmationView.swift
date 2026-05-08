@@ -194,6 +194,9 @@ struct BookingConfirmationView: View {
                 }
             }
         }
+        .onChange(of: bookingVM.showSuccess) { success in
+            if success { withAnimation { showSuccess = true } }
+        }
         .animation(.spring(response: 0.45, dampingFraction: 0.75), value: showSuccess)
         .alert("Verification Required", isPresented: $showVerificationAlert) {
             Button("Verify Now") { showIDVerificationSheet = true }
@@ -236,11 +239,9 @@ struct BookingConfirmationView: View {
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
             if success, let bookingId = bookingVM.currentBooking?.id {
-                let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: totalPrice)
-                if paid {
-                    withAnimation { showSuccess = true }
-                } else {
-                    // Payment failed - allow retry
+                let ready = await bookingVM.confirmAndPay(bookingId: bookingId, amount: totalPrice)
+                if !ready {
+                    // authorizePayment failed - allow retry
                     isBookingComplete = false
                 }
             } else {
