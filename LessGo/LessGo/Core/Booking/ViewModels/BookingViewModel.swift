@@ -83,6 +83,7 @@ class BookingViewModel: ObservableObject {
     func deletePostedTrip(id: String) async {
         try? await TripService.shared.deleteTrip(tripId: id)
         postedTrips.removeAll { $0.id == id }
+        bookings.removeAll { $0.tripId == id }
     }
 
     func updatePostedTrip(id: String, departureTime: Date, seatsAvailable: Int) async -> Bool {

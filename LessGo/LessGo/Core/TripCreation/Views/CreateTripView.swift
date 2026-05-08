@@ -813,7 +813,7 @@ private struct TripCreatedView: View {
 
                     Circle().fill(Color.brandGreen.opacity(0.2)).frame(width: 100, height: 100)
 
-                    Image(systemName: "car.badge.checkmark")
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 56)).foregroundColor(.brandGreen)
                 }
                 .scaleEffect(scale).opacity(opacity)

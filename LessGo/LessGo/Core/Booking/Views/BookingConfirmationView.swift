@@ -997,7 +997,6 @@ private struct DriverTripGroupRow: View {
     var onDeleteCancelled: (() -> Void)? = nil
     @EnvironmentObject var authVM: AuthViewModel
     @State private var showDetail = false
-    @State private var showDeleteConfirm = false
 
     private var pendingCount: Int {
         bookings.filter { $0.bookingState == .pending }.count
@@ -1067,20 +1066,6 @@ private struct DriverTripGroupRow: View {
                         .foregroundColor(.textTertiary)
                 }
 
-                if trip.status == .cancelled {
-                    HStack {
-                        Spacer()
-                        Button(action: { showDeleteConfirm = true }) {
-                            Label("Delete", systemImage: "trash")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.brandRed)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Color.brandRed.opacity(0.08))
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
             }
             .padding(AppConstants.cardPadding)
             .background(Color.cardBackground)
@@ -1092,13 +1077,7 @@ private struct DriverTripGroupRow: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail) {
-            DriverTripDetailsView(trip: trip, onTripDeleted: onDeletePermanent).environmentObject(authVM)
-        }
-        .confirmationDialog("Delete this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete Trip", role: .destructive) { onDeleteCancelled?() }
-            Button("Keep", role: .cancel) {}
-        } message: {
-            Text("This will permanently remove the cancelled trip from your history.")
+            DriverTripDetailsView(trip: trip, onTripDeleted: onDeleteCancelled).environmentObject(authVM)
         }
     }
 }
