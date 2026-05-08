@@ -1490,24 +1490,24 @@ private struct BookingRideDetailView: View {
         ScrollView {
             VStack(spacing: 18) {
                 if let trip = currentBooking.trip {
-                    Group {
-                        if !anchorPoints.isEmpty {
-                            AnchorRouteMapView(
-                                origin: trip.originPoint?.clLocationCoordinate2D,
-                                destination: trip.destinationPoint?.clLocationCoordinate2D,
-                                driver: nil,
-                                anchorPoints: anchorPoints,
-                                showsUserLocation: true
-                            )
-                        } else {
-                            RouteMapView(
-                                origin: trip.originPoint?.clLocationCoordinate2D,
-                                destination: trip.destinationPoint?.clLocationCoordinate2D,
-                                driver: nil,
-                                showsUserLocation: true
-                            )
-                        }
-                    }
+                    // Build anchor list: API anchors + rider's own pickup if available
+                    let riderPickupCoord: CLLocationCoordinate2D? = {
+                        guard let pl = currentBooking.pickupLocation else { return nil }
+                        return CLLocationCoordinate2D(latitude: pl.lat, longitude: pl.lng)
+                    }()
+                    let mapAnchors: [AnchorPoint] = {
+                        if !anchorPoints.isEmpty { return anchorPoints }
+                        guard let coord = riderPickupCoord else { return [] }
+                        return [AnchorPoint(lat: coord.latitude, lng: coord.longitude, type: .pickup, riderId: nil, label: nil, etaOffsetSeconds: nil)]
+                    }()
+
+                    AnchorRouteMapView(
+                        origin: trip.originPoint?.clLocationCoordinate2D,
+                        destination: trip.destinationPoint?.clLocationCoordinate2D,
+                        driver: nil,
+                        anchorPoints: mapAnchors,
+                        showsUserLocation: !showAsDriver
+                    )
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(alignment: .topLeading) {
@@ -1767,30 +1767,78 @@ private struct BookingRideDetailView: View {
     }
 
     private func routeCard(trip: Trip) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // Determine rider pickup/dropoff from booking.pickupLocation and trip direction.
+        // Direction: if destination contains "San Jose State" → toSJSU, else fromSJSU.
+        let toSJSU = trip.destination.localizedCaseInsensitiveContains("San Jose State")
+        let riderPickup: String
+        let riderDropoff: String
+        if toSJSU {
+            riderPickup  = currentBooking.pickupLocation?.address ?? trip.origin
+            riderDropoff = trip.destination
+        } else {
+            riderPickup  = trip.origin
+            riderDropoff = currentBooking.pickupLocation?.address ?? trip.destination
+        }
+
+        return VStack(alignment: .leading, spacing: 14) {
             sectionTitle("Trip")
 
-            HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 4) {
-                    Circle().fill(Color.brand).frame(width: 10, height: 10)
-                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 2, height: 22)
+            VStack(alignment: .leading, spacing: 10) {
+                // Driver start
+                HStack(spacing: 10) {
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.brand)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Driver starts at")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                        Text(trip.origin)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                    }
+                }
+                // Connector
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 27)
+                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 1.5, height: 14)
+                }
+                // Rider pickup
+                HStack(spacing: 10) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.brandGold)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Your pickup")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                        Text(riderPickup)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                    }
+                }
+                // Connector
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 27)
+                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 1.5, height: 14)
+                }
+                // Rider dropoff
+                HStack(spacing: 10) {
                     Image(systemName: "flag.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundColor(.brandGreen)
-                        .frame(width: 10, height: 10)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Your drop-off")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                        Text(riderDropoff)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                    }
                 }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(trip.origin)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(trip.destination)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
             }
             .padding(14)
             .background(
