@@ -5,6 +5,7 @@ import Combine
 struct BookingConfirmationView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var bookingVM: BookingViewModel
+    @EnvironmentObject private var stripeManager: StripePaymentManager
     @Environment(\.dismiss) private var dismiss
 
     let trip: Trip
@@ -203,6 +204,19 @@ struct BookingConfirmationView: View {
             IDVerificationView().environmentObject(authVM)
                 .onDisappear { Task { await authVM.refreshCurrentUser() } }
         }
+        .background(
+            Group {
+                if let sheet = stripeManager.paymentSheet {
+                    Color.clear.paymentSheet(
+                        isPresented: $bookingVM.shouldPresentPaymentSheet,
+                        paymentSheet: sheet,
+                        onCompletion: { result in
+                            Task { await bookingVM.handlePaymentResult(result) }
+                        }
+                    )
+                }
+            }
+        )
     }
 
     private func confirmBooking() {
