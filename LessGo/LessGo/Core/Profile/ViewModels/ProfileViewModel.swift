@@ -21,7 +21,6 @@ class ProfileViewModel: ObservableObject {
     @Published var vehicleInfo = ""
     @Published var seatsAvailable = 3
     @Published var licensePlate = ""
-    @Published var mpg: Double = 25.0
 
     // ── Vehicle picker state ──────────────────────────────────────────────────
     @Published var pickerYear: Int = Calendar.current.component(.year, from: Date())
@@ -40,9 +39,8 @@ class ProfileViewModel: ObservableObject {
     @Published var isLoadingSpecs = false
     @Published var vehicleLookupFailed = false
 
-    // Driver can override auto-populated seats/mpg
+    // Driver can override auto-populated seats
     @Published var seatsOverride: Int? = nil
-    @Published var mpgOverride: Double? = nil
 
     // Vehicle photo
     @Published var vehiclePhotoURL: String? = nil
@@ -52,13 +50,6 @@ class ProfileViewModel: ObservableObject {
 
     var selectedTrim: VehicleTrim? {
         vehicleSpecs?.trims.first { $0.id == pickerTrimId }
-    }
-
-    var effectiveMpg: Double {
-        if let override = mpgOverride { return override }
-        if let trim = selectedTrim, let combined = trim.combinedMpg { return Double(combined) }
-        if let specs = vehicleSpecs, let def = specs.defaultMpg { return Double(def) }
-        return mpg
     }
 
     var effectiveSeats: Int {
@@ -163,15 +154,13 @@ class ProfileViewModel: ObservableObject {
         // Use picker values if a vehicle was selected; fall back to raw fields
         let finalVehicleInfo = vehiclePickerIsActive ? formattedVehicleInfo : vehicleInfo
         let finalSeats = vehiclePickerIsActive ? effectiveSeats : seatsAvailable
-        let finalMpg = vehiclePickerIsActive ? effectiveMpg : mpg
 
         do {
             let updated = try await userService.setupDriverProfile(
                 id: userId,
                 vehicleInfo: finalVehicleInfo,
                 seatsAvailable: finalSeats,
-                licensePlate: licensePlate,
-                mpg: finalMpg
+                licensePlate: licensePlate
             )
             user = updated
             successMessage = "Driver profile saved!"
@@ -262,7 +251,6 @@ class ProfileViewModel: ObservableObject {
         vehicleSpecs = nil
         vehiclePhotoURL = nil
         seatsOverride = nil
-        mpgOverride = nil
     }
 
     func clearPickerModel() {
@@ -271,7 +259,6 @@ class ProfileViewModel: ObservableObject {
         vehicleSpecs = nil
         vehiclePhotoURL = nil
         seatsOverride = nil
-        mpgOverride = nil
     }
 
     /// Try to pre-populate the picker from an existing vehicle_info string.

@@ -52,8 +52,8 @@ class UserService {
 
     // MARK: - Setup Driver Profile
 
-    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String, mpg: Double = 25.0) async throws -> User {
-        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate, mpg: mpg)
+    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String) async throws -> User {
+        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate)
 
         let user: User = try await network.request(
             endpoint: "/users/\(id)/driver-setup",
@@ -219,13 +219,11 @@ struct DriverSetupRequest: Codable {
     let vehicleInfo: String
     let seatsAvailable: Int
     let licensePlate: String
-    let mpg: Double?
 
     enum CodingKeys: String, CodingKey {
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
         case licensePlate = "license_plate"
-        case mpg
     }
 }
 

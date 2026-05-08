@@ -56,7 +56,6 @@ function rateLimiter(req: Request, res: Response, next: express.NextFunction): v
 // ── External API base URLs ────────────────────────────────────────────────────
 
 const NHTSA_BASE = 'https://vpic.nhtsa.dot.gov/api/vehicles';
-const DOE_BASE   = 'https://www.fueleconomy.gov/ws/rest';
 const WIKIPEDIA_API = 'https://en.wikipedia.org/w/api.php';
 
 // ── Title-case helper (converts "HONDA" → "Honda", "GENERAL MOTORS" → "General Motors") ──
@@ -196,92 +195,11 @@ router.get('/models', rateLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// ── Error categorization ─────────────────────────────────────────────────────
-
-enum VehicleLookupErrorType {
-  timeout = 'timeout',
-  not_found = 'not_found',
-  rate_limited = 'rate_limited',
-  network_error = 'network_error',
-  parsing_error = 'parsing_error',
-  unknown = 'unknown'
-}
-
-interface VehicleLookupError {
-  type: VehicleLookupErrorType;
-  message: string;
-  suggestion: string;
-  isTransient: boolean; // Can be retried
-}
-
-function categorizeError(error: unknown, context: { make: string; model: string; year: number }): VehicleLookupError {
-  const err = error as Error & { code?: string; response?: { status?: number } };
-
-  // Timeout errors
-  if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-    return {
-      type: VehicleLookupErrorType.timeout,
-      message: 'Fuel economy lookup timed out',
-      suggestion: 'Try again or enter manually',
-      isTransient: true
-    };
-  }
-
-  // Rate limiting
-  if (err.response?.status === 429) {
-    return {
-      type: VehicleLookupErrorType.rate_limited,
-      message: 'Too many lookups',
-      suggestion: 'Wait a moment and try again',
-      isTransient: true
-    };
-  }
-
-  // Network errors
-  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
-    return {
-      type: VehicleLookupErrorType.network_error,
-      message: 'Connection issue',
-      suggestion: 'Check internet and retry',
-      isTransient: true
-    };
-  }
-
-  // Not found (empty results from DOE API)
-  if (err.message?.includes('no results') || err.message?.includes('not found')) {
-    return {
-      type: VehicleLookupErrorType.not_found,
-      message: `MPG data not available for ${context.year} ${context.make} ${context.model}`,
-      suggestion: 'Enter manually',
-      isTransient: false
-    };
-  }
-
-  // Parsing errors
-  if (err.message?.includes('parse') || err.message?.includes('JSON')) {
-    return {
-      type: VehicleLookupErrorType.parsing_error,
-      message: 'Invalid response from fuel economy database',
-      suggestion: 'Try again or enter manually',
-      isTransient: true
-    };
-  }
-
-  // Unknown errors
-  return {
-    type: VehicleLookupErrorType.unknown,
-    message: 'Unable to fetch fuel economy data',
-    suggestion: 'Try again or enter manually',
-    isTransient: true
-  };
-}
-
 // ── GET /vehicles/specs?make=Toyota&model=Camry&year=2022 ─────────────────────
-// Fetches MPG data from DOE Fuel Economy API and infers seating from lookup table.
-// Returns trim list with city/highway/combined MPG plus default values.
-// Response cached 24h per make+model+year.
+// Returns seating capacity inferred from the model name.
+// (MPG lookup removed — pricing now uses IRS mileage rate, not fuel cost.)
 
-router.get('/specs', rateLimiter, async (req: Request, res: Response) => {
+router.get('/specs', rateLimiter, (req: Request, res: Response) => {
   const { make, model, year } = req.query as { make?: string; model?: string; year?: string };
 
   if (!make || !model || !year) {
@@ -293,148 +211,16 @@ router.get('/specs', rateLimiter, async (req: Request, res: Response) => {
     return res.status(400).json({ status: 'error', message: 'Invalid year' });
   }
 
-  const cacheKey = `specs_${make.toLowerCase()}_${model.toLowerCase()}_${yearNum}`;
-  const cached = getCache<unknown>(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
-
-  // ── Step 1: Fetch trim options from DOE ──────────────────────────────────────
-  let trims: Array<{
-    id: string;
-    trim_name: string;
-    city_mpg: number | null;
-    highway_mpg: number | null;
-    combined_mpg: number | null;
-  }> = [];
-  let mpg_source: 'doe' | 'unavailable' = 'unavailable';
-  let lookupError: VehicleLookupError | null = null;
-
-  try {
-    // DOE API expects title-case make ("Honda", not "HONDA" or "honda")
-    const doeMake = toTitleCase(make);
-    const doeModel = toTitleCase(model);
-    const optionsUrl = `${DOE_BASE}/vehicle/menu/options?year=${yearNum}&make=${encodeURIComponent(doeMake)}&model=${encodeURIComponent(doeModel)}`;
-
-    console.log('[vehicles/specs] Fetching DOE options:', { make: doeMake, model: doeModel, year: yearNum, url: optionsUrl });
-
-    const optionsResp = await axios.get(optionsUrl, {
-      timeout: 10_000,
-      headers: { Accept: 'application/json' },
-    });
-
-    // DOE returns { menuItem: [...] } or { menuItem: {} } (single item not in array)
-    const raw = optionsResp.data;
-    let items: Array<{ value: string; text: string }> = [];
-    if (raw?.menuItem) {
-      items = Array.isArray(raw.menuItem) ? raw.menuItem : [raw.menuItem];
-    }
-
-    if (items.length > 0) {
-      console.log('[vehicles/specs] Found', items.length, 'trim options for', doeMake, doeModel, yearNum);
-
-      // ── Step 2: Fetch MPG details for each trim (parallel, max 6) ─────────────
-      const limited = items.slice(0, 6);
-      const detailResults = await Promise.allSettled(
-        limited.map(async (item) => {
-          const detailResp = await axios.get(`${DOE_BASE}/vehicle/${item.value}`, {
-            timeout: 10_000,
-            headers: { Accept: 'application/json' },
-          });
-          const d = detailResp.data;
-          const combinedMpg = Number(d.comb08) || null;
-          return {
-            id: String(item.value),
-            trim_name: item.text,
-            city_mpg:     Number(d.city08)    || null,
-            highway_mpg:  Number(d.highway08) || null,
-            combined_mpg: combinedMpg,
-          };
-        })
-      );
-
-      trims = detailResults
-        .filter((r): r is PromiseFulfilledResult<typeof trims[0]> => r.status === 'fulfilled')
-        .map((r) => r.value)
-        .filter((t) => t.combined_mpg !== null);
-
-      if (trims.length > 0) {
-        mpg_source = 'doe';
-        console.log('[vehicles/specs] Successfully fetched MPG data:', {
-          make: doeMake,
-          model: doeModel,
-          year: yearNum,
-          trimsFound: trims.length,
-          avgMpg: Math.round(trims.reduce((sum, t) => sum + (t.combined_mpg ?? 0), 0) / trims.length)
-        });
-      } else {
-        console.warn('[vehicles/specs] No valid MPG data found in trim results');
-        lookupError = {
-          type: VehicleLookupErrorType.not_found,
-          message: `MPG data not available for ${yearNum} ${doeMake} ${doeModel}`,
-          suggestion: 'Enter manually',
-          isTransient: false
-        };
-      }
-    } else {
-      console.warn('[vehicles/specs] No trim options found for', doeMake, doeModel, yearNum);
-      lookupError = {
-        type: VehicleLookupErrorType.not_found,
-        message: `MPG data not available for ${yearNum} ${doeMake} ${doeModel}`,
-        suggestion: 'Enter manually',
-        isTransient: false
-      };
-    }
-  } catch (err) {
-    const errorContext = { make: toTitleCase(make), model: toTitleCase(model), year: yearNum };
-    lookupError = categorizeError(err, errorContext);
-    console.error('[vehicles/specs] DOE API error:', {
-      type: lookupError.type,
-      message: lookupError.message,
-      suggestion: lookupError.suggestion,
-      isTransient: lookupError.isTransient,
-      error: (err as Error).message,
-      make: errorContext.make,
-      model: errorContext.model,
-      year: errorContext.year
-    });
-  }
-
-  // ── Step 3: Compute default_mpg as average across trims ──────────────────────
-  const default_mpg: number | null =
-    trims.length > 0
-      ? Math.round(
-          trims.reduce((sum, t) => sum + (t.combined_mpg ?? 0), 0) / trims.length
-        )
-      : null;
-
-  // ── Step 4: Seating from inference table ────────────────────────────────────
   const seating_capacity = inferSeats(model);
 
-  const result = {
+  return res.json({
     make,
     model,
     year: yearNum,
     seating_capacity,
-    trims,
-    default_mpg,
     default_seats: seating_capacity,
-    mpg_source,
-    // Include error information if lookup failed
-    ...(lookupError && {
-      error_type: lookupError.type,
-      error_message: lookupError.message,
-      suggestion: lookupError.suggestion,
-      is_transient: lookupError.isTransient
-    })
-  };
-
-  // Cache only if we have good data (don't cache empty/error states)
-  if (trims.length > 0 || mpg_source === 'unavailable') {
-    setCache(cacheKey, result);
-  }
-
-  return res.json(result);
+    trims: [],
+  });
 });
 
 // ── GET /vehicles/photo?make=Honda&model=Civic+Si&year=2024 ──────────────────

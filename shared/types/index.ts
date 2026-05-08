@@ -62,7 +62,6 @@ export interface User {
   rating: number;
   vehicle_info?: string;
   seats_available?: number;
-  mpg?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -82,7 +81,6 @@ export interface SafeUser {
   license_plate?: string;
   earnings?: number;
   profile_picture_url?: string | null;
-  mpg?: number;
   stripe_connect_account_id?: string | null;
   created_at: Date;
   updated_at: Date;
@@ -300,7 +298,6 @@ export interface DriverSetupRequest {
   vehicle_info: string;
   seats_available: number;
   license_plate: string;
-  mpg?: number;
 }
 
 // ========== API RESPONSE TYPES ==========

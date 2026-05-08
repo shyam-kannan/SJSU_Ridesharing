@@ -13,16 +13,10 @@ struct VehicleModelsResponse: Decodable {
 struct VehicleTrim: Decodable, Identifiable {
     let id: String
     let trimName: String
-    let cityMpg: Int?
-    let highwayMpg: Int?
-    let combinedMpg: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
-        case trimName     = "trim_name"
-        case cityMpg      = "city_mpg"
-        case highwayMpg   = "highway_mpg"
-        case combinedMpg  = "combined_mpg"
+        case trimName = "trim_name"
     }
 }
 
@@ -40,28 +34,11 @@ struct VehicleSpecs: Decodable {
     let year: Int
     let seatingCapacity: Int
     let trims: [VehicleTrim]
-    let defaultMpg: Int?
     let defaultSeats: Int
-    let mpgSource: MpgSource
-    let errorType: String?
-    let errorMessage: String?
-    let suggestion: String?
-    let isTransient: Bool?
-
-    enum MpgSource: String, Decodable {
-        case doe
-        case unavailable
-    }
 
     enum CodingKeys: String, CodingKey {
         case make, model, year, trims
         case seatingCapacity = "seating_capacity"
-        case defaultMpg      = "default_mpg"
         case defaultSeats    = "default_seats"
-        case mpgSource       = "mpg_source"
-        case errorType       = "error_type"
-        case errorMessage    = "error_message"
-        case suggestion
-        case isTransient     = "is_transient"
     }
 }

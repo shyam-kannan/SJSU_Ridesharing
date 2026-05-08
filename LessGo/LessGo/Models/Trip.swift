@@ -393,8 +393,6 @@ struct TripSettlement: Codable {
     let totalCost: Double
     let driverEarnings: Double
     let riderCount: Int
-    let driverMpg: Double
-    let mileageRate: Double
     let breakdown: SettlementBreakdown
     let riders: [RiderSettlement]
 
@@ -403,8 +401,6 @@ struct TripSettlement: Codable {
         case totalCost = "total_cost"
         case driverEarnings = "driver_earnings"
         case riderCount = "rider_count"
-        case driverMpg = "driver_mpg"
-        case mileageRate = "mileage_rate"
         case breakdown, riders
     }
 }
