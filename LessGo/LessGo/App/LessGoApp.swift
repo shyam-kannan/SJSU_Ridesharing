@@ -8,6 +8,7 @@ struct LessGoApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var authVM = AuthViewModel()
     @StateObject private var locationManager = LocationManager.shared
+    @StateObject private var stripeManager = StripePaymentManager.shared
     @AppStorage("appAppearance") private var appAppearanceRawValue = AppAppearance.system.rawValue
 
     init() {
@@ -20,7 +21,9 @@ struct LessGoApp: App {
             ContentView()
                 .environmentObject(authVM)
                 .environmentObject(locationManager)
+                .environmentObject(stripeManager)
                 .preferredColorScheme(appAppearance.colorScheme)
+                .task { await stripeManager.configure() }
                 .onAppear {
                     appDelegate.authVM = authVM
                     applyGlobalAppearance()
