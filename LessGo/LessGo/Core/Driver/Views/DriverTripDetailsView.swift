@@ -442,6 +442,12 @@ struct DriverTripDetailsView: View {
 
     private func loadPassengers() async {
         guard !isLoadingPassengers else { return }
+
+        if trip.status == .cancelled {
+            passengers = []
+            return
+        }
+
         isLoadingPassengers = true
         isLoading = true
         errorMessage = nil

@@ -808,8 +808,10 @@ export const deleteBooking = async (bookingId: string, userId: string): Promise<
     throw new Error('Booking not found');
   }
 
-  if (bookingData.rider_id !== userId) {
-    throw new AppError('Forbidden: You are not the rider of this booking', 403);
+  // Fix: also allow the trip's driver
+  const tripData = await getTripById(bookingData.trip_id);
+  if (bookingData.rider_id !== userId && tripData?.driver_id !== userId) {
+      throw new AppError('Forbidden', 403);
   }
 
   if (!['cancelled', 'rejected'].includes(bookingData.booking_state || '')) {
