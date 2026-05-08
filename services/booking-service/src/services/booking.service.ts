@@ -19,6 +19,14 @@ const pool = new Pool({
   connectionString: config.databaseUrl,
 });
 
+const getTripById = async (tripId: string) => {
+  const result = await pool.query(
+    'SELECT trip_id, driver_id, origin, destination, seats_available, status, departure_time FROM trips WHERE trip_id = $1',
+    [tripId]
+  );
+  return result.rows[0] ?? null;
+};
+
 /**
  * Create a new booking
  * @param riderId Rider's UUID
