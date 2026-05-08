@@ -853,6 +853,7 @@ private struct PostedTripRow: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var showDeleteConfirm = false
+    @State private var showDetail = false
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -943,11 +944,15 @@ private struct PostedTripRow: View {
             RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous)
                 .strokeBorder(DesignSystem.Colors.border.opacity(0.5), lineWidth: 1)
         )
+        .onTapGesture { showDetail = true }
         .confirmationDialog("Cancel this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Cancel Trip", role: .destructive, action: onDelete)
             Button("Keep Trip", role: .cancel) {}
         } message: {
             Text("This will cancel the trip and notify any passengers.")
+        }
+        .sheet(isPresented: $showDetail) {
+            DriverTripDetailsView(trip: trip)
         }
     }
 
