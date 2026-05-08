@@ -137,6 +137,8 @@ export interface Booking {
   fare?: number;
   payment_intent_id?: string | null;
   hold_expires_at?: Date | null;
+  payment_deadline_at?: Date | string | null;
+  cancellation_reason?: string | null;
   pickup_location?: { lat: number; lng: number } | null;
   created_at: Date;
   updated_at: Date;
