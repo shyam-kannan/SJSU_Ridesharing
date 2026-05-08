@@ -462,7 +462,7 @@ struct TripDetailView: View {
             }
 
         case .approved:
-            // Approved - show confirmed status
+            // Approved - show confirmed status with cancel option
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
                     Image(systemName: "checkmark.circle.fill")
@@ -498,6 +498,39 @@ struct TripDetailView: View {
                     .background(Color.brand)
                     .cornerRadius(12)
                 }
+
+                Text("Cancellation after payment may take 3–5 days to refund.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.textTertiary)
+                    .multilineTextAlignment(.center)
+
+                Button(action: {
+                    Task {
+                        await viewModel.cancelBooking()
+                        if viewModel.cancellationSuccess {
+                            showSuccessMessage = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                dismiss()
+                            }
+                        }
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        if viewModel.isCancelling {
+                            ProgressView().tint(.brandRed)
+                        } else {
+                            Image(systemName: "xmark")
+                        }
+                        Text(viewModel.isCancelling ? "Cancelling..." : "Cancel Booking")
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.brandRed)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.brandRed.opacity(0.1))
+                    .cornerRadius(12)
+                }
+                .disabled(viewModel.isCancelling)
             }
 
         case .rejected:

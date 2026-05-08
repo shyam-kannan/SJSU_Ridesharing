@@ -9,7 +9,9 @@ struct DriverTripDetailsView: View {
 
     @State private var passengers: [BookingWithRider] = []
     @State private var isLoading = true
+    @State private var isLoadingPassengers = false
     @State private var errorMessage: String?
+    @State private var cancelTripError: String?
     @State private var chatDestination: DriverNotificationChatDestination?
     @State private var showCancelTripConfirm = false
     @State private var isCancellingTrip = false
@@ -89,286 +91,41 @@ struct DriverTripDetailsView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
+                    // Route map card
                     routeMapWithPassengers
-                    .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                    )
-                    .overlay(alignment: .topLeading) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "map.fill")
-                            Text("Route Preview")
-                        }
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(.ultraThinMaterial)
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
-                        .clipShape(Capsule())
-                        .padding(14)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 18)
+                        .frame(height: 150)
+                        .cornerRadius(12)
+                        .disabled(true)
+                        .padding(.top, 8)
 
-                    headerStatsStrip
+                    // Trip details card
+                    tripDetailsCard
 
-                    // Trip Overview Card
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text("Trip Details")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.textPrimary)
+                    // Stats card
+                    statsCard
 
-                        // Route
-                        HStack(alignment: .top, spacing: 14) {
-                            VStack(spacing: 0) {
-                                Circle()
-                                    .fill(DesignSystem.Colors.sjsuBlue)
-                                    .frame(width: 10, height: 10)
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.25))
-                                    .frame(width: 1.5, height: 40)
-                                Image(systemName: "mappin.circle.fill")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.brandRed)
-                            }
-                            .padding(.top, 3)
-
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(trip.origin)
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundColor(.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text(trip.destination)
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundColor(.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text(trip.departureTime.tripTimeString)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(DesignSystem.Colors.sjsuBlue)
-                                Text(trip.departureTime.tripDateString)
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.textSecondary)
-                            }
-                        }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.sheetBackground)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                                )
-                        )
-
-                        Divider()
-
-                        // Stats
-                        HStack(spacing: 20) {
-                            StatItem(
-                                icon: "person.2.fill",
-                                label: "Passengers",
-                                value: "\(totalSeatsBooked)/\(trip.seatsAvailable)",
-                                color: DesignSystem.Colors.sjsuBlue
-                            )
-
-                            Divider().frame(height: 40)
-
-                            StatItem(
-                                icon: "dollarsign.circle.fill",
-                                label: "Earnings",
-                                value: String(format: "$%.2f", totalEarnings),
-                                color: DesignSystem.Colors.sjsuGold
-                            )
-                        }
-                    }
-                    .padding(18)
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.cardBackground)
-                            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-                    )
-                    .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
-                    .padding(.horizontal, 24)
-
-                    // Passengers Section
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("Passengers")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.textPrimary)
-                            Spacer()
-                            HStack(spacing: 6) {
-                                Text("\(passengers.count)")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(.textPrimary)
-                                if !pendingBookings.isEmpty {
-                                    Circle()
-                                        .fill(Color.brandRed)
-                                        .frame(width: 6, height: 6)
-                                    Text("\(pendingBookings.count) pending")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundColor(.brandRed)
-                                }
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.cardBackground)
-                            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-                            .clipShape(Capsule())
-                        }
-                        .padding(.horizontal, 24)
-
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding(48)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(Color.cardBackground)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                                        )
-                                )
-                                .padding(.horizontal, 24)
-                        } else if let error = errorMessage {
-                            VStack(spacing: 12) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(.brandRed)
-                                Text(error)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.textSecondary)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding(44)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.cardBackground)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                                        )
-                            )
-                            .padding(.horizontal, 24)
-                        } else if passengers.isEmpty {
-                            VStack(spacing: 12) {
-                                Image(systemName: "person.crop.circle.badge.questionmark")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.textTertiary)
-                                Text("No passengers yet")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.textSecondary)
-                                Text("Share your trip to get riders!")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.textTertiary)
-                            }
-                            .padding(44)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.cardBackground)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                                        )
-                            )
-                            .padding(.horizontal, 24)
-                        } else {
-                            VStack(spacing: 12) {
-                                // Pending bookings first
-                                if !pendingBookings.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Pending Requests")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.brandRed)
-                                            .padding(.horizontal, 2)
-                                        ForEach(pendingBookings) { passenger in
-                                            PendingBookingCard(
-                                                passenger: passenger,
-                                                onApprove: { await approveBooking(passenger) },
-                                                onReject: { await rejectBooking(passenger) },
-                                                onChat: { openChat(with: passenger) }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Approved bookings
-                                if !approvedBookings.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Confirmed Passengers")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.brandGreen)
-                                            .padding(.horizontal, 2)
-                                        ForEach(approvedBookings) { passenger in
-                                            PassengerCard(passenger: passenger, onChat: { openChat(with: passenger) })
-                                        }
-                                    }
-                                }
-
-                                // Past bookings (completed, cancelled, rejected)
-                                let archivedBookings = passengers.filter {
-                                    $0.bookingState == .completed || $0.bookingState == .cancelled || $0.bookingState == .rejected
-                                }
-                                if !archivedBookings.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Past Requests")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundColor(.textSecondary)
-                                            .padding(.horizontal, 2)
-                                        ForEach(archivedBookings) { booking in
-                                            archivedTripRow(booking)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 24)
-                        }
-                    }
-
-                    Spacer().frame(height: 96)
+                    // Passengers section
+                    passengersSection
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
             .refreshable {
                 await loadPassengers()
             }
-            .background(
-                ZStack {
-                    Color.appBackground.ignoresSafeArea()
-                    Circle()
-                        .fill(DesignSystem.Colors.accentLime.opacity(0.10))
-                        .frame(width: 260)
-                        .offset(x: 140, y: 580)
-                        .ignoresSafeArea()
-                }
-            )
-            .navigationBarTitleDisplayMode(.inline)
+            .background(Color.appBackground.ignoresSafeArea())
+            .navigationTitle("Trip Passengers")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.textSecondary)
-                            .padding(8)
-                            .background(Color.cardBackground)
-                            .clipShape(Circle())
-                            .overlay(Circle().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-                    }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Trip Passengers")
-                        .font(.system(size: 17, weight: .semibold))
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark")
+                        }
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.textPrimary)
+                    }
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -377,7 +134,7 @@ struct DriverTripDetailsView: View {
                             ProgressView().scaleEffect(0.8)
                         } else {
                             Text("Cancel Trip")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.brandRed)
                         }
                     }
@@ -392,13 +149,19 @@ struct DriverTripDetailsView: View {
             } message: {
                 Text("This will cancel the trip and notify all passengers.")
             }
+            .alert("Cancel Failed", isPresented: Binding(
+                get: { cancelTripError != nil },
+                set: { if !$0 { cancelTripError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(cancelTripError ?? "")
+            }
         }
+        .navigationViewStyle(.stack)
         .task {
             await loadPassengers()
             await loadAnchorPoints()
-        }
-        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
-            Task { await loadPassengers() }
         }
         .sheet(item: $chatDestination) { destination in
             ChatView(
@@ -411,57 +174,239 @@ struct DriverTripDetailsView: View {
         }
     }
 
-    private var headerStatsStrip: some View {
+    private var tripDetailsCard: some View {
+        VStack(spacing: 16) {
+            detailRow(
+                icon: "mappin.circle.fill",
+                iconColor: .brand,
+                title: "Pickup",
+                value: trip.origin
+            )
+            Divider()
+            detailRow(
+                icon: "location.fill",
+                iconColor: .brandGreen,
+                title: "Drop-off",
+                value: trip.destination
+            )
+            Divider()
+            detailRow(
+                icon: "clock",
+                iconColor: .textSecondary,
+                title: "Departure",
+                value: formatDateTime(trip.departureTime)
+            )
+            Divider()
+            detailRow(
+                icon: "person.2.fill",
+                iconColor: .textSecondary,
+                title: "Seats Available",
+                value: "\(trip.seatsAvailable)"
+            )
+        }
+        .padding(16)
+        .background(Color.cardBackground)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+        )
+    }
+
+    private func detailRow(icon: String, iconColor: Color, title: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(iconColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundColor(.textSecondary)
+                Text(value)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+    }
+
+    private var statsCard: some View {
         let statusColor: Color = approvedBookings.isEmpty ? .brandGold : .brandGreen
         let statusLabel = approvedBookings.isEmpty ? "Pending" : "Confirmed"
 
-        return HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "person.2.fill")
-                    .foregroundColor(.brand)
-                Text("\(passengers.count) riders")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
+        return VStack(spacing: 16) {
+            detailRow(
+                icon: "person.2.fill",
+                iconColor: .brand,
+                title: "Passengers",
+                value: "\(totalSeatsBooked) booked / \(trip.seatsAvailable) seats"
+            )
+            Divider()
+            detailRow(
+                icon: "dollarsign.circle.fill",
+                iconColor: .brandGreen,
+                title: "Estimated Earnings",
+                value: String(format: "$%.2f", totalEarnings)
+            )
+            Divider()
+            HStack(spacing: 12) {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(statusColor)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Status")
+                        .font(.system(size: 12))
+                        .foregroundColor(.textSecondary)
+                    Text(statusLabel)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.textPrimary)
+                }
+                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.cardBackground)
-            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-            .clipShape(Capsule())
-
-            HStack(spacing: 8) {
-                Image(systemName: "dollarsign.circle.fill")
-                    .foregroundColor(DesignSystem.Colors.accentLime)
-                Text(String(format: "$%.2f est.", totalEarnings))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.cardBackground)
-            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-            .clipShape(Capsule())
-
-            HStack(spacing: 6) {
-                Circle().fill(statusColor).frame(width: 8, height: 8)
-                Text(statusLabel)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.cardBackground)
-            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
-            .clipShape(Capsule())
-
-            Spacer()
         }
-        .padding(.horizontal, 24)
-        .padding(.top, -4)
+        .padding(16)
+        .background(Color.cardBackground)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+        )
+    }
+
+    private var passengersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Passengers")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.textPrimary)
+                Spacer()
+                if !pendingBookings.isEmpty {
+                    Text("\(pendingBookings.count) pending")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.brandRed)
+                }
+            }
+
+            if isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(48)
+                    .background(Color.cardBackground)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                    )
+            } else if let error = errorMessage {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 32))
+                        .foregroundColor(.brandRed)
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundColor(.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(44)
+                .background(Color.cardBackground)
+                .cornerRadius(16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                )
+            } else if passengers.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .font(.system(size: 40))
+                        .foregroundColor(.textTertiary)
+                    Text("No passengers yet")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.textSecondary)
+                    Text("Share your trip to get riders!")
+                        .font(.system(size: 13))
+                        .foregroundColor(.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(44)
+                .background(Color.cardBackground)
+                .cornerRadius(16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
+                )
+            } else {
+                VStack(spacing: 12) {
+                    if !pendingBookings.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Pending Requests")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.brandRed)
+                                .padding(.horizontal, 2)
+                            ForEach(pendingBookings) { passenger in
+                                PendingBookingCard(
+                                    passenger: passenger,
+                                    onApprove: { await approveBooking(passenger) },
+                                    onReject: { await rejectBooking(passenger) },
+                                    onChat: { openChat(with: passenger) }
+                                )
+                            }
+                        }
+                    }
+
+                    if !approvedBookings.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Confirmed Passengers")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.brandGreen)
+                                .padding(.horizontal, 2)
+                            ForEach(approvedBookings) { passenger in
+                                PassengerCard(passenger: passenger, onChat: { openChat(with: passenger) })
+                            }
+                        }
+                    }
+
+                    let archivedBookings = passengers.filter {
+                        $0.bookingState == .completed || $0.bookingState == .cancelled || $0.bookingState == .rejected
+                    }
+                    if !archivedBookings.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Past Requests")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.textSecondary)
+                                .padding(.horizontal, 2)
+                            ForEach(archivedBookings) { booking in
+                                archivedTripRow(booking)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func formatDateTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     private func archivedTripRow(_ booking: BookingWithRider) -> some View {
-        HStack(spacing: 12) {
+        let stateLabel: String = {
+            switch booking.bookingState {
+            case .completed: return "Completed"
+            case .cancelled: return "Cancelled"
+            case .rejected:  return "Declined"
+            default:         return booking.bookingState.displayName
+            }
+        }()
+        let stateColor: Color = booking.bookingState == .completed ? .brandGreen : .textSecondary
+
+        return HStack(spacing: 12) {
             Circle()
                 .fill(Color.gray.opacity(0.2))
                 .frame(width: 36, height: 36)
@@ -474,13 +419,16 @@ struct DriverTripDetailsView: View {
                 Text(booking.riderName)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.textPrimary)
-                Text(booking.bookingState == .completed ? "Completed" : "Cancelled")
+                Text(stateLabel)
                     .font(.system(size: 12))
-                    .foregroundColor(booking.bookingState == .completed ? Color.green : Color.secondary)
+                    .foregroundColor(stateColor)
             }
             Spacer()
             Button {
-                passengers.removeAll { $0.id == booking.id }
+                Task {
+                    try? await BookingService.shared.deleteBooking(bookingId: booking.id)
+                    passengers.removeAll { $0.id == booking.id }
+                }
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 14))
@@ -493,17 +441,19 @@ struct DriverTripDetailsView: View {
     }
 
     private func loadPassengers() async {
+        guard !isLoadingPassengers else { return }
+        isLoadingPassengers = true
         isLoading = true
         errorMessage = nil
 
         do {
             passengers = try await TripService.shared.getTripPassengers(tripId: trip.id)
-            isLoading = false
         } catch {
             errorMessage = "Failed to load passengers"
-            isLoading = false
             print("Error loading passengers: \(error)")
         }
+        isLoading = false
+        isLoadingPassengers = false
     }
 
     private func loadAnchorPoints() async {
@@ -554,37 +504,12 @@ struct DriverTripDetailsView: View {
             dismiss()
         } catch {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
-            errorMessage = "Failed to cancel trip. Please try again."
+            cancelTripError = "Failed to cancel trip. Please try again."
         }
         isCancellingTrip = false
     }
 }
 
-// MARK: - Stat Item Component
-
-private struct StatItem: View {
-    let icon: String
-    let label: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundColor(color)
-
-            Text(value)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.textPrimary)
-
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundColor(.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
 
 // MARK: - Pending Booking Card
 
@@ -808,4 +733,3 @@ func formatScostTime(_ seconds: Double) -> String {
         return String(format: "%.1fh", seconds / 3600)
     }
 }
-

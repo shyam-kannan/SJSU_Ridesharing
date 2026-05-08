@@ -179,6 +179,9 @@ class TripDetailViewModel: ObservableObject {
                     self.bookingState = bookingState
                     if bookingState == .pending {
                         startPolling()
+                    } else {
+                        // Terminal or settled state — stop polling
+                        stopPolling()
                     }
                 }
             }
@@ -192,7 +195,7 @@ class TripDetailViewModel: ObservableObject {
     private func startPolling() {
         stopPolling()
 
-        pollingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        pollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.checkExistingBooking()
             }

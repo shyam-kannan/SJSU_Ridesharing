@@ -41,7 +41,7 @@ const SERVICES = {
 const isDev = process.env.NODE_ENV !== 'production';
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || (isDev ? '60000' : '900000')),
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || (isDev ? '1000' : '100')),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || (isDev ? '1000' : '300')),
   message: { status: 'error', message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,

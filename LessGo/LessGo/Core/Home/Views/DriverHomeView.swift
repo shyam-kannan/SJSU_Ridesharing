@@ -29,8 +29,7 @@ struct DriverHomeView: View {
     @AppStorage("hasCompletedFirstTrip") private var hasCompletedFirstTrip = false
 
     // ── Timers ─────────────────────────────────────────────────────────────────
-    private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
-    private let matchPollingTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+    private let matchPollingTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     // ── Computed helpers ───────────────────────────────────────────────────────
 
@@ -141,9 +140,6 @@ struct DriverHomeView: View {
                 if !isPresented { Task { await refreshNotificationBadge() } }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                Task { await refreshNotificationBadge() }
-            }
-            .onReceive(notificationBadgeTimer) { _ in
                 Task { await refreshNotificationBadge() }
             }
             .onReceive(matchPollingTimer) { _ in

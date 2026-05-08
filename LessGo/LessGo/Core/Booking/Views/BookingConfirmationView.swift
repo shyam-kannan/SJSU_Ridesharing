@@ -16,8 +16,13 @@ struct BookingConfirmationView: View {
     @State private var showIDVerificationSheet = false
     @State private var isBookingComplete = false
 
-    private var displayedPrice: Double {
-        bookingVM.currentBooking?.quote?.maxPrice ?? Double(seats) * 8.50
+    // quote.maxPrice is the per-rider price from the cost service
+    private var perSeatPrice: Double {
+        bookingVM.currentBooking?.quote?.maxPrice ?? 8.50
+    }
+
+    private var totalPrice: Double {
+        perSeatPrice * Double(seats)
     }
 
     var body: some View {
@@ -124,7 +129,7 @@ struct BookingConfirmationView: View {
                                     .foregroundColor(.textPrimary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                                PriceRow(label: "Per seat", value: String(format: "$%.2f", displayedPrice / Double(max(seats, 1))))
+                                PriceRow(label: "Per seat", value: String(format: "$%.2f", perSeatPrice))
                                 PriceRow(label: "Seats", value: "× \(seats)")
                                 Rectangle()
                                     .fill(
@@ -136,7 +141,7 @@ struct BookingConfirmationView: View {
                                     )
                                     .frame(height: 1.5)
                                     .cornerRadius(1)
-                                PriceRow(label: "Total", value: String(format: "$%.2f", displayedPrice), isBold: true)
+                                PriceRow(label: "Total", value: String(format: "$%.2f", totalPrice), isBold: true)
                             }
                             .padding(16)
                             .elevatedCard(cornerRadius: 20)
@@ -164,7 +169,7 @@ struct BookingConfirmationView: View {
                         VStack(spacing: 0) {
                             Divider()
                             PrimaryButton(
-                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", displayedPrice))",
+                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", totalPrice))",
                                 icon: isBookingComplete ? "checkmark" : "lock.fill",
                                 isLoading: bookingVM.isCreating || bookingVM.isLoading,
                                 isEnabled: !isBookingComplete
@@ -216,7 +221,7 @@ struct BookingConfirmationView: View {
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
             if success, let bookingId = bookingVM.currentBooking?.id {
-                let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: displayedPrice)
+                let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: totalPrice)
                 if paid {
                     withAnimation { showSuccess = true }
                 } else {
@@ -553,8 +558,12 @@ struct BookingListView: View {
                         LazyVStack(spacing: 14) {
                             if showAsDriver && driverTab == .passengers {
                                 ForEach(vm.bookingsGroupedByTrip, id: \.trip.id) { group in
-                                    DriverTripGroupRow(trip: group.trip, bookings: group.bookings)
-                                        .padding(.horizontal, AppConstants.pagePadding)
+                                    DriverTripGroupRow(
+                                        trip: group.trip,
+                                        bookings: group.bookings,
+                                        onDeleteCancelled: { Task { await vm.deletePostedTrip(id: group.trip.id) } }
+                                    )
+                                    .padding(.horizontal, AppConstants.pagePadding)
                                 }
                             } else {
                                 ForEach(filteredBookings) { booking in
@@ -681,7 +690,8 @@ struct BookingListView: View {
                         PostedTripRow(
                             trip: trip,
                             onEdit: { editingTrip = trip },
-                            onDelete: { Task { await vm.cancelPostedTrip(id: trip.id) } }
+                            onDelete: { Task { await vm.cancelPostedTrip(id: trip.id) } },
+                            onDeletePermanent: { Task { await vm.deletePostedTrip(id: trip.id) } }
                         )
                         .padding(.horizontal, AppConstants.pagePadding)
                     }
@@ -852,9 +862,9 @@ private struct PostedTripRow: View {
     let trip: Trip
     let onEdit: () -> Void
     let onDelete: () -> Void
-    @EnvironmentObject var authVM: AuthViewModel
+    var onDeletePermanent: (() -> Void)? = nil
     @State private var showDeleteConfirm = false
-    @State private var showDetail = false
+    @State private var showPermanentDeleteConfirm = false
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -909,33 +919,43 @@ private struct PostedTripRow: View {
             }
             HStack(spacing: 10) {
                 Spacer()
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.textSecondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.cardBackground)
-                        .overlay(
-                            Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                        )
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+                if trip.status == .cancelled {
+                    Button(action: { showPermanentDeleteConfirm = true }) {
+                        Label("Delete", systemImage: "trash")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.red.opacity(0.08))
+                            .overlay(Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button(action: onEdit) {
+                        Label("Edit", systemImage: "pencil")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.textSecondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.cardBackground)
+                            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
 
-                Button(action: { showDeleteConfirm = true }) {
-                    Label("Cancel", systemImage: "xmark")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.red.opacity(0.08))
-                        .overlay(
-                            Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
-                        )
-                        .clipShape(Capsule())
+                    Button(action: { showDeleteConfirm = true }) {
+                        Label("Cancel", systemImage: "xmark")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.red.opacity(0.08))
+                            .overlay(Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(AppConstants.cardPadding)
@@ -945,15 +965,17 @@ private struct PostedTripRow: View {
             RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous)
                 .strokeBorder(DesignSystem.Colors.border.opacity(0.5), lineWidth: 1)
         )
-        .onTapGesture { showDetail = true }
         .confirmationDialog("Cancel this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Cancel Trip", role: .destructive, action: onDelete)
             Button("Keep Trip", role: .cancel) {}
         } message: {
             Text("This will cancel the trip and notify any passengers.")
         }
-        .sheet(isPresented: $showDetail) {
-            DriverTripDetailsView(trip: trip).environmentObject(authVM)
+        .confirmationDialog("Delete this trip?", isPresented: $showPermanentDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete Trip", role: .destructive) { onDeletePermanent?() }
+            Button("Keep", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the cancelled trip from your history.")
         }
     }
 
@@ -972,8 +994,10 @@ private struct PostedTripRow: View {
 private struct DriverTripGroupRow: View {
     let trip: Trip
     let bookings: [Booking]
+    var onDeleteCancelled: (() -> Void)? = nil
     @EnvironmentObject var authVM: AuthViewModel
     @State private var showDetail = false
+    @State private var showDeleteConfirm = false
 
     private var pendingCount: Int {
         bookings.filter { $0.bookingState == .pending }.count
@@ -984,6 +1008,15 @@ private struct DriverTripGroupRow: View {
     private var riderNames: String {
         bookings.compactMap { $0.rider?.name.components(separatedBy: " ").first }
                 .joined(separator: ", ")
+    }
+
+    private func tripStatusColor(_ status: TripStatus) -> Color {
+        switch status {
+        case .pending:   return .brandOrange
+        case .enRoute, .inProgress, .arrived: return .brand
+        case .completed: return .textTertiary
+        case .cancelled: return .brandRed
+        }
     }
 
     var body: some View {
@@ -1000,6 +1033,12 @@ private struct DriverTripGroupRow: View {
                             .foregroundColor(.textSecondary)
                     }
                     Spacer()
+                    Text(trip.status.displayName)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(tripStatusColor(trip.status))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(tripStatusColor(trip.status).opacity(0.12))
+                        .clipShape(Capsule())
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.textTertiary)
@@ -1027,6 +1066,21 @@ private struct DriverTripGroupRow: View {
                         .font(.system(size: 12))
                         .foregroundColor(.textTertiary)
                 }
+
+                if trip.status == .cancelled {
+                    HStack {
+                        Spacer()
+                        Button(action: { showDeleteConfirm = true }) {
+                            Label("Delete", systemImage: "trash")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.brandRed)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Color.brandRed.opacity(0.08))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             .padding(AppConstants.cardPadding)
             .background(Color.cardBackground)
@@ -1039,6 +1093,12 @@ private struct DriverTripGroupRow: View {
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail) {
             DriverTripDetailsView(trip: trip).environmentObject(authVM)
+        }
+        .confirmationDialog("Delete this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete Trip", role: .destructive) { onDeleteCancelled?() }
+            Button("Keep", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the cancelled trip from your history.")
         }
     }
 }
@@ -1120,10 +1180,11 @@ private struct BookingRow: View {
     }
 
     var statusColor: Color {
-        switch booking.status {
+        switch booking.bookingState {
         case .pending:   return .brandOrange
-        case .confirmed: return .brandGreen
+        case .approved:  return .brandGreen
         case .cancelled: return .brandRed
+        case .rejected:  return .brandRed
         case .completed: return .textTertiary
         }
     }
@@ -1134,7 +1195,7 @@ private struct BookingRow: View {
                 // Status
                 HStack(spacing: 5) {
                     Circle().fill(statusColor).frame(width: 10, height: 10)
-                    Text(booking.status.rawValue.capitalized)
+                    Text(booking.bookingState.displayName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(statusColor)
                 }
@@ -1314,8 +1375,8 @@ private struct BookingRow: View {
                 }
             }
 
-            // Cancel button for pending bookings (riders only)
-            if !showAsDriver && booking.status == .pending {
+            // Cancel button for pending/approved bookings (riders only)
+            if !showAsDriver && (booking.bookingState == .pending || booking.bookingState == .approved) {
                 Button(action: {
                     Task {
                         let success = await vm.cancelBooking(id: booking.id)
