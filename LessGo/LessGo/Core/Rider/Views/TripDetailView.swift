@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 // MARK: - Trip Detail View
 
@@ -8,9 +9,11 @@ struct TripDetailView: View {
     @StateObject private var viewModel: TripDetailViewModel
     @State private var showChat = false
     @State private var showSuccessMessage = false
+    private let criteria: SearchCriteria?
 
-    init(trip: TripWithDriver) {
+    init(trip: TripWithDriver, criteria: SearchCriteria? = nil) {
         _viewModel = StateObject(wrappedValue: TripDetailViewModel(trip: trip))
+        self.criteria = criteria
     }
 
     var body: some View {
@@ -205,44 +208,40 @@ struct TripDetailView: View {
     // MARK: - Trip Details Section
 
     private func tripDetailsSection(trip: TripWithDriver) -> some View {
-        VStack(spacing: 16) {
-            // Origin
-            tripDetailRow(
-                icon: "mappin.circle.fill",
-                iconColor: .brand,
-                title: "Pickup",
-                value: trip.origin
-            )
+        // Derive rider-specific pickup/dropoff labels from search criteria.
+        // to SJSU:   driver starts at trip.origin, rider boards at criteria.location, drops off at SJSU
+        // from SJSU: driver starts at SJSU (= trip.origin), rider boards at SJSU, drops off at criteria.location
+        let driverStart: String
+        let riderPickup: String
+        let riderDropoff: String
 
+        if let c = criteria {
+            switch c.direction {
+            case .toSJSU:
+                driverStart  = trip.origin
+                riderPickup  = c.location
+                riderDropoff = "San Jose State University"
+            case .fromSJSU:
+                driverStart  = trip.origin
+                riderPickup  = "San Jose State University"
+                riderDropoff = c.location
+            }
+        } else {
+            driverStart  = trip.origin
+            riderPickup  = trip.origin
+            riderDropoff = trip.destination
+        }
+
+        return VStack(spacing: 16) {
+            tripDetailRow(icon: "car.fill",        iconColor: .brand,          title: "Driver starts at", value: driverStart)
             Divider()
-
-            // Destination
-            tripDetailRow(
-                icon: "location.fill",
-                iconColor: .brandGreen,
-                title: "Drop-off",
-                value: trip.destination
-            )
-
+            tripDetailRow(icon: "mappin.circle.fill", iconColor: .brandGold,   title: "Your pickup",      value: riderPickup)
             Divider()
-
-            // Departure time
-            tripDetailRow(
-                icon: "clock",
-                iconColor: .textSecondary,
-                title: "Departure",
-                value: formatDateTime(trip.departureTime)
-            )
-
+            tripDetailRow(icon: "location.fill",   iconColor: .brandGreen,     title: "Your drop-off",    value: riderDropoff)
             Divider()
-
-            // Seats available
-            tripDetailRow(
-                icon: "person.2.fill",
-                iconColor: .textSecondary,
-                title: "Seats Available",
-                value: "\(trip.seatsAvailable)"
-            )
+            tripDetailRow(icon: "clock",           iconColor: .textSecondary,  title: "Departure",        value: formatDateTime(trip.departureTime))
+            Divider()
+            tripDetailRow(icon: "person.2.fill",   iconColor: .textSecondary,  title: "Seats Available",  value: "\(trip.seatsAvailable)")
         }
         .padding(16)
         .background(Color.cardBackground)
@@ -276,30 +275,53 @@ struct TripDetailView: View {
     // MARK: - Route Map Section
 
     private func routeMapSection(trip: TripWithDriver) -> some View {
-        VStack(spacing: 12) {
-            Map(
-                coordinateRegion: .constant(
-                    MKCoordinateRegion(
-                        center: AppConstants.sjsuCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                    )
-                ),
-                interactionModes: [],
-                showsUserLocation: false,
-                annotationItems: [trip]
-            ) { trip in
-                MapMarker(coordinate: AppConstants.sjsuCoordinate, tint: .brand)
-            }
-            .frame(height: 150)
-            .cornerRadius(12)
-            .disabled(true)
+        // Full driver route: driver origin → rider pickup → destination
+        // Coordinates:
+        //   driver origin  = trip.originLat/Lng (from search enrichment)
+        //   rider pickup   = criteria.coordinate (to SJSU) or AppConstants.sjsuCoordinate (from SJSU)
+        //   final dest     = AppConstants.sjsuCoordinate (to SJSU) or criteria.coordinate (from SJSU)
+        let driverOrigin: CLLocationCoordinate2D? = {
+            guard let lat = trip.originLat, let lng = trip.originLng else { return nil }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        }()
 
-            Text("Route visualization will be shown here")
-                .font(.system(size: 12))
-                .foregroundColor(.textSecondary)
+        let (mapOrigin, riderAnchor, mapDest): (CLLocationCoordinate2D?, CLLocationCoordinate2D?, CLLocationCoordinate2D?)
+        if let c = criteria {
+            switch c.direction {
+            case .toSJSU:
+                mapOrigin   = driverOrigin
+                riderAnchor = c.coordinate
+                mapDest     = AppConstants.sjsuCoordinate
+            case .fromSJSU:
+                mapOrigin   = AppConstants.sjsuCoordinate
+                riderAnchor = AppConstants.sjsuCoordinate  // pickup = SJSU, no detour leg
+                mapDest     = c.coordinate
+            }
+        } else {
+            mapOrigin   = driverOrigin
+            riderAnchor = nil
+            mapDest     = AppConstants.sjsuCoordinate
         }
-        .padding(16)
-        .background(Color.cardBackground)
+
+        // Build anchor points so AnchorRouteMapView draws the detour leg
+        let anchors: [AnchorPoint] = {
+            guard let c = criteria, let anchor = riderAnchor else { return [] }
+            switch c.direction {
+            case .toSJSU:
+                return [AnchorPoint(lat: anchor.latitude, lng: anchor.longitude, type: .pickup, riderId: nil, label: nil, etaOffsetSeconds: nil)]
+            case .fromSJSU:
+                return []
+            }
+        }()
+
+        return AnchorRouteMapView(
+            origin: mapOrigin,
+            destination: mapDest,
+            driver: nil,
+            anchorPoints: anchors,
+            showsUserLocation: false
+        )
+        .frame(height: 200)
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
