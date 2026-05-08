@@ -393,7 +393,7 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
       }
     );
 
-    const bookings = bookingsResponse.data.data || [];
+    const bookings = bookingsResponse.data.data?.bookings || [];
 
     successResponse(res, { bookings, total: bookings.length }, 'Trip bookings retrieved successfully');
   } catch (error) {

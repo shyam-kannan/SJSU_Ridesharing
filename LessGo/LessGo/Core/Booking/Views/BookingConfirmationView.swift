@@ -852,6 +852,7 @@ private struct PostedTripRow: View {
     let trip: Trip
     let onEdit: () -> Void
     let onDelete: () -> Void
+    @EnvironmentObject var authVM: AuthViewModel
     @State private var showDeleteConfirm = false
     @State private var showDetail = false
 
@@ -952,7 +953,7 @@ private struct PostedTripRow: View {
             Text("This will cancel the trip and notify any passengers.")
         }
         .sheet(isPresented: $showDetail) {
-            DriverTripDetailsView(trip: trip)
+            DriverTripDetailsView(trip: trip).environmentObject(authVM)
         }
     }
 
@@ -971,6 +972,7 @@ private struct PostedTripRow: View {
 private struct DriverTripGroupRow: View {
     let trip: Trip
     let bookings: [Booking]
+    @EnvironmentObject var authVM: AuthViewModel
     @State private var showDetail = false
 
     private var pendingCount: Int {
@@ -1036,7 +1038,7 @@ private struct DriverTripGroupRow: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail) {
-            DriverTripDetailsView(trip: trip)
+            DriverTripDetailsView(trip: trip).environmentObject(authVM)
         }
     }
 }
