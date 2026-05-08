@@ -3,6 +3,7 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import configRoutes from './routes/config.routes';
 
 dotenv.config();
 
@@ -63,7 +64,7 @@ app.use((req, res, next) => {
 const jwtMiddleware = (req: Request, res: Response, next: Function) => {
   // NOTE: mounted at app.use('/api', ...) so req.path is WITHOUT the /api prefix.
   // A request to /api/auth/register arrives here as /auth/register.
-  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh', '/vehicles', '/users/login', '/users/register'];
+  const publicPaths = ['/auth/register', '/auth/login', '/auth/refresh', '/vehicles', '/users/login', '/users/register', '/config'];
 
   console.log(`[JWT] path="${req.path}" | isPublic=${publicPaths.some(p => req.path.startsWith(p))}`);
 
@@ -183,6 +184,9 @@ app.use('/api/embedding', createProxyMiddleware({
   pathRewrite: { '^/api/embedding': '' },
   ...proxyOptions,
 }));
+
+// Config Routes (public)
+app.use('/api/config', express.json(), configRoutes);
 
 // 404 Handler
 app.use((req, res) => {
