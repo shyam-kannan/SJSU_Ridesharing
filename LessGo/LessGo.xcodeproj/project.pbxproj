@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		17A8F6E32F452023005CFF55 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A8F6E12F451FFA005CFF55 /* UIKit.framework */; };
+		80DC20C32FAE37A5004479F7 /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 80DC20C22FAE37A5004479F7 /* StripePaymentSheet */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				80DC20C32FAE37A5004479F7 /* StripePaymentSheet in Frameworks */,
 				17A8F6E32F452023005CFF55 /* UIKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -133,6 +135,7 @@
 			);
 			name = LessGo;
 			packageProductDependencies = (
+				80DC20C22FAE37A5004479F7 /* StripePaymentSheet */,
 			);
 			productName = LessGo;
 			productReference = 17961E812F43EB97002C32D2 /* LessGo.app */;
@@ -216,6 +219,9 @@
 			);
 			mainGroup = 17961E782F43EB97002C32D2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8066DD992FAE32D300BDCA43 /* XCRemoteSwiftPackageReference "stripe-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 17961E822F43EB97002C32D2 /* Products */;
 			projectDirPath = "";
@@ -653,6 +659,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8066DD992FAE32D300BDCA43 /* XCRemoteSwiftPackageReference "stripe-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 25.13.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		80DC20C22FAE37A5004479F7 /* StripePaymentSheet */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8066DD992FAE32D300BDCA43 /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePaymentSheet;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 17961E792F43EB97002C32D2 /* Project object */;
 }
