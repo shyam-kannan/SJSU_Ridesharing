@@ -12,8 +12,6 @@ This file provides context for Claude Code to understand the project quickly wit
 - PostgreSQL database hosted on Supabase (project: bdefyxdpojqxxvaybfwk)
 - ML matching pipeline using RShareForm embeddings
 
-**Current Work:** Posted Rides Feature (Phase 2 Complete ✅)
-
 ## Memory System
 
 The project has a memory system at `memory/` that stores important context. When starting a new session, Claude should:
@@ -87,9 +85,8 @@ When starting a new session on this project:
 
 1. Load `memory/MEMORY.md` to see available memory
 2. Load `memory/repo_overview.md` for repository context
-3. Check `POSTED_RIDES_IMPLEMENTATION_PLAN.md` for current implementation status
-4. Check `SETUP.md` for setup instructions
-5. Check git status to see what's changed
+3. Check `SETUP.md` for setup instructions
+4. Check git status to see what's changed
 
 ## Important Notes
 
@@ -98,6 +95,7 @@ When starting a new session on this project:
 - **Chat:** Already implemented, reuse for rider-driver communication
 - **SJSU Requirement:** All trips must connect to SJSU campus
 - **On-Demand Matching:** Still exists for backward compatibility, being deprecated
+- **Backend Services:** Are all hosted  and managed by Google Kubernetes Engine, using an auto-pilot cluster
 
 ## Recent Changes (Phase 1)
 
