@@ -7,15 +7,13 @@ app.use(express.json());
 app.use(cors());
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-const BASE_PRICE        = 5.0;
-const PRICE_PER_MILE    = 0.5;
-const FUEL_PRICE        = 5.00;   // $/gal — Bay Area average
-const DETOUR_MULTIPLIER = 1.25;   // 25% surcharge on detour mileage
+const IRS_MILEAGE_RATE = 0.67;   // $/mile — covers fuel + wear + depreciation
+const DRIVER_HOURLY    = 15.00;  // $/hr  — driver time compensation
+const DETOUR_SURCHARGE = 1.25;   // 25% premium on rerouting miles
 
 const ROUTING_SERVICE_URL = process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8002';
 const TRIP_SERVICE_URL    = process.env.TRIP_SERVICE_URL    || 'http://127.0.0.1:3003';
 const BOOKING_SERVICE_URL = process.env.BOOKING_SERVICE_URL || 'http://127.0.0.1:3004';
-const USER_SERVICE_URL    = process.env.USER_SERVICE_URL    || 'http://127.0.0.1:3002';
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -42,27 +40,30 @@ app.post('/cost/calculate', async (req, res) => {
     }
 
     let distance_miles = 10;
+    let duration_seconds = 0;
 
     try {
       const routeResponse = await axios.post(`${ROUTING_SERVICE_URL}/route/calculate`, {
         origin,
         destination,
       });
-      // FastAPI returns the model directly — no { data: ... } wrapper
-      distance_miles = routeResponse.data?.distance_miles || 10;
+      distance_miles   = routeResponse.data?.distance_miles  || 10;
+      duration_seconds = routeResponse.data?.duration_seconds || 0;
     } catch {
       console.warn('Routing service unavailable, using default distance of 10 miles');
     }
 
-    const total_trip_cost = BASE_PRICE + distance_miles * PRICE_PER_MILE;
+    const duration_hours  = duration_seconds / 3600;
+    const total_trip_cost = distance_miles * IRS_MILEAGE_RATE + duration_hours * DRIVER_HOURLY;
     const price_per_rider = total_trip_cost / num_riders;
 
     const breakdown = {
-      base_price:      BASE_PRICE,
-      distance_miles:  parseFloat(distance_miles.toFixed(2)),
-      price_per_mile:  PRICE_PER_MILE,
-      total_trip_cost: parseFloat(total_trip_cost.toFixed(2)),
-      price_per_rider: parseFloat(price_per_rider.toFixed(2)),
+      distance_miles:   parseFloat(distance_miles.toFixed(2)),
+      duration_hours:   parseFloat(duration_hours.toFixed(4)),
+      irs_mileage_rate: IRS_MILEAGE_RATE,
+      driver_hourly:    DRIVER_HOURLY,
+      total_trip_cost:  parseFloat(total_trip_cost.toFixed(2)),
+      price_per_rider:  parseFloat(price_per_rider.toFixed(2)),
     };
 
     res.json({
@@ -80,7 +81,7 @@ app.post('/cost/calculate', async (req, res) => {
 });
 
 // ── GET /cost/settle/:trip_id ─────────────────────────────────────────────────
-// Detour-aware, MPG-based settlement for a completed trip.
+// IRS mileage-rate settlement for a completed trip.
 // Called by trip-service when a trip transitions to 'completed'.
 app.get('/cost/settle/:trip_id', async (req, res) => {
   const { trip_id } = req.params;
@@ -104,33 +105,13 @@ app.get('/cost/settle/:trip_id', async (req, res) => {
       return;
     }
 
-    const driverId   = trip.driver_id;
-    const tripOrigin = trip.origin;
-    const tripDest   = trip.destination;
-
-    // Prefer coordinate strings for routing (more reliable than address strings)
     const originCoord = (trip.origin_point?.lat != null && trip.origin_point?.lng != null)
-      ? `${trip.origin_point.lat},${trip.origin_point.lng}` : tripOrigin;
+      ? `${trip.origin_point.lat},${trip.origin_point.lng}` : trip.origin;
     const destCoord = (trip.destination_point?.lat != null && trip.destination_point?.lng != null)
-      ? `${trip.destination_point.lat},${trip.destination_point.lng}` : tripDest;
+      ? `${trip.destination_point.lat},${trip.destination_point.lng}` : trip.destination;
     console.log(`[settle] routing coords: origin=${originCoord} dest=${destCoord}`);
 
-    // STEP 2 — Fetch driver MPG
-    let mpg = 25.0;
-    try {
-      const userResp = await axios.get(`${USER_SERVICE_URL}/users/${driverId}`);
-      const driver = userResp.data?.data ?? userResp.data;
-      if (driver?.mpg != null && !isNaN(parseFloat(driver.mpg))) {
-        mpg = parseFloat(driver.mpg);
-      }
-    } catch {
-      console.warn(`[settle] Could not fetch driver MPG for ${driverId}, using default 25.0`);
-    }
-
-    const mileageRate = FUEL_PRICE / mpg; // $/mile
-
-    // STEP 3 — Fetch bookings via internal no-auth route
-    // Full path: BOOKING_SERVICE_URL (port 3004) + /bookings (mount prefix) + /trip/:id/settle
+    // STEP 2 — Fetch bookings via internal no-auth route
     let bookings: any[] = [];
     try {
       const bookingsResp = await axios.get(`${BOOKING_SERVICE_URL}/bookings/trip/${trip_id}/settle`);
@@ -143,9 +124,9 @@ app.get('/cost/settle/:trip_id', async (req, res) => {
       console.warn(`[settle] Could not fetch bookings for trip ${trip_id}: ${err?.message}`);
     }
 
-    // Accept everything except explicitly cancelled/rejected (both spellings)
+    // Accept only bookings that are approved (not cancelled/rejected)
     const confirmedBookings = bookings.filter(
-      (b: any) => !['cancelled', 'canceled', 'rejected'].includes(b.status)
+      (b: any) => !['cancelled', 'canceled', 'rejected'].includes(b.booking_state)
     );
 
     const riderCount = confirmedBookings.reduce(
@@ -153,24 +134,26 @@ app.get('/cost/settle/:trip_id', async (req, res) => {
     );
     console.log(`[settle] trip ${trip_id}: fetched ${bookings.length} bookings, ${confirmedBookings.length} accepted, riderCount=${riderCount}`);
 
-    // STEP 4 — Direct trip distance
+    // STEP 3 — Direct trip distance + duration
     let direct_distance_miles = 10;
+    let direct_duration_seconds = 0;
     try {
       const routeResp = await axios.post(`${ROUTING_SERVICE_URL}/route/calculate`, {
         origin: originCoord,
         destination: destCoord,
       });
-      // FastAPI returns the model directly — no { data: ... } wrapper
-      direct_distance_miles = routeResp.data?.distance_miles ?? 10;
-      console.log(`[settle] direct distance: ${direct_distance_miles.toFixed(2)} miles (origin=${originCoord} dest=${destCoord})`);
+      direct_distance_miles    = routeResp.data?.distance_miles    ?? 10;
+      direct_duration_seconds  = routeResp.data?.duration_seconds  ?? 0;
+      console.log(`[settle] direct distance: ${direct_distance_miles.toFixed(2)} miles, duration: ${direct_duration_seconds}s`);
     } catch {
-      console.warn('[settle] Routing unavailable, using 10 mi default for direct distance');
+      console.warn('[settle] Routing unavailable, using 10 mi / 0s defaults');
     }
 
-    // STEP 5 — Per-rider settlement
-    const total_shared_cost = BASE_PRICE + direct_distance_miles * mileageRate;
+    // STEP 4 — Per-rider settlement (IRS mileage rate formula)
+    const direct_duration_hours = direct_duration_seconds / 3600;
+    const trip_cost         = direct_distance_miles * IRS_MILEAGE_RATE + direct_duration_hours * DRIVER_HOURLY;
     // Guard against riderCount=0 (no confirmed bookings) to avoid NaN/Infinity
-    const shared_per_rider  = riderCount > 0 ? total_shared_cost / riderCount : total_shared_cost;
+    const shared_per_rider  = riderCount > 0 ? trip_cost / riderCount : trip_cost;
 
     const riderSettlements: any[] = [];
 
@@ -206,13 +189,12 @@ app.get('/cost/settle/:trip_id', async (req, res) => {
             axios.post(`${ROUTING_SERVICE_URL}/route/calculate`, { origin: originCoord, destination: pickupAddr }),
             axios.post(`${ROUTING_SERVICE_URL}/route/calculate`, { origin: pickupAddr, destination: destCoord }),
           ]);
-          // FastAPI returns the model directly — no { data: ... } wrapper
           const toPickupDist   = leg1Resp.data?.distance_miles ?? 0;
           const fromPickupDist = leg2Resp.data?.distance_miles ?? 0;
           detour_miles = Math.max(0, (toPickupDist + fromPickupDist) - direct_distance_miles);
           console.log(`[settle-debug] rider ${riderId}: toPickup=${toPickupDist} fromPickup=${fromPickupDist} detour=${detour_miles}`);
           if (detour_miles > 0.1) {
-            detour_cost = detour_miles * mileageRate * DETOUR_MULTIPLIER;
+            detour_cost = detour_miles * IRS_MILEAGE_RATE * DETOUR_SURCHARGE;
             breakdown += ` + ${detour_miles.toFixed(2)} mi detour surcharge`;
           }
         } catch {
@@ -220,7 +202,11 @@ app.get('/cost/settle/:trip_id', async (req, res) => {
         }
       }
 
-      const amount_paid = parseFloat(((shared_per_rider + detour_cost) * seatsBooked).toFixed(2));
+      // Cap at hold amount (max_price from quote, already on the booking row as `fare`)
+      const holdAmount = booking.fare != null ? parseFloat(booking.fare) : (shared_per_rider + detour_cost);
+
+      const raw_amount   = (shared_per_rider + detour_cost) * seatsBooked;
+      const amount_paid  = parseFloat(Math.min(raw_amount, holdAmount * seatsBooked).toFixed(2));
 
       riderSettlements.push({
         rider_id:     riderId,
@@ -232,27 +218,27 @@ app.get('/cost/settle/:trip_id', async (req, res) => {
       });
     }
 
-    // STEP 6 — Build response
+    // STEP 5 — Build response
     const totalDriverEarnings = parseFloat(
       riderSettlements.reduce((sum, r) => sum + r.amount_paid, 0).toFixed(2)
     );
 
     res.json({
       status: 'success',
-      message: 'Settlement calculated successfully (Detour-based + MPG)',
+      message: 'Settlement calculated successfully (IRS mileage rate)',
       data: {
         trip_id,
-        driver_mpg:      mpg,
-        mileage_rate:    parseFloat(mileageRate.toFixed(4)),
+        irs_mileage_rate: IRS_MILEAGE_RATE,
+        driver_hourly:    DRIVER_HOURLY,
         total_cost:      totalDriverEarnings,
         driver_earnings: totalDriverEarnings,
         rider_count:     riderCount > 0 ? riderCount : 1,
         cost_per_rider:  parseFloat(shared_per_rider.toFixed(2)),
         breakdown: {
-          base_price:            BASE_PRICE,
-          direct_distance_miles: parseFloat(direct_distance_miles.toFixed(2)),
-          fuel_price_per_gal:    FUEL_PRICE,
-          detour_multiplier:     DETOUR_MULTIPLIER,
+          direct_distance_miles:  parseFloat(direct_distance_miles.toFixed(2)),
+          direct_duration_hours:  parseFloat(direct_duration_hours.toFixed(4)),
+          trip_cost:              parseFloat(trip_cost.toFixed(2)),
+          detour_surcharge:       DETOUR_SURCHARGE,
         },
         riders: riderSettlements,
       },

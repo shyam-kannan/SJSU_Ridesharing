@@ -99,4 +99,23 @@ router.get(
   })
 );
 
+// Internal: write final_price to quotes table after settlement.
+// Called by trip-service on trip completion.
+router.patch(
+  '/:id/final-price',
+  asyncHandler(async (req: express.Request, res: express.Response) => {
+    if (req.headers['x-internal-service'] !== 'trip-service') {
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
+    }
+    const { final_price } = req.body;
+    if (typeof final_price !== 'number' || final_price <= 0) {
+      res.status(400).json({ status: 'error', message: 'final_price must be a positive number' });
+      return;
+    }
+    await bookingService.writeFinalPrice(req.params.id, final_price);
+    res.json({ status: 'success', message: 'final_price updated' });
+  })
+);
+
 export default router;

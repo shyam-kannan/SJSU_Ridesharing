@@ -310,34 +310,45 @@ struct TripDetailView: View {
     // MARK: - Cost Section
 
     private func costSection(trip: TripWithDriver) -> some View {
-        VStack(spacing: 12) {
+        let total = trip.estimatedCost
+        return VStack(spacing: 12) {
             HStack {
-                Text("Estimated Cost")
+                Text("Estimated Fare")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text(formatPrice(trip.estimatedCost))
+                Text("Up to \(formatPrice(total))")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.brand)
             }
 
             Divider()
 
-            costBreakdownRow(label: "Base fare", value: "$5.00")
-            costBreakdownRow(label: "Distance", value: "$3.50")
-            costBreakdownRow(label: "Service fee", value: "$1.50")
+            costBreakdownRow(
+                label: "Distance & time",
+                value: formatPrice(trip.costBreakdown?.tripCost ?? total)
+            )
+            if let detourFee = trip.costBreakdown?.detourFee, detourFee > 0.01 {
+                costBreakdownRow(label: "Rerouting fee", value: formatPrice(detourFee))
+            }
 
             Divider()
 
             HStack {
-                Text("Total")
+                Text("Up to")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.textPrimary)
                 Spacer()
-                Text(formatPrice(trip.estimatedCost))
+                Text(formatPrice(total))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.brand)
             }
+
+            Text("Final charge split among confirmed riders — you'll only pay your share.")
+                .font(.system(size: 12))
+                .foregroundColor(.textSecondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
         .background(Color.cardBackground)

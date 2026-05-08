@@ -1050,7 +1050,34 @@ export const capturePayment = async (
     throw new AppError('No authorized payment found for this booking', 400);
   }
 
-  await stripe.paymentIntents.capture(paymentIntentId);
+  // Partial capture: use final_price if written, otherwise capture full hold
+  const quoteResult = await pool.query(
+    'SELECT final_price, max_price FROM quotes WHERE booking_id = $1',
+    [bookingId]
+  );
+  const finalPrice = quoteResult.rows[0]?.final_price
+    ? parseFloat(quoteResult.rows[0].final_price)
+    : undefined;
+  const holdAmount = quoteResult.rows[0]?.max_price
+    ? parseFloat(quoteResult.rows[0].max_price)
+    : undefined;
+
+  const captureOptions = finalPrice
+    ? { amount_to_capture: Math.round(finalPrice * 100) }
+    : undefined;
+
+  await stripe.paymentIntents.capture(paymentIntentId, captureOptions);
+
+  // Credit driver earnings with the actual captured amount
+  const capturedAmount = finalPrice ?? holdAmount;
+  if (capturedAmount) {
+    await pool.query(
+      `UPDATE users
+       SET earnings = COALESCE(earnings, 0) + $1, updated_at = current_timestamp
+       WHERE user_id = $2`,
+      [capturedAmount, driverId]
+    ).catch(() => {}); // non-fatal
+  }
 
   await pool.query(
     `UPDATE bookings
@@ -1061,6 +1088,16 @@ export const capturePayment = async (
 
   const updatedBooking = await getBookingById(bookingId);
   return updatedBooking!;
+};
+
+/**
+ * Write final_price to the quotes row for a booking (called by trip-service on completion)
+ */
+export const writeFinalPrice = async (bookingId: string, finalPrice: number): Promise<void> => {
+  await pool.query(
+    `UPDATE quotes SET final_price = $1 WHERE booking_id = $2`,
+    [finalPrice, bookingId]
+  );
 };
 
 export default {
@@ -1078,4 +1115,5 @@ export default {
   authorizePayment,
   confirmPayment,
   capturePayment,
+  writeFinalPrice,
 };

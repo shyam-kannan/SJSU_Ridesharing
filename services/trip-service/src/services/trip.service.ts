@@ -815,8 +815,9 @@ export const isLocationNearSJSU = async (
 // ── ML-ranked search for posted rides with rerouting ────────────────────────
 
 export interface CostBreakdown {
-  base_fare: number;
-  detour_surcharge: number;
+  trip_cost:       number;
+  duration_hours:  number;
+  detour_fee:      number;
   per_rider_split: number;
 }
 
@@ -912,6 +913,9 @@ export const searchTripsWithRerouting = async (
       let adjustedEtaMinutes: number | undefined;
       let originalEtaMinutes: number | undefined;
       let detourTimeMinutes: number | undefined;
+      let leg1DurationSec = 0;
+      let leg2DurationSec = 0;
+      let leg2DistanceMiles = 0;
       try {
         // Two-leg ETA: driver_origin → rider_pickup + rider_pickup → destination
         const [leg1, leg2] = await Promise.all([
@@ -924,16 +928,21 @@ export const searchTripsWithRerouting = async (
             destination: `${destinationLat},${destinationLng}`,
           }, { timeout: 4000 }),
         ]);
-        detourTimeMinutes   = Math.round((leg1.data?.duration_seconds ?? 0) / 60);
-        originalEtaMinutes  = Math.round((leg2.data?.duration_seconds ?? 0) / 60);
+        leg1DurationSec   = leg1.data?.duration_seconds ?? 0;
+        leg2DurationSec   = leg2.data?.duration_seconds ?? 0;
+        leg2DistanceMiles = leg2.data?.distance_miles   ?? 0;
+        detourTimeMinutes   = Math.round(leg1DurationSec / 60);
+        originalEtaMinutes  = Math.round(leg2DurationSec / 60);
         adjustedEtaMinutes  = detourTimeMinutes + originalEtaMinutes;
       } catch {
         // Routing service unavailable — omit ETA
       }
 
-      const baseFare = 5.00; // default base fare; cost-calculation-service can refine this
-      const detourSurcharge = parseFloat((detourMiles * 0.50).toFixed(2));
-      const perRiderSplit = parseFloat((baseFare + detourSurcharge).toFixed(2));
+      const durationHours       = (leg1DurationSec + leg2DurationSec) / 3600;
+      const directDistanceMiles = leg2DistanceMiles > 0 ? leg2DistanceMiles : detourMiles;
+      const tripCost            = parseFloat((directDistanceMiles * 0.67 + durationHours * 15.00).toFixed(2));
+      const detourFee           = parseFloat((detourMiles * 0.67 * 1.25).toFixed(2));
+      const perRiderSplit        = parseFloat((tripCost + detourFee).toFixed(2));
 
       return {
         ...trip,
@@ -949,8 +958,9 @@ export const searchTripsWithRerouting = async (
         original_eta_minutes: originalEtaMinutes,
         detour_time_minutes: detourTimeMinutes,
         cost_breakdown: {
-          base_fare: baseFare,
-          detour_surcharge: detourSurcharge,
+          trip_cost:       tripCost,
+          duration_hours:  parseFloat(durationHours.toFixed(4)),
+          detour_fee:      detourFee,
           per_rider_split: perRiderSplit,
         },
       };
