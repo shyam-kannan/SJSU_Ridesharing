@@ -486,6 +486,32 @@ struct TripDetailView: View {
                         .strokeBorder(Color.brandGreen.opacity(0.5), lineWidth: 1)
                 )
 
+                // Payment deadline banner — shown when payment has not yet been completed
+                if viewModel.booking?.paymentIntentId == nil, let deadline = viewModel.paymentDeadlineAt {
+                    HStack(spacing: 10) {
+                        Image(systemName: "clock.badge.exclamationmark.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.brandOrange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Payment required")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.textPrimary)
+                            Text("Complete payment by \(formatDeadline(deadline)) to keep your seat.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                    }
+                    .padding(14)
+                    .background(Color.brandOrange.opacity(0.08))
+                    .cornerRadius(14)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(Color.brandOrange.opacity(0.35), lineWidth: 1)
+                    )
+                }
+
                 Button(action: { showChat = true }) {
                     HStack(spacing: 8) {
                         Image(systemName: "message.fill")
@@ -580,9 +606,12 @@ struct TripDetailView: View {
                         Text("Request Cancelled")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.textPrimary)
-                        Text("You cancelled this booking request.")
+                        Text(viewModel.cancellationReason == "payment_not_completed"
+                             ? "Your booking was cancelled because payment wasn't completed before the deadline."
+                             : "You cancelled this booking request.")
                             .font(.system(size: 13))
                             .foregroundColor(.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
                 }
@@ -646,6 +675,17 @@ struct TripDetailView: View {
     }
 
     // MARK: - Helpers
+
+    private func formatDeadline(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        if calendar.isDateInToday(date) || calendar.isDateInTomorrow(date) {
+            return formatter.string(from: date)
+        }
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
 
     private func formatDateTime(_ date: Date) -> String {
         let formatter = DateFormatter()

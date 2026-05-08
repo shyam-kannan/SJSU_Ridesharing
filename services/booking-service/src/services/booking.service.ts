@@ -276,6 +276,8 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     fare: row.fare != null ? parseFloat(row.fare) : undefined,
     payment_intent_id: row.payment_intent_id || null,
     hold_expires_at: row.hold_expires_at || null,
+    payment_deadline_at: row.payment_deadline_at || null,
+    cancellation_reason: row.cancellation_reason || null,
     pickup_location: row.pickup_location || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -670,11 +672,15 @@ export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: a
       u.rating as rider_rating,
       u.profile_picture_url as rider_picture,
       b.payment_intent_id,
+      b.payment_deadline_at,
+      b.cancellation_reason,
       q.max_price AS fare
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
     LEFT JOIN quotes q ON q.booking_id = b.booking_id
-    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending') AND b.deleted_at IS NULL
+    WHERE b.trip_id = $1
+      AND b.booking_state IS NOT NULL
+      AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `;
 
@@ -725,10 +731,20 @@ export const approveBooking = async (
       throw new Error('Cannot approve a rejected or cancelled booking');
     }
 
-    // Update booking state and clear hold_expires_at (seat is now permanently held)
+    // Update booking state, clear hold_expires_at, and set payment_deadline_at
+    // (trip.departure_time - 1 hour) so the rider knows when to complete payment.
     await client.query(
-      'UPDATE bookings SET booking_state = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
-      ['approved', bookingId]
+      `UPDATE bookings b
+       SET booking_state        = 'approved',
+           hold_expires_at      = NULL,
+           payment_deadline_at  = (
+             SELECT departure_time - INTERVAL '1 hour'
+             FROM trips
+             WHERE trip_id = b.trip_id
+           ),
+           updated_at           = current_timestamp
+       WHERE b.booking_id = $1`,
+      [bookingId]
     );
 
     await client.query('COMMIT');

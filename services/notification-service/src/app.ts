@@ -256,6 +256,106 @@ app.post('/notifications/driver-request', (req, res) => {
   res.json({ status: 'success', message: 'Driver request notification sent', data: notification });
 });
 
+// ─── Payment deadline cancellation notifications ──────────────────────────────
+
+/**
+ * POST /notifications/send/payment-deadline-cancelled
+ * Body: {
+ *   rider_id, rider_email,
+ *   driver_id,
+ *   other_passenger_ids: string[],
+ *   trip_origin, trip_destination, departure_time
+ * }
+ *
+ * Sends:
+ *   - Rider: in-app + email — booking cancelled because payment not completed.
+ *   - Driver: in-app — passenger removed, route updated.
+ *   - Other passengers: in-app — route updated.
+ */
+app.post('/notifications/send/payment-deadline-cancelled', async (req, res) => {
+  const {
+    rider_id,
+    rider_email,
+    driver_id,
+    other_passenger_ids,
+    trip_origin,
+    trip_destination,
+    departure_time,
+  } = req.body;
+
+  if (!rider_id || !driver_id) {
+    res.status(400).json({ status: 'error', message: 'rider_id and driver_id are required' });
+    return;
+  }
+
+  const departureStr = departure_time
+    ? new Date(departure_time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'your scheduled trip';
+
+  // Notify rider in-app
+  const riderNotification = createNotification({
+    user_id: rider_id,
+    type: 'booking_cancelled_payment_deadline',
+    title: 'Booking Cancelled',
+    message: `Your booking for ${trip_origin} → ${trip_destination} was cancelled because payment wasn't completed before the deadline.`,
+    data: { trip_origin, trip_destination, departure_time },
+  });
+  pushNotification(riderNotification);
+
+  // Notify rider via email (non-fatal)
+  if (rider_email) {
+    try {
+      await emailService.sendCancellationNotice(rider_email, {
+        name: 'Rider',
+        origin: trip_origin ?? '',
+        destination: trip_destination ?? '',
+        departureTime: departureStr,
+        bookingId: 'deadline-cancellation',
+      });
+    } catch (err) {
+      console.warn('[payment-deadline-cancelled] Rider email failed (non-fatal):', err);
+    }
+  }
+
+  // Notify driver in-app
+  const driverNotification = createNotification({
+    user_id: driver_id,
+    type: 'passenger_removed_payment_deadline',
+    title: 'Passenger Removed',
+    message: `A passenger was removed from your trip (${trip_origin} → ${trip_destination}) — payment not completed. Your route has been updated.`,
+    data: { trip_origin, trip_destination, departure_time },
+  });
+  pushNotification(driverNotification);
+
+  // Notify other passengers in-app
+  const otherIds: string[] = Array.isArray(other_passenger_ids) ? other_passenger_ids : [];
+  for (const passengerId of otherIds) {
+    const passengerNotification = createNotification({
+      user_id: passengerId,
+      type: 'route_updated',
+      title: 'Route Updated',
+      message: `Your pickup route for the trip on ${departureStr} has been updated.`,
+      data: { trip_origin, trip_destination, departure_time },
+    });
+    pushNotification(passengerNotification);
+  }
+
+  console.log(
+    `[payment-deadline-cancelled] rider=${rider_id} driver=${driver_id} others=${otherIds.length}`
+  );
+
+  res.json({
+    status: 'success',
+    message: 'Payment deadline cancellation notifications sent',
+    data: {
+      rider_notified: true,
+      rider_email_notified: !!rider_email,
+      driver_notified: true,
+      other_passengers_notified: otherIds.length,
+    },
+  });
+});
+
 // ─── Support endpoints ────────────────────────────────────────────────────────
 
 /**

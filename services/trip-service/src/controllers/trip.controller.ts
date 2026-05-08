@@ -788,6 +788,16 @@ function extractBookingsArray(payload: any): any[] {
   return [];
 }
 
+/**
+ * POST /trips/internal/process-deadline-cancellations
+ * Internal endpoint: scans for deadline-cancelled bookings that need route update + notifications.
+ * Protected by X-Internal-Service header (checked in the router, not here).
+ */
+export const processDeadlineCancellations = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const result = await tripService.processDeadlineCancellations();
+  res.json({ status: 'success', message: `Processed ${result.processed} deadline cancellation(s)`, data: result });
+};
+
 async function riderHasBookingForTrip(authHeader: string | undefined, tripId: string, userId: string): Promise<boolean> {
   try {
     const bookingsResponse = await axios.get(

@@ -18,6 +18,8 @@ class TripDetailViewModel: ObservableObject {
     @Published var cancellationSuccess = false
     @Published var isAuthorizing = false
     @Published var paymentAuthorized = false
+    @Published var paymentDeadlineAt: Date? = nil
+    @Published var cancellationReason: String? = nil
 
     // MARK: - Private State
 
@@ -173,11 +175,17 @@ class TripDetailViewModel: ObservableObject {
                existingBooking.bookingState == .cancelled || existingBooking.bookingState == .rejected {
                 booking = nil
                 bookingState = nil
+                // Still surface cancellation reason if available (e.g. payment_not_completed)
+                cancellationReason = existingBooking.cancellationReason
+                paymentDeadlineAt = nil
             } else {
                 booking = existingBooking
-                if let bookingState = existingBooking?.bookingState {
-                    self.bookingState = bookingState
-                    if bookingState == .pending {
+                if let existingBooking = existingBooking {
+                    let state = existingBooking.bookingState
+                    self.bookingState = state
+                    self.paymentDeadlineAt = existingBooking.paymentDeadlineAt
+                    self.cancellationReason = existingBooking.cancellationReason
+                    if state == .pending {
                         startPolling()
                     } else {
                         // Terminal or settled state — stop polling

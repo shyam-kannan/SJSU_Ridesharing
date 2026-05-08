@@ -1092,7 +1092,7 @@ private struct DriverTripGroupRow: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail) {
-            DriverTripDetailsView(trip: trip).environmentObject(authVM)
+            DriverTripDetailsView(trip: trip, onTripDeleted: onDeletePermanent).environmentObject(authVM)
         }
         .confirmationDialog("Delete this trip?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete Trip", role: .destructive) { onDeleteCancelled?() }

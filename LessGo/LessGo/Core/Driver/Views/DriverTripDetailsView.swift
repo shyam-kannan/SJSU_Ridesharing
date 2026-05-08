@@ -4,6 +4,7 @@ import Combine
 
 struct DriverTripDetailsView: View {
     let trip: Trip
+    var onTripDeleted: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authVM: AuthViewModel
 
@@ -15,6 +16,9 @@ struct DriverTripDetailsView: View {
     @State private var chatDestination: DriverNotificationChatDestination?
     @State private var showCancelTripConfirm = false
     @State private var isCancellingTrip = false
+    @State private var showDeleteTripConfirm = false
+    @State private var isDeletingTrip = false
+    @State private var deleteTripError: String?
     @State private var anchorPoints: [AnchorPoint] = []
     @State private var isLoadingAnchors = true
 
@@ -129,16 +133,29 @@ struct DriverTripDetailsView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showCancelTripConfirm = true }) {
-                        if isCancellingTrip {
-                            ProgressView().scaleEffect(0.8)
-                        } else {
-                            Text("Cancel Trip")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.brandRed)
+                    if trip.status == .cancelled || trip.status == .completed {
+                        Button(action: { showDeleteTripConfirm = true }) {
+                            if isDeletingTrip {
+                                ProgressView().scaleEffect(0.8)
+                            } else {
+                                Text("Delete Trip")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.brandRed)
+                            }
                         }
+                        .disabled(isDeletingTrip)
+                    } else {
+                        Button(action: { showCancelTripConfirm = true }) {
+                            if isCancellingTrip {
+                                ProgressView().scaleEffect(0.8)
+                            } else {
+                                Text("Cancel Trip")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.brandRed)
+                            }
+                        }
+                        .disabled(isCancellingTrip)
                     }
-                    .disabled(isCancellingTrip)
                 }
             }
             .confirmationDialog("Cancel this trip?", isPresented: $showCancelTripConfirm, titleVisibility: .visible) {
@@ -156,6 +173,22 @@ struct DriverTripDetailsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(cancelTripError ?? "")
+            }
+            .confirmationDialog("Delete this trip?", isPresented: $showDeleteTripConfirm, titleVisibility: .visible) {
+                Button("Delete Trip", role: .destructive) {
+                    Task { await deleteTrip() }
+                }
+                Button("Keep", role: .cancel) {}
+            } message: {
+                Text("This will permanently remove the trip from your history.")
+            }
+            .alert("Delete Failed", isPresented: Binding(
+                get: { deleteTripError != nil },
+                set: { if !$0 { deleteTripError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteTripError ?? "")
             }
         }
         .navigationViewStyle(.stack)
@@ -445,6 +478,8 @@ struct DriverTripDetailsView: View {
 
         if trip.status == .cancelled {
             passengers = []
+            isLoading = false
+            isLoadingPassengers = false
             return
         }
 
@@ -475,8 +510,10 @@ struct DriverTripDetailsView: View {
 
     private func approveBooking(_ passenger: BookingWithRider) async {
         do {
-            _ = try await BookingService.shared.approveBooking(id: passenger.id)
-            await loadPassengers()
+            let updated = try await BookingService.shared.approveBooking(id: passenger.id)
+            if let idx = passengers.firstIndex(where: { $0.id == updated.id }) {
+                passengers[idx] = passengers[idx].withBookingState(updated.bookingState)
+            }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             print("Error approving booking: \(error)")
@@ -486,13 +523,29 @@ struct DriverTripDetailsView: View {
 
     private func rejectBooking(_ passenger: BookingWithRider) async {
         do {
-            _ = try await BookingService.shared.rejectBooking(id: passenger.id)
-            await loadPassengers()
+            let updated = try await BookingService.shared.rejectBooking(id: passenger.id)
+            if let idx = passengers.firstIndex(where: { $0.id == updated.id }) {
+                passengers[idx] = passengers[idx].withBookingState(updated.bookingState)
+            }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             print("Error rejecting booking: \(error)")
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
+    }
+
+    private func deleteTrip() async {
+        isDeletingTrip = true
+        do {
+            try await TripService.shared.deleteTrip(tripId: trip.id)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onTripDeleted?()
+            dismiss()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            deleteTripError = "Failed to delete trip. Please try again."
+        }
+        isDeletingTrip = false
     }
 
     private func openChat(with passenger: BookingWithRider) {
@@ -705,19 +758,39 @@ private struct PendingBookingCard: View {
 
 // MARK: - Payment Badge Helper
 
+private func formatDeadlineLabel(_ date: Date) -> String {
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    formatter.timeStyle = .short
+    if calendar.isDateInToday(date) || calendar.isDateInTomorrow(date) {
+        return formatter.string(from: date)
+    }
+    formatter.dateStyle = .medium
+    return formatter.string(from: date)
+}
+
 private func paymentBadge(for passenger: BookingWithRider) -> some View {
     let held = passenger.paymentIntentId != nil
-    return HStack(spacing: 4) {
-        Image(systemName: held ? "lock.shield.fill" : "clock.badge.exclamationmark.fill")
-            .font(.system(size: 10))
-        Text(held ? "Payment Held" : "Awaiting Payment")
-            .font(.system(size: 11, weight: .semibold))
+    return VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 4) {
+            Image(systemName: held ? "lock.shield.fill" : "clock.badge.exclamationmark.fill")
+                .font(.system(size: 10))
+            Text(held ? "Payment Held" : "Awaiting Payment")
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(held ? .brandGreen : .brandGold)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background((held ? Color.brandGreen : Color.brandGold).opacity(0.12))
+        .cornerRadius(8)
+
+        if !held, let deadline = passenger.paymentDeadlineAt {
+            Text("Due by \(formatDeadlineLabel(deadline))")
+                .font(.system(size: 10))
+                .foregroundColor(.brandOrange)
+                .padding(.horizontal, 4)
+        }
     }
-    .foregroundColor(held ? .brandGreen : .brandGold)
-    .padding(.horizontal, 8)
-    .padding(.vertical, 4)
-    .background((held ? Color.brandGreen : Color.brandGold).opacity(0.12))
-    .cornerRadius(8)
 }
 
 // MARK: - Helper Functions

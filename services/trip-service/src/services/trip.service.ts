@@ -986,6 +986,117 @@ export const deleteTrip = async (tripId: string, driverId: string): Promise<void
   );
 };
 
+/**
+ * Remove all anchor points that belong to a specific rider from a trip's route.
+ * Called after a payment-deadline cancellation so the route no longer includes
+ * the removed rider's pickup/dropoff stops.
+ *
+ * @param tripId  Trip UUID
+ * @param riderId Rider UUID to remove from the route
+ */
+export const removeRiderFromRoute = async (tripId: string, riderId: string): Promise<void> => {
+  // Fetch current anchor_points
+  const result = await pool.query<{ anchor_points: any[] }>(
+    `SELECT COALESCE(anchor_points, '[]'::jsonb) AS anchor_points FROM trips WHERE trip_id = $1`,
+    [tripId]
+  );
+  if (result.rows.length === 0) return;
+
+  const currentAnchors: any[] = Array.isArray(result.rows[0].anchor_points)
+    ? result.rows[0].anchor_points
+    : [];
+
+  const updatedAnchors = currentAnchors.filter((ap: any) => ap.rider_id !== riderId);
+
+  // Only update if something was actually removed
+  if (updatedAnchors.length < currentAnchors.length) {
+    await pool.query(
+      `UPDATE trips SET anchor_points = $1::jsonb, updated_at = NOW() WHERE trip_id = $2`,
+      [JSON.stringify(updatedAnchors), tripId]
+    );
+    console.log(
+      `[removeRiderFromRoute] Removed rider ${riderId} from trip ${tripId} route (${currentAnchors.length} → ${updatedAnchors.length} anchors)`
+    );
+  }
+};
+
+/**
+ * Detect bookings that were cancelled by the pg_cron payment-deadline job
+ * (cancellation_reason = 'payment_not_completed', route_updated_after_cancel = FALSE),
+ * update the trip route by removing the rider, and send notifications.
+ *
+ * Exposed as POST /trips/internal/process-deadline-cancellations.
+ */
+export const processDeadlineCancellations = async (): Promise<{ processed: number }> => {
+  // Find newly deadline-cancelled bookings that haven't had their route updated yet
+  const query = `
+    SELECT b.booking_id, b.trip_id, b.rider_id, b.seats_booked,
+           u.email AS rider_email, u.name AS rider_name,
+           t.origin, t.destination, t.departure_time, t.driver_id
+    FROM bookings b
+    JOIN users u ON b.rider_id = u.user_id
+    JOIN trips  t ON b.trip_id = t.trip_id
+    WHERE b.booking_state           = 'cancelled'
+      AND b.cancellation_reason     = 'payment_not_completed'
+      AND b.route_updated_after_cancel = FALSE
+      AND b.deleted_at IS NULL
+  `;
+
+  const result = await pool.query(query);
+  if (result.rows.length === 0) return { processed: 0 };
+
+  for (const row of result.rows) {
+    try {
+      // 1. Remove rider from route
+      await removeRiderFromRoute(row.trip_id, row.rider_id);
+
+      // 2. Mark route as updated so we don't process it again
+      await pool.query(
+        `UPDATE bookings SET route_updated_after_cancel = TRUE, updated_at = NOW() WHERE booking_id = $1`,
+        [row.booking_id]
+      );
+
+      // 3. Send notifications (fire-and-forget; non-fatal)
+      // Find other approved/pending riders on the same trip for the route-update notification
+      const otherRidersResult = await pool.query(
+        `SELECT rider_id FROM bookings
+         WHERE trip_id = $1
+           AND booking_state IN ('pending', 'approved')
+           AND rider_id != $2
+           AND deleted_at IS NULL`,
+        [row.trip_id, row.rider_id]
+      );
+      const otherPassengerIds: string[] = otherRidersResult.rows.map((r: any) => r.rider_id);
+
+      axios.post(`${config.notificationServiceUrl}/notifications/send/payment-deadline-cancelled`, {
+        rider_id: row.rider_id,
+        rider_email: row.rider_email,
+        driver_id: row.driver_id,
+        other_passenger_ids: otherPassengerIds,
+        trip_origin: row.origin,
+        trip_destination: row.destination,
+        departure_time: row.departure_time,
+      }).catch((err: unknown) => {
+        console.warn(
+          `[processDeadlineCancellations] Notification failed for booking ${row.booking_id}:`,
+          err
+        );
+      });
+
+      console.log(
+        `[processDeadlineCancellations] Processed booking ${row.booking_id} (trip ${row.trip_id}, rider ${row.rider_id})`
+      );
+    } catch (err) {
+      console.error(
+        `[processDeadlineCancellations] Error processing booking ${row.booking_id}:`,
+        err
+      );
+    }
+  }
+
+  return { processed: result.rows.length };
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
@@ -1002,4 +1113,6 @@ export default {
   getTripMessages,
   markMessagesAsRead,
   isLocationNearSJSU,
+  removeRiderFromRoute,
+  processDeadlineCancellations,
 };
