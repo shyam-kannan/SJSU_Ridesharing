@@ -1479,6 +1479,7 @@ private struct BookingRideDetailView: View {
 
     @State private var anchorPoints: [AnchorPoint] = []
     @State private var isLoadingAnchors = true
+    @State private var riderPickupAddress: String?
     @State private var isAuthorizing = false
     @State private var authError: String?
 
@@ -1570,6 +1571,16 @@ private struct BookingRideDetailView: View {
         } catch {
             print("Error loading anchor points: \(error)")
             isLoadingAnchors = false
+        }
+        // Reverse-geocode rider's pickup coordinate if address not stored
+        if let pl = booking.pickupLocation, pl.address == nil {
+            let geocoder = CLGeocoder()
+            let loc = CLLocation(latitude: pl.lat, longitude: pl.lng)
+            if let placemark = try? await geocoder.reverseGeocodeLocation(loc).first {
+                riderPickupAddress = [placemark.name, placemark.locality].compactMap { $0 }.joined(separator: ", ")
+            }
+        } else {
+            riderPickupAddress = booking.pickupLocation?.address
         }
     }
 
@@ -1773,11 +1784,11 @@ private struct BookingRideDetailView: View {
         let riderPickup: String
         let riderDropoff: String
         if toSJSU {
-            riderPickup  = currentBooking.pickupLocation?.address ?? trip.origin
+            riderPickup  = riderPickupAddress ?? trip.origin
             riderDropoff = trip.destination
         } else {
             riderPickup  = trip.origin
-            riderDropoff = currentBooking.pickupLocation?.address ?? trip.destination
+            riderDropoff = riderPickupAddress ?? trip.destination
         }
 
         return VStack(alignment: .leading, spacing: 14) {
