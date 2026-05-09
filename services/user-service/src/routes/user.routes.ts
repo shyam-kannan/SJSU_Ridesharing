@@ -191,4 +191,16 @@ router.post('/driver/stripe-onboard', authenticateToken, asyncHandler(userContro
  */
 router.get('/driver/stripe-dashboard', authenticateToken, asyncHandler(userController.stripeDashboard));
 
+/**
+ * @route   GET /stripe/connect-return
+ * @desc    Stripe Connect onboarding return redirect (no auth — called by Stripe in browser)
+ */
+router.get('/stripe/connect-return', userController.stripeConnectReturn);
+
+/**
+ * @route   GET /stripe/connect-refresh
+ * @desc    Stripe Connect onboarding refresh redirect (no auth — called by Stripe in browser)
+ */
+router.get('/stripe/connect-refresh', userController.stripeConnectRefresh);
+
 export default router;

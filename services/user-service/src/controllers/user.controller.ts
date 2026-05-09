@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { Pool } from 'pg';
 import * as userService from '../services/user.service';
 import { AuthRequest, AppError, successResponse, errorResponse, DriverSetupRequest } from '@lessgo/shared';
@@ -555,8 +555,9 @@ export const stripeOnboard = async (req: AuthRequest, res: Response): Promise<vo
       res.status(403).json({ status: 'error', message: 'Only drivers can set up payouts' });
       return;
     }
-    const returnUrl = `${process.env.APP_SCHEME ?? 'lessgo'}://stripe-return`;
-    const refreshUrl = `${process.env.APP_SCHEME ?? 'lessgo'}://stripe-refresh`;
+    const gatewayUrl = process.env.GATEWAY_PUBLIC_URL ?? 'https://lessgo-zeta.vercel.app';
+    const returnUrl = `${gatewayUrl}/api/users/stripe/connect-return`;
+    const refreshUrl = `${gatewayUrl}/api/users/stripe/connect-refresh`;
     const result = await userService.createStripeConnectOnboardingUrl(userId, returnUrl, refreshUrl);
     res.json({ status: 'success', data: result });
   } catch (err) {
@@ -588,4 +589,20 @@ export const stripeDashboard = async (req: AuthRequest, res: Response): Promise<
     console.error('Stripe dashboard error:', err);
     throw new AppError('Failed to get Stripe dashboard URL', 500);
   }
+};
+
+/**
+ * GET /stripe/connect-return
+ * Stripe redirects here after onboarding; we bounce to the app deep link.
+ */
+export const stripeConnectReturn = (_req: Request, res: Response): void => {
+  res.redirect('lessgo://stripe-return');
+};
+
+/**
+ * GET /stripe/connect-refresh
+ * Stripe redirects here when the onboarding link expires; bounce to app.
+ */
+export const stripeConnectRefresh = (_req: Request, res: Response): void => {
+  res.redirect('lessgo://stripe-refresh');
 };

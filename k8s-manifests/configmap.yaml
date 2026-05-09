@@ -20,3 +20,4 @@ data:
   EMBEDDING_SERVICE_URL: "http://embedding-service:3010"
   ROUTING_SERVICE_URL: "http://routing-service:8002"
   SAFETY_SERVICE_URL: "http://safety-service:8000"
+  GATEWAY_PUBLIC_URL: "https://lessgo-zeta.vercel.app"

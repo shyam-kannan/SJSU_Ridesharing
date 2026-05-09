@@ -160,38 +160,30 @@ class UserService {
     // MARK: - Stripe Connect
 
     func startStripeOnboarding() async throws -> URL {
-        struct OnboardResponse: Codable {
-            let status: String
-            let data: OnboardData
-            struct OnboardData: Codable {
-                let url: String
-            }
+        struct OnboardData: Codable {
+            let url: String
         }
-        let response: OnboardResponse = try await network.request(
+        let response: OnboardData = try await network.request(
             endpoint: "/users/driver/stripe-onboard",
             method: .post,
             requiresAuth: true
         )
-        guard let url = URL(string: response.data.url) else {
+        guard let url = URL(string: response.url) else {
             throw NetworkError.decodingError(NSError(domain: "Invalid Stripe onboarding URL", code: 0))
         }
         return url
     }
 
     func getStripeDashboardUrl() async throws -> URL {
-        struct DashResponse: Codable {
-            let status: String
-            let data: DashData
-            struct DashData: Codable {
-                let url: String
-            }
+        struct DashData: Codable {
+            let url: String
         }
-        let response: DashResponse = try await network.request(
+        let response: DashData = try await network.request(
             endpoint: "/users/driver/stripe-dashboard",
             method: .get,
             requiresAuth: true
         )
-        guard let url = URL(string: response.data.url) else {
+        guard let url = URL(string: response.url) else {
             throw NetworkError.decodingError(NSError(domain: "Invalid Stripe dashboard URL", code: 0))
         }
         return url
