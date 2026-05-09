@@ -6,7 +6,6 @@ import StripePaymentSheet
 struct BookingConfirmationView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var bookingVM: BookingViewModel
-    @EnvironmentObject private var stripeManager: StripePaymentManager
     @Environment(\.dismiss) private var dismiss
 
     let trip: Trip
@@ -171,8 +170,8 @@ struct BookingConfirmationView: View {
                         VStack(spacing: 0) {
                             Divider()
                             PrimaryButton(
-                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", totalPrice))",
-                                icon: isBookingComplete ? "checkmark" : "lock.fill",
+                                title: isBookingComplete ? "✓ Request Sent" : "Request Ride",
+                                icon: isBookingComplete ? "checkmark" : "paperplane.fill",
                                 isLoading: bookingVM.isCreating || bookingVM.isLoading,
                                 isEnabled: !isBookingComplete
                             ) { confirmBooking() }
@@ -208,19 +207,6 @@ struct BookingConfirmationView: View {
             IDVerificationView().environmentObject(authVM)
                 .onDisappear { Task { await authVM.refreshCurrentUser() } }
         }
-        .background(
-            Group {
-                if let sheet = stripeManager.paymentSheet {
-                    Color.clear.paymentSheet(
-                        isPresented: $bookingVM.shouldPresentPaymentSheet,
-                        paymentSheet: sheet,
-                        onCompletion: { result in
-                            Task { await bookingVM.handlePaymentResult(result) }
-                        }
-                    )
-                }
-            }
-        )
     }
 
     private func confirmBooking() {
@@ -238,12 +224,8 @@ struct BookingConfirmationView: View {
 
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
-            if success, let bookingId = bookingVM.currentBooking?.id {
-                let ready = await bookingVM.confirmAndPay(bookingId: bookingId, amount: totalPrice)
-                if !ready {
-                    // authorizePayment failed - allow retry
-                    isBookingComplete = false
-                }
+            if success {
+                withAnimation { showSuccess = true }
             } else {
                 // Booking creation failed - allow retry
                 isBookingComplete = false
@@ -1498,6 +1480,7 @@ private struct BookingRideDetailView: View {
     @State private var riderPickupAddress: String?
     @State private var isAuthorizing = false
     @State private var authError: String?
+    @State private var paymentSucceeded = false
     @ObservedObject private var stripeManager = StripePaymentManager.shared
     @State private var shouldPresentPaymentSheet = false
 
@@ -1589,6 +1572,19 @@ private struct BookingRideDetailView: View {
                 }
             }
         )
+        .alert("Payment Error", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            Text(authError ?? "")
+        }
+        .alert("Payment Hold Placed", isPresented: $paymentSucceeded) {
+            Button("OK") {}
+        } message: {
+            Text("Your payment hold was successful. The charge will be finalized when your ride is complete.")
+        }
         .task {
             await loadAnchorPoints()
         }
@@ -1817,8 +1813,13 @@ private struct BookingRideDetailView: View {
     private func handlePaymentResult(_ result: PaymentSheetResult) async {
         switch result {
         case .completed:
-            try? await BookingService.shared.confirmPayment(bookingId: booking.id)
+            do {
+                try await BookingService.shared.confirmPayment(bookingId: booking.id)
+            } catch {
+                authError = "Payment succeeded but server confirmation failed: \(error.localizedDescription)"
+            }
             await vm.loadBookings(asDriver: false)
+            paymentSucceeded = true
         case .canceled:
             break
         case .failed(let error):
