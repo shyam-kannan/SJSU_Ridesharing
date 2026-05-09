@@ -162,10 +162,12 @@ class BookingService {
     // MARK: - Get Booking for Trip
 
     func getBookingForTrip(tripId: String) async throws -> Booking? {
+        // GET /bookings returns the authenticated rider's own bookings.
+        // The driver-only /bookings/trip/:tripId endpoint returns 403 for riders.
         let response: BookingListResponse = try await network.request(
-            endpoint: "/bookings/trip/\(tripId)",
+            endpoint: "/bookings",
             method: .get
         )
-        return response.bookings.first
+        return response.bookings.first { $0.tripId == tripId }
     }
 }

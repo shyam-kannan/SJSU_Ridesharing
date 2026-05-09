@@ -541,8 +541,10 @@ struct TripDetailView: View {
                         .strokeBorder(Color.brandGreen.opacity(0.5), lineWidth: 1)
                 )
 
+                let paymentDone = viewModel.paymentAuthorized || viewModel.booking?.paymentIntentId != nil
+
                 // Payment deadline banner — shown when payment has not yet been completed
-                if viewModel.booking?.paymentIntentId == nil, let deadline = viewModel.paymentDeadlineAt {
+                if !paymentDone, let deadline = viewModel.paymentDeadlineAt {
                     HStack(spacing: 10) {
                         Image(systemName: "clock.badge.exclamationmark.fill")
                             .font(.system(size: 18))
@@ -565,6 +567,46 @@ struct TripDetailView: View {
                         RoundedRectangle(cornerRadius: 14)
                             .strokeBorder(Color.brandOrange.opacity(0.35), lineWidth: 1)
                     )
+                }
+
+                // Confirm & Pay button — hidden once payment is done
+                if !paymentDone {
+                    Button(action: {
+                        Task { await viewModel.authorizePayment() }
+                    }) {
+                        HStack(spacing: 8) {
+                            if viewModel.isAuthorizing {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "creditcard.fill")
+                            }
+                            Text(viewModel.isAuthorizing ? "Processing..." : "Confirm & Pay")
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(viewModel.isAuthorizing ? Color.brand.opacity(0.6) : Color.brand)
+                        .cornerRadius(12)
+                    }
+                    .disabled(viewModel.isAuthorizing)
+                } else {
+                    VStack(spacing: 4) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "lock.fill")
+                                .foregroundColor(.brandOrange)
+                            Text("Payment Held")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.brandOrange)
+                        }
+                        Text("You'll only be charged when the trip completes")
+                            .font(.system(size: 12))
+                            .foregroundColor(.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.brandOrange.opacity(0.1))
+                    .cornerRadius(12)
                 }
 
                 Button(action: { showChat = true }) {

@@ -1451,7 +1451,9 @@ private struct BookingRow: View {
         case .pending: return "Payment Held"
         case .refunded: return "Refunded"
         case .failed: return "Failed"
-        case .none: return "Quoted"
+        case .none:
+            // payment_intent_id set means card is held; no row in payments table yet
+            return booking.paymentIntentId != nil ? "Payment Held" : "Quoted"
         }
     }
 
@@ -1461,7 +1463,8 @@ private struct BookingRow: View {
         case .pending: return .brandOrange
         case .refunded: return .brand
         case .failed: return .brandRed
-        case .none: return .textSecondary
+        case .none:
+            return booking.paymentIntentId != nil ? .brandOrange : .textSecondary
         }
     }
 }
@@ -1560,17 +1563,13 @@ private struct BookingRideDetailView: View {
         .navigationTitle("Ride Details")
         .navigationBarTitleDisplayMode(.inline)
         .background(
-            Group {
-                if let sheet = paymentSheet {
-                    Color.clear.paymentSheet(
-                        isPresented: $shouldPresentPaymentSheet,
-                        paymentSheet: sheet,
-                        onCompletion: { result in
-                            Task { await handlePaymentResult(result) }
-                        }
-                    )
+            PaymentSheetPresenter(
+                paymentSheet: paymentSheet,
+                isPresented: $shouldPresentPaymentSheet,
+                onCompletion: { result in
+                    Task { await handlePaymentResult(result) }
                 }
-            }
+            )
         )
 
         .alert("Payment Error", isPresented: Binding(
@@ -1613,9 +1612,9 @@ private struct BookingRideDetailView: View {
     }
 
     private var bookingStateLabel: String {
-        switch booking.bookingState {
+        switch currentBooking.bookingState {
         case .pending:   return "Awaiting Approval"
-        case .approved:  return booking.payment == nil ? "Approved — Pay Now" : "Approved"
+        case .approved:  return (currentBooking.payment == nil && currentBooking.paymentIntentId == nil) ? "Approved — Pay Now" : "Approved"
         case .cancelled: return "Cancelled"
         case .rejected:  return "Rejected"
         case .completed: return "Completed"
@@ -1659,9 +1658,9 @@ private struct BookingRideDetailView: View {
     }
 
     private var bookingStatusTimeline: some View {
-        let approvedDone = booking.bookingState == .approved || booking.bookingState == .completed
-        let paymentDone = booking.payment != nil
-        let completeDone = booking.bookingState == .completed
+        let approvedDone = currentBooking.bookingState == .approved || currentBooking.bookingState == .completed
+        let paymentDone = currentBooking.payment != nil || currentBooking.paymentIntentId != nil
+        let completeDone = currentBooking.bookingState == .completed
         let steps: [(String, String, Bool)] = [
             ("Requested", "paperplane.fill",      true),
             ("Approved",  "checkmark.circle.fill", approvedDone),
@@ -1826,6 +1825,7 @@ private struct BookingRideDetailView: View {
                 authError = "Payment succeeded but server confirmation failed: \(error.localizedDescription)"
             }
             await vm.loadBookings(asDriver: false)
+            await loadAnchorPoints()
             paymentSucceeded = true
         case .canceled:
             break
@@ -2076,7 +2076,8 @@ private struct BookingRideDetailView: View {
             }
 
             // Rider: authorize payment hold after driver approves
-            if !showAsDriver && currentBooking.bookingState == .approved && currentBooking.payment == nil {
+            if !showAsDriver && currentBooking.bookingState == .approved
+                && currentBooking.payment == nil && currentBooking.paymentIntentId == nil {
                 Button(action: { Task { await authorizePayment() } }) {
                     actionPill(
                         title: isAuthorizing ? "Authorizing…" : "Confirm & Pay Hold",
@@ -2086,6 +2087,19 @@ private struct BookingRideDetailView: View {
                     )
                 }
                 .disabled(isAuthorizing)
+            } else if !showAsDriver && currentBooking.bookingState == .approved
+                && (currentBooking.payment != nil || currentBooking.paymentIntentId != nil) {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.fill")
+                    Text("Payment Held")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.brandOrange)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+                .background(Color.brandOrange.opacity(0.1))
+                .cornerRadius(10)
             }
 
             if !showAsDriver && booking.status == .pending {
@@ -2215,4 +2229,30 @@ private struct BookingRideDetailView: View {
         case .failed:   return "Failed"
         }
     }
+}
+
+// MARK: - Imperative PaymentSheet presenter
+// Bypasses SwiftUI modifier timing by calling PaymentSheet.present() directly
+// from a UIViewController that is always in the view hierarchy.
+private struct PaymentSheetPresenter: UIViewControllerRepresentable {
+    let paymentSheet: PaymentSheet?
+    @Binding var isPresented: Bool
+    let onCompletion: (PaymentSheetResult) -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController { UIViewController() }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        guard isPresented, let sheet = paymentSheet,
+              let root = uiViewController.view.window?.rootViewController,
+              !context.coordinator.isPresenting else { return }
+        context.coordinator.isPresenting = true
+        sheet.present(from: root) { result in
+            isPresented = false
+            context.coordinator.isPresenting = false
+            onCompletion(result)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    class Coordinator { var isPresenting = false }
 }

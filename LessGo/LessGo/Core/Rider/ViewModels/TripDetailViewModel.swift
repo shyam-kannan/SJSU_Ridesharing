@@ -165,6 +165,14 @@ class TripDetailViewModel: ObservableObject {
             // requires_capture, ready for driver-triggered capture at trip end.
             try await bookingService.confirmPayment(bookingId: bookingId)
 
+            // Fetch by booking ID directly — getBookingForTrip hits a driver-only
+            // endpoint and 403s for riders, so we use getBooking(id:) instead.
+            if let refreshed = try? await bookingService.getBooking(id: bookingId) {
+                booking = refreshed
+            } else {
+                print("[PAYMENT] Warning: failed to re-fetch booking \(bookingId) after payment")
+            }
+            // paymentAuthorized is the fallback: hides the button even if re-fetch fails
             paymentAuthorized = true
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
@@ -180,12 +188,18 @@ class TripDetailViewModel: ObservableObject {
 
     func checkExistingBooking() async {
         do {
-            let existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
+            // If we already have a booking ID, fetch it directly for freshest data.
+            // Otherwise fall back to listing rider's bookings filtered by trip.
+            let existingBooking: Booking?
+            if let knownId = booking?.id {
+                existingBooking = try await bookingService.getBooking(id: knownId)
+            } else {
+                existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
+            }
             if let existingBooking = existingBooking,
                existingBooking.bookingState == .cancelled || existingBooking.bookingState == .rejected {
                 booking = nil
                 bookingState = nil
-                // Still surface cancellation reason if available (e.g. payment_not_completed)
                 cancellationReason = existingBooking.cancellationReason
                 paymentDeadlineAt = nil
             } else {
@@ -195,12 +209,7 @@ class TripDetailViewModel: ObservableObject {
                     self.bookingState = state
                     self.paymentDeadlineAt = existingBooking.paymentDeadlineAt
                     self.cancellationReason = existingBooking.cancellationReason
-                    if state == .pending {
-                        startPolling()
-                    } else {
-                        // Terminal or settled state — stop polling
-                        stopPolling()
-                    }
+                    if state == .pending { startPolling() } else { stopPolling() }
                 }
             }
         } catch {
