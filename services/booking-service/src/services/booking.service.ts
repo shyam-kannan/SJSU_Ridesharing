@@ -872,18 +872,21 @@ export const authorizePayment = async (
     throw new AppError('Booking must be approved before payment can be authorized', 400);
   }
 
-  // Don't create a duplicate PaymentIntent
+  // Don't create a duplicate PaymentIntent — but only reuse if it's still usable
   const existingResult = await pool.query(
     'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
     [bookingId]
   );
   if (existingResult.rows[0]?.payment_intent_id) {
-    // Return existing PaymentIntent client secret
     const existing = await stripe.paymentIntents.retrieve(existingResult.rows[0].payment_intent_id);
-    return {
-      clientSecret: existing.client_secret!,
-      paymentIntentId: existing.id,
-    };
+    // Reuse only if the intent can still accept a payment method
+    if (existing.status === 'requires_payment_method' || existing.status === 'requires_confirmation') {
+      return {
+        clientSecret: existing.client_secret!,
+        paymentIntentId: existing.id,
+      };
+    }
+    // Otherwise fall through to create a fresh PaymentIntent
   }
 
   // Determine fare amount in cents
@@ -898,6 +901,7 @@ export const authorizePayment = async (
     amount: amountCents,
     currency: 'usd',
     capture_method: 'manual',
+    automatic_payment_methods: { enabled: true },
     metadata: {
       booking_id: bookingId,
       rider_id: riderId,
