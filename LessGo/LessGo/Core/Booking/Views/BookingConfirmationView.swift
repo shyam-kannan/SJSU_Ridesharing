@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreLocation
 import Combine
+import StripePaymentSheet
 
 struct BookingConfirmationView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -16,8 +17,13 @@ struct BookingConfirmationView: View {
     @State private var showIDVerificationSheet = false
     @State private var isBookingComplete = false
 
-    private var displayedPrice: Double {
-        bookingVM.currentBooking?.quote?.maxPrice ?? Double(seats) * 8.50
+    // quote.maxPrice is the per-rider price from the cost service
+    private var perSeatPrice: Double {
+        bookingVM.currentBooking?.quote?.maxPrice ?? 8.50
+    }
+
+    private var totalPrice: Double {
+        perSeatPrice * Double(seats)
     }
 
     var body: some View {
@@ -124,7 +130,7 @@ struct BookingConfirmationView: View {
                                     .foregroundColor(.textPrimary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                                PriceRow(label: "Per seat", value: String(format: "$%.2f", displayedPrice / Double(max(seats, 1))))
+                                PriceRow(label: "Per seat", value: String(format: "$%.2f", perSeatPrice))
                                 PriceRow(label: "Seats", value: "× \(seats)")
                                 Rectangle()
                                     .fill(
@@ -136,7 +142,7 @@ struct BookingConfirmationView: View {
                                     )
                                     .frame(height: 1.5)
                                     .cornerRadius(1)
-                                PriceRow(label: "Total", value: String(format: "$%.2f", displayedPrice), isBold: true)
+                                PriceRow(label: "Total", value: String(format: "$%.2f", totalPrice), isBold: true)
                             }
                             .padding(16)
                             .elevatedCard(cornerRadius: 20)
@@ -164,8 +170,8 @@ struct BookingConfirmationView: View {
                         VStack(spacing: 0) {
                             Divider()
                             PrimaryButton(
-                                title: isBookingComplete ? "✓ Booking Complete" : "Confirm & Pay \(String(format: "$%.2f", displayedPrice))",
-                                icon: isBookingComplete ? "checkmark" : "lock.fill",
+                                title: isBookingComplete ? "✓ Request Sent" : "Request Ride",
+                                icon: isBookingComplete ? "checkmark" : "paperplane.fill",
                                 isLoading: bookingVM.isCreating || bookingVM.isLoading,
                                 isEnabled: !isBookingComplete
                             ) { confirmBooking() }
@@ -186,6 +192,9 @@ struct BookingConfirmationView: View {
                     }
                 }
             }
+        }
+        .onChange(of: bookingVM.showSuccess) { success in
+            if success { withAnimation { showSuccess = true } }
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.75), value: showSuccess)
         .alert("Verification Required", isPresented: $showVerificationAlert) {
@@ -215,14 +224,8 @@ struct BookingConfirmationView: View {
 
         Task {
             let success = await bookingVM.createBooking(tripId: trip.id, seats: seats)
-            if success, let bookingId = bookingVM.currentBooking?.id {
-                let paid = await bookingVM.confirmAndPay(bookingId: bookingId, amount: displayedPrice)
-                if paid {
-                    withAnimation { showSuccess = true }
-                } else {
-                    // Payment failed - allow retry
-                    isBookingComplete = false
-                }
+            if success {
+                withAnimation { showSuccess = true }
             } else {
                 // Booking creation failed - allow retry
                 isBookingComplete = false
@@ -535,7 +538,7 @@ struct BookingListView: View {
                             .padding(.horizontal, AppConstants.pagePadding)
                     }
                     .refreshable { await refreshCurrentTab() }
-                } else if filteredBookings.isEmpty {
+                } else if (showAsDriver && driverTab == .passengers) ? vm.bookingsGroupedByTrip.isEmpty : filteredBookings.isEmpty {
                     ScrollView {
                         EmptyStateView(
                             icon: "calendar.badge.plus",
@@ -551,14 +554,25 @@ struct BookingListView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 14) {
-                            ForEach(filteredBookings) { booking in
-                                BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
-                                    reportedUserId = userId
-                                    reportedUserName = userName
-                                    reportTripId = tripId
-                                    showReportUser = true
+                            if showAsDriver && driverTab == .passengers {
+                                ForEach(vm.bookingsGroupedByTrip, id: \.trip.id) { group in
+                                    DriverTripGroupRow(
+                                        trip: group.trip,
+                                        bookings: group.bookings,
+                                        onDeleteCancelled: { Task { await vm.deletePostedTrip(id: group.trip.id) } }
+                                    )
+                                    .padding(.horizontal, AppConstants.pagePadding)
                                 }
-                                .padding(.horizontal, AppConstants.pagePadding)
+                            } else {
+                                ForEach(filteredBookings) { booking in
+                                    BookingRow(booking: booking, vm: vm, showAsDriver: showAsDriver) { userId, userName, tripId in
+                                        reportedUserId = userId
+                                        reportedUserName = userName
+                                        reportTripId = tripId
+                                        showReportUser = true
+                                    }
+                                    .padding(.horizontal, AppConstants.pagePadding)
+                                }
                             }
                         }
                         .padding(.top, 14)
@@ -674,7 +688,8 @@ struct BookingListView: View {
                         PostedTripRow(
                             trip: trip,
                             onEdit: { editingTrip = trip },
-                            onDelete: { Task { await vm.cancelPostedTrip(id: trip.id) } }
+                            onDelete: { Task { await vm.cancelPostedTrip(id: trip.id) } },
+                            onDeletePermanent: { Task { await vm.deletePostedTrip(id: trip.id) } }
                         )
                         .padding(.horizontal, AppConstants.pagePadding)
                     }
@@ -845,7 +860,9 @@ private struct PostedTripRow: View {
     let trip: Trip
     let onEdit: () -> Void
     let onDelete: () -> Void
+    var onDeletePermanent: (() -> Void)? = nil
     @State private var showDeleteConfirm = false
+    @State private var showPermanentDeleteConfirm = false
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -882,35 +899,61 @@ private struct PostedTripRow: View {
                     .font(.system(size: 12))
                     .foregroundColor(.textTertiary)
             }
+            let payout = trip.totalPayout ?? 0
+            let quoted = trip.totalQuoted ?? 0
+            if payout > 0 || quoted > 0 {
+                HStack(spacing: 12) {
+                    if payout > 0 {
+                        Label(String(format: "$%.2f payout", payout), systemImage: "dollarsign.circle.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.brandGreen)
+                    }
+                    if quoted > 0 {
+                        Label(String(format: "$%.2f quoted", quoted), systemImage: "clock.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.brandOrange)
+                    }
+                }
+            }
             HStack(spacing: 10) {
                 Spacer()
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.textSecondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.cardBackground)
-                        .overlay(
-                            Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1)
-                        )
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+                if trip.status == .cancelled {
+                    Button(action: { showPermanentDeleteConfirm = true }) {
+                        Label("Delete", systemImage: "trash")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.red.opacity(0.08))
+                            .overlay(Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button(action: onEdit) {
+                        Label("Edit", systemImage: "pencil")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.textSecondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.cardBackground)
+                            .overlay(Capsule().strokeBorder(DesignSystem.Colors.border.opacity(0.7), lineWidth: 1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
 
-                Button(action: { showDeleteConfirm = true }) {
-                    Label("Cancel", systemImage: "xmark")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.red.opacity(0.08))
-                        .overlay(
-                            Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
-                        )
-                        .clipShape(Capsule())
+                    Button(action: { showDeleteConfirm = true }) {
+                        Label("Cancel", systemImage: "xmark")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.red.opacity(0.08))
+                            .overlay(Capsule().strokeBorder(Color.red.opacity(0.3), lineWidth: 1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(AppConstants.cardPadding)
@@ -926,6 +969,12 @@ private struct PostedTripRow: View {
         } message: {
             Text("This will cancel the trip and notify any passengers.")
         }
+        .confirmationDialog("Delete this trip?", isPresented: $showPermanentDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete Trip", role: .destructive) { onDeletePermanent?() }
+            Button("Keep", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the cancelled trip from your history.")
+        }
     }
 
     private func statusColor(_ status: TripStatus) -> Color {
@@ -934,6 +983,99 @@ private struct PostedTripRow: View {
         case .enRoute, .inProgress, .arrived: return .blue
         case .completed: return .gray
         case .cancelled: return .red
+        }
+    }
+}
+
+// MARK: - Driver Trip Group Row
+
+private struct DriverTripGroupRow: View {
+    let trip: Trip
+    let bookings: [Booking]
+    var onDeleteCancelled: (() -> Void)? = nil
+    @EnvironmentObject var authVM: AuthViewModel
+    @State private var showDetail = false
+
+    private var pendingCount: Int {
+        bookings.filter { $0.bookingState == .pending }.count
+    }
+    private var approvedCount: Int {
+        bookings.filter { $0.bookingState == .approved }.count
+    }
+    private var riderNames: String {
+        bookings.compactMap { $0.rider?.name.components(separatedBy: " ").first }
+                .joined(separator: ", ")
+    }
+
+    private func tripStatusColor(_ status: TripStatus) -> Color {
+        switch status {
+        case .pending:   return .brandOrange
+        case .enRoute, .inProgress, .arrived: return .brand
+        case .completed: return .textTertiary
+        case .cancelled: return .brandRed
+        }
+    }
+
+    var body: some View {
+        Button(action: { showDetail = true }) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(trip.origin) → \(trip.destination)")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                            .lineLimit(1)
+                        Text(trip.departureTime, format: .dateTime.month().day().hour().minute())
+                            .font(.system(size: 12))
+                            .foregroundColor(.textSecondary)
+                    }
+                    Spacer()
+                    Text(trip.status.displayName)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(tripStatusColor(trip.status))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(tripStatusColor(trip.status).opacity(0.12))
+                        .clipShape(Capsule())
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.textTertiary)
+                }
+                HStack(spacing: 8) {
+                    if pendingCount > 0 {
+                        Label("\(pendingCount) pending", systemImage: "clock.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                    }
+                    if approvedCount > 0 {
+                        Label("\(approvedCount) confirmed", systemImage: "person.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Color.brandGreen)
+                            .clipShape(Capsule())
+                    }
+                }
+                if !riderNames.isEmpty {
+                    Text(riderNames)
+                        .font(.system(size: 12))
+                        .foregroundColor(.textTertiary)
+                }
+
+            }
+            .padding(AppConstants.cardPadding)
+            .background(Color.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppConstants.cardRadius, style: .continuous)
+                    .strokeBorder(DesignSystem.Colors.border.opacity(0.5), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showDetail) {
+            DriverTripDetailsView(trip: trip, onTripDeleted: onDeleteCancelled).environmentObject(authVM)
         }
     }
 }
@@ -1015,10 +1157,11 @@ private struct BookingRow: View {
     }
 
     var statusColor: Color {
-        switch booking.status {
+        switch booking.bookingState {
         case .pending:   return .brandOrange
-        case .confirmed: return .brandGreen
+        case .approved:  return .brandGreen
         case .cancelled: return .brandRed
+        case .rejected:  return .brandRed
         case .completed: return .textTertiary
         }
     }
@@ -1029,7 +1172,7 @@ private struct BookingRow: View {
                 // Status
                 HStack(spacing: 5) {
                     Circle().fill(statusColor).frame(width: 10, height: 10)
-                    Text(booking.status.rawValue.capitalized)
+                    Text(booking.bookingState.displayName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(statusColor)
                 }
@@ -1209,8 +1352,8 @@ private struct BookingRow: View {
                 }
             }
 
-            // Cancel button for pending bookings (riders only)
-            if !showAsDriver && booking.status == .pending {
+            // Cancel button for pending/approved bookings (riders only)
+            if !showAsDriver && (booking.bookingState == .pending || booking.bookingState == .approved) {
                 Button(action: {
                     Task {
                         let success = await vm.cancelBooking(id: booking.id)
@@ -1308,7 +1451,9 @@ private struct BookingRow: View {
         case .pending: return "Payment Held"
         case .refunded: return "Refunded"
         case .failed: return "Failed"
-        case .none: return "Quoted"
+        case .none:
+            // payment_intent_id set means card is held; no row in payments table yet
+            return booking.paymentIntentId != nil ? "Payment Held" : "Quoted"
         }
     }
 
@@ -1318,7 +1463,8 @@ private struct BookingRow: View {
         case .pending: return .brandOrange
         case .refunded: return .brand
         case .failed: return .brandRed
-        case .none: return .textSecondary
+        case .none:
+            return booking.paymentIntentId != nil ? .brandOrange : .textSecondary
         }
     }
 }
@@ -1334,35 +1480,46 @@ private struct BookingRideDetailView: View {
 
     @State private var anchorPoints: [AnchorPoint] = []
     @State private var isLoadingAnchors = true
+    @State private var riderPickupAddress: String?
     @State private var isAuthorizing = false
+    @State private var authError: String?
+    @State private var paymentSucceeded = false
+    @State private var paymentSheet: PaymentSheet?
+    @State private var shouldPresentPaymentSheet = false
+
+    private var currentBooking: Booking {
+        vm.bookings.first(where: { $0.id == booking.id }) ?? booking
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
-                if let trip = booking.trip {
-                    Group {
-                        if !anchorPoints.isEmpty {
-                            AnchorRouteMapView(
-                                origin: trip.originPoint?.clLocationCoordinate2D,
-                                destination: trip.destinationPoint?.clLocationCoordinate2D,
-                                driver: nil,
-                                anchorPoints: anchorPoints,
-                                showsUserLocation: true
-                            )
-                        } else {
-                            RouteMapView(
-                                origin: trip.originPoint?.clLocationCoordinate2D,
-                                destination: trip.destinationPoint?.clLocationCoordinate2D,
-                                driver: nil,
-                                showsUserLocation: true
-                            )
-                        }
-                    }
+                if let trip = currentBooking.trip {
+                    // Build anchor list: API anchors + rider's own pickup if available
+                    let riderPickupCoord: CLLocationCoordinate2D? = {
+                        guard let pl = currentBooking.pickupLocation else { return nil }
+                        return CLLocationCoordinate2D(latitude: pl.lat, longitude: pl.lng)
+                    }()
+                    let mapAnchors: [AnchorPoint] = {
+                        if !anchorPoints.isEmpty { return anchorPoints }
+                        guard let coord = riderPickupCoord else { return [] }
+                        return [AnchorPoint(lat: coord.latitude, lng: coord.longitude, type: .pickup, riderId: nil, label: nil, etaOffsetSeconds: nil)]
+                    }()
+
+                    AnchorRouteMapView(
+                        origin: trip.originPoint?.clLocationCoordinate2D,
+                        destination: trip.destinationPoint?.clLocationCoordinate2D,
+                        driver: nil,
+                        anchorPoints: mapAnchors,
+                        showsUserLocation: !showAsDriver
+                    )
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(alignment: .topLeading) {
-                        statusBadge
-                            .padding(14)
+                        if !showAsDriver {
+                            statusBadge
+                                .padding(14)
+                        }
                     }
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -1405,6 +1562,29 @@ private struct BookingRideDetailView: View {
         .background(Color.appBackground.ignoresSafeArea())
         .navigationTitle("Ride Details")
         .navigationBarTitleDisplayMode(.inline)
+        .background(
+            PaymentSheetPresenter(
+                paymentSheet: paymentSheet,
+                isPresented: $shouldPresentPaymentSheet,
+                onCompletion: { result in
+                    Task { await handlePaymentResult(result) }
+                }
+            )
+        )
+
+        .alert("Payment Error", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            Text(authError ?? "")
+        }
+        .alert("Payment Hold Placed", isPresented: $paymentSucceeded) {
+            Button("OK") {}
+        } message: {
+            Text("Your payment hold was successful. The charge will be finalized when your ride is complete.")
+        }
         .task {
             await loadAnchorPoints()
         }
@@ -1419,12 +1599,22 @@ private struct BookingRideDetailView: View {
             print("Error loading anchor points: \(error)")
             isLoadingAnchors = false
         }
+        // Reverse-geocode rider's pickup coordinate if address not stored
+        if let pl = booking.pickupLocation, pl.address == nil {
+            let geocoder = CLGeocoder()
+            let loc = CLLocation(latitude: pl.lat, longitude: pl.lng)
+            if let placemark = try? await geocoder.reverseGeocodeLocation(loc).first {
+                riderPickupAddress = [placemark.name, placemark.locality].compactMap { $0 }.joined(separator: ", ")
+            }
+        } else {
+            riderPickupAddress = booking.pickupLocation?.address
+        }
     }
 
     private var bookingStateLabel: String {
-        switch booking.bookingState {
+        switch currentBooking.bookingState {
         case .pending:   return "Awaiting Approval"
-        case .approved:  return booking.payment == nil ? "Approved — Pay Now" : "Approved"
+        case .approved:  return (currentBooking.payment == nil && currentBooking.paymentIntentId == nil) ? "Approved — Pay Now" : "Approved"
         case .cancelled: return "Cancelled"
         case .rejected:  return "Rejected"
         case .completed: return "Completed"
@@ -1468,9 +1658,9 @@ private struct BookingRideDetailView: View {
     }
 
     private var bookingStatusTimeline: some View {
-        let approvedDone = booking.bookingState == .approved || booking.bookingState == .completed
-        let paymentDone = booking.payment != nil
-        let completeDone = booking.bookingState == .completed
+        let approvedDone = currentBooking.bookingState == .approved || currentBooking.bookingState == .completed
+        let paymentDone = currentBooking.payment != nil || currentBooking.paymentIntentId != nil
+        let completeDone = currentBooking.bookingState == .completed
         let steps: [(String, String, Bool)] = [
             ("Requested", "paperplane.fill",      true),
             ("Approved",  "checkmark.circle.fill", approvedDone),
@@ -1609,36 +1799,114 @@ private struct BookingRideDetailView: View {
 
     private func authorizePayment() async {
         isAuthorizing = true
-        _ = try? await BookingService.shared.authorizePayment(bookingId: booking.id)
-        await vm.loadBookings(asDriver: false)
+        authError = nil
+        do {
+            let result = try await BookingService.shared.authorizePayment(bookingId: booking.id)
+            var config = PaymentSheet.Configuration()
+            config.merchantDisplayName = "LessGo Ridesharing"
+            config.style = .automatic
+            paymentSheet = PaymentSheet(paymentIntentClientSecret: result.clientSecret, configuration: config)
+            // Defer by one main-actor hop so SwiftUI re-renders the `if let sheet = paymentSheet`
+            // branch (attaching the .paymentSheet modifier) before isPresented flips true.
+            await Task.yield()
+            shouldPresentPaymentSheet = true
+        } catch {
+            authError = error.localizedDescription
+        }
         isAuthorizing = false
     }
 
+    private func handlePaymentResult(_ result: PaymentSheetResult) async {
+        switch result {
+        case .completed:
+            do {
+                try await BookingService.shared.confirmPayment(bookingId: booking.id)
+            } catch {
+                authError = "Payment succeeded but server confirmation failed: \(error.localizedDescription)"
+            }
+            await vm.loadBookings(asDriver: false)
+            await loadAnchorPoints()
+            paymentSucceeded = true
+        case .canceled:
+            break
+        case .failed(let error):
+            authError = error.localizedDescription
+        }
+    }
+
     private func routeCard(trip: Trip) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // Determine rider pickup/dropoff from booking.pickupLocation and trip direction.
+        // Direction: if destination contains "San Jose State" → toSJSU, else fromSJSU.
+        let toSJSU = trip.destination.localizedCaseInsensitiveContains("San Jose State")
+        let riderPickup: String
+        let riderDropoff: String
+        if toSJSU {
+            riderPickup  = riderPickupAddress ?? trip.origin
+            riderDropoff = trip.destination
+        } else {
+            riderPickup  = trip.origin
+            riderDropoff = riderPickupAddress ?? trip.destination
+        }
+
+        return VStack(alignment: .leading, spacing: 14) {
             sectionTitle("Trip")
 
-            HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 4) {
-                    Circle().fill(Color.brand).frame(width: 10, height: 10)
-                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 2, height: 22)
+            VStack(alignment: .leading, spacing: 10) {
+                // Driver start
+                HStack(spacing: 10) {
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.brand)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Driver starts at")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                        Text(trip.origin)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                    }
+                }
+                // Connector
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 27)
+                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 1.5, height: 14)
+                }
+                // Rider pickup
+                HStack(spacing: 10) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.brandGold)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Your pickup")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                        Text(riderPickup)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                    }
+                }
+                // Connector
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 27)
+                    Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 1.5, height: 14)
+                }
+                // Rider dropoff
+                HStack(spacing: 10) {
                     Image(systemName: "flag.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundColor(.brandGreen)
-                        .frame(width: 10, height: 10)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Your drop-off")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textSecondary)
+                        Text(riderDropoff)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                    }
                 }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(trip.origin)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(trip.destination)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
             }
             .padding(14)
             .background(
@@ -1808,7 +2076,8 @@ private struct BookingRideDetailView: View {
             }
 
             // Rider: authorize payment hold after driver approves
-            if !showAsDriver && booking.bookingState == .approved && booking.payment == nil {
+            if !showAsDriver && currentBooking.bookingState == .approved
+                && currentBooking.payment == nil && currentBooking.paymentIntentId == nil {
                 Button(action: { Task { await authorizePayment() } }) {
                     actionPill(
                         title: isAuthorizing ? "Authorizing…" : "Confirm & Pay Hold",
@@ -1818,6 +2087,19 @@ private struct BookingRideDetailView: View {
                     )
                 }
                 .disabled(isAuthorizing)
+            } else if !showAsDriver && currentBooking.bookingState == .approved
+                && (currentBooking.payment != nil || currentBooking.paymentIntentId != nil) {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.fill")
+                    Text("Payment Held")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.brandOrange)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+                .background(Color.brandOrange.opacity(0.1))
+                .cornerRadius(10)
             }
 
             if !showAsDriver && booking.status == .pending {
@@ -1947,4 +2229,30 @@ private struct BookingRideDetailView: View {
         case .failed:   return "Failed"
         }
     }
+}
+
+// MARK: - Imperative PaymentSheet presenter
+// Bypasses SwiftUI modifier timing by calling PaymentSheet.present() directly
+// from a UIViewController that is always in the view hierarchy.
+private struct PaymentSheetPresenter: UIViewControllerRepresentable {
+    let paymentSheet: PaymentSheet?
+    @Binding var isPresented: Bool
+    let onCompletion: (PaymentSheetResult) -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController { UIViewController() }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        guard isPresented, let sheet = paymentSheet,
+              let root = uiViewController.view.window?.rootViewController,
+              !context.coordinator.isPresenting else { return }
+        context.coordinator.isPresenting = true
+        sheet.present(from: root) { result in
+            isPresented = false
+            context.coordinator.isPresenting = false
+            onCompletion(result)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    class Coordinator { var isPresenting = false }
 }

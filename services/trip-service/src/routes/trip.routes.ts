@@ -107,6 +107,24 @@ router.post(
  */
 router.get('/request/:id', authenticateToken, asyncHandler(matchingController.getTripRequest));
 
+// ─── Internal service-to-service endpoints (must be before /:id param routes) ─
+
+/**
+ * @route   POST /trips/internal/process-deadline-cancellations
+ * @desc    Internal: scan for deadline-cancelled bookings, update routes, send notifications
+ * @access  Internal service-to-service only (X-Internal-Service header required)
+ */
+router.post(
+  '/internal/process-deadline-cancellations',
+  (req: any, res: any, next: any) => {
+    if (!req.headers['x-internal-service']) {
+      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+    }
+    return next();
+  },
+  asyncHandler(tripController.processDeadlineCancellations)
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -248,7 +266,11 @@ router.post(
  */
 router.post(
   '/:id/merge-route',
-  authenticateToken,
+  (req: any, res: any, next: any) => {
+    // Allow internal service-to-service calls to bypass JWT auth
+    if (req.headers['x-internal-service']) return next();
+    return authenticateToken(req, res, next);
+  },
   [
     body('rider_id').notEmpty(),
     body('pickup_lat').isFloat(),

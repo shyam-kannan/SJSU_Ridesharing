@@ -1,5 +1,16 @@
 import SwiftUI
 
+private func formatPassengerDeadline(_ date: Date) -> String {
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    formatter.timeStyle = .short
+    if calendar.isDateInToday(date) || calendar.isDateInTomorrow(date) {
+        return formatter.string(from: date)
+    }
+    formatter.dateStyle = .medium
+    return formatter.string(from: date)
+}
+
 struct PassengerCard: View {
     let passenger: BookingWithRider
     var onChat: (() -> Void)? = nil
@@ -93,17 +104,26 @@ struct PassengerCard: View {
 
                 // Payment status badge
                 let held = passenger.paymentIntentId != nil
-                HStack(spacing: 4) {
-                    Image(systemName: held ? "lock.shield.fill" : "clock.badge.exclamationmark.fill")
-                        .font(.system(size: 10))
-                    Text(held ? "Payment Held" : "Awaiting Payment")
-                        .font(.system(size: 11, weight: .semibold))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Image(systemName: held ? "lock.shield.fill" : "clock.badge.exclamationmark.fill")
+                            .font(.system(size: 10))
+                        Text(held ? "Payment Held" : "Awaiting Payment")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundColor(held ? .brandGreen : .brandGold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background((held ? Color.brandGreen : Color.brandGold).opacity(0.12))
+                    .cornerRadius(8)
+
+                    if !held, let deadline = passenger.paymentDeadlineAt {
+                        Text("Due by \(formatPassengerDeadline(deadline))")
+                            .font(.system(size: 10))
+                            .foregroundColor(.brandOrange)
+                            .padding(.horizontal, 4)
+                    }
                 }
-                .foregroundColor(held ? .brandGreen : .brandGold)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background((held ? Color.brandGreen : Color.brandGold).opacity(0.12))
-                .cornerRadius(8)
                 .padding(.top, 2)
 
                 Spacer()

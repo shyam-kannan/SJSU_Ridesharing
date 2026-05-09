@@ -18,6 +18,9 @@ struct Booking: Codable, Identifiable {
     let quote: Quote?
     let payment: Payment?
     let fare: Double?
+    let paymentIntentId: String?
+    let paymentDeadlineAt: Date?
+    let cancellationReason: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "booking_id"
@@ -32,6 +35,9 @@ struct Booking: Codable, Identifiable {
         case trip, rider
         case pickupLocation = "pickup_location"
         case quote, payment, fare
+        case paymentIntentId = "payment_intent_id"
+        case paymentDeadlineAt = "payment_deadline_at"
+        case cancellationReason = "cancellation_reason"
     }
 
     init(from decoder: Decoder) throws {
@@ -51,6 +57,9 @@ struct Booking: Codable, Identifiable {
         pickupLocation = try c.decodeIfPresent(PickupLocation.self, forKey: .pickupLocation)
         quote = try c.decodeIfPresent(Quote.self, forKey: .quote)
         payment = try c.decodeIfPresent(Payment.self, forKey: .payment)
+        paymentIntentId = try c.decodeIfPresent(String.self, forKey: .paymentIntentId)
+        paymentDeadlineAt = try c.decodeIfPresent(Date.self, forKey: .paymentDeadlineAt)
+        cancellationReason = try c.decodeIfPresent(String.self, forKey: .cancellationReason)
         // fare = max_price from the quotes table, returned directly on the booking by some endpoints
         if let fareDouble = try? c.decode(Double.self, forKey: .fare) {
             fare = fareDouble
@@ -59,6 +68,28 @@ struct Booking: Codable, Identifiable {
         } else {
             fare = nil
         }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(tripId, forKey: .tripId)
+        try c.encode(riderId, forKey: .riderId)
+        try c.encode(seatsBooked, forKey: .seatsBooked)
+        try c.encode(status, forKey: .status)
+        try c.encode(bookingState, forKey: .bookingState)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(holdExpiresAt, forKey: .holdExpiresAt)
+        try c.encodeIfPresent(trip, forKey: .trip)
+        try c.encodeIfPresent(rider, forKey: .rider)
+        try c.encodeIfPresent(pickupLocation, forKey: .pickupLocation)
+        try c.encodeIfPresent(quote, forKey: .quote)
+        try c.encodeIfPresent(payment, forKey: .payment)
+        try c.encodeIfPresent(fare, forKey: .fare)
+        try c.encodeIfPresent(paymentIntentId, forKey: .paymentIntentId)
+        try c.encodeIfPresent(paymentDeadlineAt, forKey: .paymentDeadlineAt)
+        try c.encodeIfPresent(cancellationReason, forKey: .cancellationReason)
     }
 }
 
@@ -140,6 +171,15 @@ struct Quote: Codable {
         if let s = try? c.decode(String.self, forKey: key) { return Double(s) }
         return nil
     }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(bookingId, forKey: .bookingId)
+        try c.encode(maxPrice, forKey: .maxPrice)
+        try c.encodeIfPresent(finalPrice, forKey: .finalPrice)
+        try c.encode(createdAt, forKey: .createdAt)
+    }
 }
 
 // MARK: - Booking Request/Response Models
@@ -214,6 +254,47 @@ struct BookingWithRider: Codable, Identifiable {
     let scostBreakdown: ScostBreakdown?
     let fare: Double?
     let paymentIntentId: String?
+    let paymentDeadlineAt: Date?
+    let cancellationReason: String?
+
+    init(
+        id: String, tripId: String, riderId: String,
+        riderName: String, riderEmail: String?,
+        riderPhone: String?, riderRating: Double,
+        riderPicture: String?, seatsBooked: Int,
+        status: BookingStatus, bookingState: BookingState,
+        pickupLocation: PickupLocation?, createdAt: Date,
+        holdExpiresAt: Date?, scostBreakdown: ScostBreakdown?,
+        fare: Double?, paymentIntentId: String?,
+        paymentDeadlineAt: Date? = nil,
+        cancellationReason: String? = nil
+    ) {
+        self.id = id; self.tripId = tripId; self.riderId = riderId
+        self.riderName = riderName; self.riderEmail = riderEmail
+        self.riderPhone = riderPhone; self.riderRating = riderRating
+        self.riderPicture = riderPicture; self.seatsBooked = seatsBooked
+        self.status = status; self.bookingState = bookingState
+        self.pickupLocation = pickupLocation; self.createdAt = createdAt
+        self.holdExpiresAt = holdExpiresAt; self.scostBreakdown = scostBreakdown
+        self.fare = fare; self.paymentIntentId = paymentIntentId
+        self.paymentDeadlineAt = paymentDeadlineAt
+        self.cancellationReason = cancellationReason
+    }
+
+    func withBookingState(_ newState: BookingState) -> BookingWithRider {
+        BookingWithRider(
+            id: id, tripId: tripId, riderId: riderId,
+            riderName: riderName, riderEmail: riderEmail,
+            riderPhone: riderPhone, riderRating: riderRating,
+            riderPicture: riderPicture, seatsBooked: seatsBooked,
+            status: status, bookingState: newState,
+            pickupLocation: pickupLocation, createdAt: createdAt,
+            holdExpiresAt: holdExpiresAt, scostBreakdown: scostBreakdown,
+            fare: fare, paymentIntentId: paymentIntentId,
+            paymentDeadlineAt: paymentDeadlineAt,
+            cancellationReason: cancellationReason
+        )
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -233,6 +314,8 @@ struct BookingWithRider: Codable, Identifiable {
         case scostBreakdown = "scost_breakdown"
         case fare
         case paymentIntentId = "payment_intent_id"
+        case paymentDeadlineAt = "payment_deadline_at"
+        case cancellationReason = "cancellation_reason"
     }
 
     init(from decoder: Decoder) throws {
@@ -252,6 +335,8 @@ struct BookingWithRider: Codable, Identifiable {
         holdExpiresAt = try container.decodeIfPresent(Date.self, forKey: .holdExpiresAt)
         scostBreakdown = try container.decodeIfPresent(ScostBreakdown.self, forKey: .scostBreakdown)
         paymentIntentId = try container.decodeIfPresent(String.self, forKey: .paymentIntentId)
+        paymentDeadlineAt = try container.decodeIfPresent(Date.self, forKey: .paymentDeadlineAt)
+        cancellationReason = try container.decodeIfPresent(String.self, forKey: .cancellationReason)
         if let fareDouble = try? container.decode(Double.self, forKey: .fare) {
             fare = fareDouble
         } else if let fareString = try? container.decode(String.self, forKey: .fare), let parsed = Double(fareString) {
@@ -269,6 +354,29 @@ struct BookingWithRider: Codable, Identifiable {
         } else {
             riderRating = 0.0
         }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(tripId, forKey: .tripId)
+        try c.encode(riderId, forKey: .riderId)
+        try c.encode(riderName, forKey: .riderName)
+        try c.encodeIfPresent(riderEmail, forKey: .riderEmail)
+        try c.encodeIfPresent(riderPhone, forKey: .riderPhone)
+        try c.encode(riderRating, forKey: .riderRating)
+        try c.encodeIfPresent(riderPicture, forKey: .riderPicture)
+        try c.encode(seatsBooked, forKey: .seatsBooked)
+        try c.encode(status, forKey: .status)
+        try c.encode(bookingState, forKey: .bookingState)
+        try c.encodeIfPresent(pickupLocation, forKey: .pickupLocation)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(holdExpiresAt, forKey: .holdExpiresAt)
+        try c.encodeIfPresent(scostBreakdown, forKey: .scostBreakdown)
+        try c.encodeIfPresent(fare, forKey: .fare)
+        try c.encodeIfPresent(paymentIntentId, forKey: .paymentIntentId)
+        try c.encodeIfPresent(paymentDeadlineAt, forKey: .paymentDeadlineAt)
+        try c.encodeIfPresent(cancellationReason, forKey: .cancellationReason)
     }
 }
 

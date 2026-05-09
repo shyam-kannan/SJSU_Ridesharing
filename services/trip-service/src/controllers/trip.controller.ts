@@ -393,7 +393,7 @@ export const getTripBookings = async (req: AuthRequest, res: Response): Promise<
       }
     );
 
-    const bookings = bookingsResponse.data.data || [];
+    const bookings = bookingsResponse.data.data?.bookings || [];
 
     successResponse(res, { bookings, total: bookings.length }, 'Trip bookings retrieved successfully');
   } catch (error) {
@@ -463,6 +463,68 @@ export const updateTripState = async (req: AuthRequest, res: Response): Promise<
         );
         settlement = settlementResponse.data.data;
         console.log(`💰 Settlement calculated: $${settlement?.driver_earnings?.toFixed(2)} for ${settlement?.rider_count} rider(s)`);
+
+        // Fetch bookings once — used for both final-price write-back and capture
+        const bookingsForSettle: any[] = await axios.get(
+          `${config.bookingServiceUrl}/bookings/trip/${id}/settle`
+        ).then(r => {
+          const raw = r.data?.data ?? r.data;
+          return Array.isArray(raw) ? raw : Array.isArray(raw?.bookings) ? raw.bookings : [];
+        }).catch(() => []);
+
+        // Write final_price back to each rider's quote
+        if (Array.isArray(settlement?.riders)) {
+          await Promise.all(
+            (settlement.riders as any[]).map(async (rider: any) => {
+              const booking = bookingsForSettle.find((b: any) => b.rider_id === rider.rider_id);
+              if (!booking) return;
+              const bookingId = booking.booking_id ?? booking.id;
+              try {
+                await axios.patch(
+                  `${config.bookingServiceUrl}/bookings/${bookingId}/final-price`,
+                  { final_price: rider.amount_paid },
+                  { headers: { 'x-internal-service': 'trip-service' } }
+                );
+              } catch (fpErr) {
+                console.error(`[FINAL_PRICE] Failed for booking ${bookingId}:`, fpErr);
+              }
+            })
+          );
+        }
+
+        // Capture payments (partial) for each approved booking
+        const toCapture = bookingsForSettle.filter(
+          (b: any) => b.payment_intent_id && b.booking_state === 'approved'
+        );
+        for (const booking of toCapture) {
+          const bookingId = booking.booking_id ?? booking.id;
+          try {
+            await axios.post(
+              `${config.bookingServiceUrl}/bookings/${bookingId}/capture-payment`,
+              {},
+              { headers: { Authorization: req.headers.authorization } }
+            );
+
+            // Notify rider of final charge
+            const held    = typeof booking.fare === 'number' ? booking.fare : parseFloat(booking.fare ?? '0');
+            const riderSettlement = (settlement.riders as any[]).find((r: any) => r.rider_id === booking.rider_id);
+            const charged = riderSettlement?.amount_paid ?? held;
+            const released = parseFloat((held - charged).toFixed(2));
+            const msg = released > 0.01
+              ? `You were charged $${charged.toFixed(2)}. $${released.toFixed(2)} was released back to your card.`
+              : `You were charged $${charged.toFixed(2)}.`;
+
+            fireInAppNotification({
+              user_id: booking.rider_id,
+              type: 'trip_completed',
+              title: 'Trip Complete — Final Fare',
+              message: msg,
+              data: { trip_id: id, charged, released },
+            });
+          } catch (capErr) {
+            console.error(`[CAPTURE] Failed for booking ${bookingId}:`, capErr);
+          }
+        }
       } catch (settleErr) {
         console.error('Failed to calculate trip settlement (non-critical):', settleErr);
       }
@@ -787,6 +849,16 @@ function extractBookingsArray(payload: any): any[] {
   if (Array.isArray(data?.bookings)) return data.bookings;
   return [];
 }
+
+/**
+ * POST /trips/internal/process-deadline-cancellations
+ * Internal endpoint: scans for deadline-cancelled bookings that need route update + notifications.
+ * Protected by X-Internal-Service header (checked in the router, not here).
+ */
+export const processDeadlineCancellations = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const result = await tripService.processDeadlineCancellations();
+  res.json({ status: 'success', message: `Processed ${result.processed} deadline cancellation(s)`, data: result });
+};
 
 async function riderHasBookingForTrip(authHeader: string | undefined, tripId: string, userId: string): Promise<boolean> {
   try {

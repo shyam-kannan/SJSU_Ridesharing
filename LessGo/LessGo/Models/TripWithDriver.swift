@@ -25,13 +25,15 @@ struct TripWithDriver: Identifiable, Codable {
     let costBreakdown: CostBreakdown?
 
     struct CostBreakdown: Codable {
-        let baseFare: Double
-        let detourSurcharge: Double
+        let tripCost: Double
+        let durationHours: Double
+        let detourFee: Double
         let perRiderSplit: Double
 
         enum CodingKeys: String, CodingKey {
-            case baseFare = "base_fare"
-            case detourSurcharge = "detour_surcharge"
+            case tripCost      = "trip_cost"
+            case durationHours = "duration_hours"
+            case detourFee     = "detour_fee"
             case perRiderSplit = "per_rider_split"
         }
     }

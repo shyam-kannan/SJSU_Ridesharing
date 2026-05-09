@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { Pool } from 'pg';
 import * as userService from '../services/user.service';
 import { AuthRequest, AppError, successResponse, errorResponse, DriverSetupRequest } from '@lessgo/shared';
@@ -536,4 +536,76 @@ export const debugDelete = async (req: AuthRequest, res: Response): Promise<void
   await availabilityPool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
 
   successResponse(res, { user_id: userId }, 'Dev: user deleted');
+};
+
+/**
+ * POST /driver/stripe-onboard
+ * Create or retrieve Stripe Connect onboarding URL for driver.
+ */
+export const stripeOnboard = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+    const userId = req.user.userId;
+    // Check that the calling user is a driver
+    const callingUser = await userService.getUserById(userId);
+    if (!callingUser || callingUser.role !== 'Driver') {
+      res.status(403).json({ status: 'error', message: 'Only drivers can set up payouts' });
+      return;
+    }
+    const gatewayUrl = process.env.GATEWAY_PUBLIC_URL ?? 'https://lessgo-zeta.vercel.app';
+    const returnUrl = `${gatewayUrl}/api/users/stripe/connect-return`;
+    const refreshUrl = `${gatewayUrl}/api/users/stripe/connect-refresh`;
+    const result = await userService.createStripeConnectOnboardingUrl(userId, returnUrl, refreshUrl);
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    console.error('Stripe onboard error:', err);
+    throw new AppError('Failed to create Stripe onboarding URL', 500);
+  }
+};
+
+/**
+ * GET /driver/stripe-dashboard
+ * Get Stripe Connect dashboard login link for driver.
+ */
+export const stripeDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+    const userId = req.user.userId;
+    // Check that the calling user is a driver
+    const callingUser = await userService.getUserById(userId);
+    if (!callingUser || callingUser.role !== 'Driver') {
+      res.status(403).json({ status: 'error', message: 'Only drivers can set up payouts' });
+      return;
+    }
+    const gatewayUrl = process.env.GATEWAY_PUBLIC_URL ?? 'https://lessgo-zeta.vercel.app';
+    const returnUrl = `${gatewayUrl}/api/users/stripe/connect-return`;
+    const refreshUrl = `${gatewayUrl}/api/users/stripe/connect-refresh`;
+    const url = await userService.getStripeConnectDashboardUrl(userId, returnUrl, refreshUrl);
+    res.json({ status: 'success', data: { url } });
+  } catch (err) {
+    console.error('Stripe dashboard error:', err);
+    throw new AppError('Failed to get Stripe dashboard URL', 500);
+  }
+};
+
+/**
+ * GET /stripe/connect-return
+ * Stripe redirects here after onboarding; we bounce to the app deep link.
+ */
+export const stripeConnectReturn = (_req: Request, res: Response): void => {
+  res.redirect('lessgo://stripe-return');
+};
+
+/**
+ * GET /stripe/connect-refresh
+ * Stripe redirects here when the onboarding link expires; bounce to app.
+ */
+export const stripeConnectRefresh = (_req: Request, res: Response): void => {
+  res.redirect('lessgo://stripe-refresh');
 };

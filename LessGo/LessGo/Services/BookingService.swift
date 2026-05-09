@@ -134,42 +134,40 @@ class BookingService {
 
     // MARK: - Authorize Payment (Rider Only)
 
-    func authorizePayment(bookingId: String) async throws -> [String: Any] {
-        struct AuthorizePaymentResponse: Codable {
-            let status: String
-            let data: AuthorizePaymentData?
-            struct AuthorizePaymentData: Codable {
-                let clientSecret: String
-                let paymentIntentId: String
-                enum CodingKeys: String, CodingKey {
-                    case clientSecret = "clientSecret"
-                    case paymentIntentId = "paymentIntentId"
-                }
-            }
-        }
+    struct AuthorizeResult: Codable {
+        let clientSecret: String
+        let paymentIntentId: String
+    }
 
-        let response: AuthorizePaymentResponse = try await network.request(
+    func authorizePayment(bookingId: String) async throws -> AuthorizeResult {
+        return try await network.request(
             endpoint: "/bookings/\(bookingId)/authorize-payment",
             method: .post
         )
+    }
 
-        guard let data = response.data else {
-            throw NetworkError.serverError(APIError(status: "error", message: "No payment data returned", errors: nil))
+    // MARK: - Confirm Payment (Rider Only)
+
+    func confirmPayment(bookingId: String) async throws {
+        struct ConfirmPaymentResponse: Codable {
+            let status: String
         }
 
-        return [
-            "clientSecret": data.clientSecret,
-            "paymentIntentId": data.paymentIntentId,
-        ]
+        let _: ConfirmPaymentResponse = try await network.request(
+            endpoint: "/bookings/\(bookingId)/confirm-payment",
+            method: .post
+        )
     }
 
     // MARK: - Get Booking for Trip
 
     func getBookingForTrip(tripId: String) async throws -> Booking? {
+        // GET /bookings returns the authenticated rider's own bookings.
+        // The driver-only /bookings/trip/:tripId endpoint returns 403 for riders.
         let response: BookingListResponse = try await network.request(
-            endpoint: "/bookings/trip/\(tripId)",
+            endpoint: "/bookings",
             method: .get
         )
-        return response.bookings.first
+        return response.bookings.first { $0.tripId == tripId }
     }
 }

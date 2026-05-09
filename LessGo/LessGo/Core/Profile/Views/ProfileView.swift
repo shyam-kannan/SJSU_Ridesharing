@@ -19,6 +19,10 @@ struct ProfileView: View {
     @State private var showAccountMenu = false
     @State private var showImagePicker = false
     @State private var selectedProfileImage: UIImage?
+    @State private var showStripeOnboarding = false
+    @State private var stripeOnboardingURL: URL? = nil
+    @State private var isLoadingStripeURL = false
+    @State private var stripeError: String? = nil
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("emailNotificationsEnabled") private var emailNotificationsEnabled = true
     @AppStorage("locationShareEnabled") private var locationShareEnabled = true
@@ -88,9 +92,39 @@ struct ProfileView: View {
                 EditProfileView(vm: vm, userId: authVM.currentUser?.id ?? "")
                     .onDisappear { Task { await authVM.refreshCurrentUser() } }
             }
-            .sheet(isPresented: $showDriverSetup) {
+            .sheet(isPresented: $showDriverSetup, onDismiss: {
+                Task {
+                    await authVM.refreshCurrentUser()
+                    if authVM.isDriver && authVM.currentUser?.stripeConnectAccountId == nil {
+                        do {
+                            let url = try await UserService.shared.startStripeOnboarding()
+                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s — allows iOS 16 sheet dismiss to finish
+                            await MainActor.run {
+                                stripeOnboardingURL = url
+                                showStripeOnboarding = true
+                            }
+                        } catch {
+                            await MainActor.run { stripeError = error.localizedDescription }
+                        }
+                    }
+                }
+            }) {
                 DriverSetupView(vm: vm, userId: authVM.currentUser?.id ?? "")
-                    .onDisappear { Task { await authVM.refreshCurrentUser() } }
+            }
+            .sheet(isPresented: $showStripeOnboarding, onDismiss: {
+                Task { await authVM.refreshCurrentUser() }
+            }) {
+                if let url = stripeOnboardingURL {
+                    SafariView(url: url)
+                }
+            }
+            .alert("Payout Setup Failed", isPresented: Binding(
+                get: { stripeError != nil },
+                set: { if !$0 { stripeError = nil } }
+            )) {
+                Button("OK") { stripeError = nil }
+            } message: {
+                Text(stripeError ?? "")
             }
             .sheet(isPresented: $showIDVerification) {
                 IDVerificationView().environmentObject(authVM)
@@ -688,7 +722,77 @@ struct ProfileView: View {
             )
             .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
             .padding(.horizontal, AppConstants.pagePadding)
+
+            // Payout Setup Card
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill((hasStripeAccount ? Color.brandGreen : Color.brandOrange).opacity(0.12))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: hasStripeAccount ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(hasStripeAccount ? .brandGreen : .brandOrange)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Payout Setup")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                        Text(hasStripeAccount ? "Bank account connected" : "Required to receive payments")
+                            .font(.system(size: 13))
+                            .foregroundColor(hasStripeAccount ? .brandGreen : .brandOrange)
+                    }
+                    Spacer()
+                    Button(action: {
+                        guard !isLoadingStripeURL else { return }
+                        Task {
+                            isLoadingStripeURL = true
+                            defer { isLoadingStripeURL = false }
+                            do {
+                                let url = hasStripeAccount
+                                    ? try await UserService.shared.getStripeDashboardUrl()
+                                    : try await UserService.shared.startStripeOnboarding()
+                                await MainActor.run {
+                                    stripeOnboardingURL = url
+                                    showStripeOnboarding = true
+                                }
+                            } catch {
+                                await MainActor.run { stripeError = error.localizedDescription }
+                            }
+                        }
+                    }) {
+                        if isLoadingStripeURL {
+                            ProgressView()
+                                .frame(width: 44, height: 28)
+                        } else {
+                            Text(hasStripeAccount ? "Edit" : "Setup")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(hasStripeAccount ? .brand : .brandOrange)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
+                                .background((hasStripeAccount ? Color.brand : Color.brandOrange).opacity(0.1))
+                                .cornerRadius(10)
+                        }
+                    }
+                    .disabled(isLoadingStripeURL)
+                }
+                .padding(AppConstants.cardPadding)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.panelGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder((hasStripeAccount ? Color.brandGreen : Color.brandOrange).opacity(0.2), lineWidth: 1)
+                    )
+            )
+            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 3)
+            .padding(.horizontal, AppConstants.pagePadding)
         }
+    }
+
+    private var hasStripeAccount: Bool {
+        authVM.currentUser?.stripeConnectAccountId != nil
     }
 
     // MARK: - Quick Actions
@@ -1382,10 +1486,9 @@ struct DriverSetupView: View {
         }
     }
 
-    // Manual MPG + seats section (fallback when API unavailable)
+    // Seats section (fallback when API unavailable)
     private var vehicleFallbackSection: some View {
         VStack(spacing: 14) {
-            // Seats stepper
             VStack(alignment: .leading, spacing: 8) {
                 Text("SEATS AVAILABLE").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary)
                 HStack {
@@ -1400,17 +1503,6 @@ struct DriverSetupView: View {
                         Image(systemName: "plus.circle.fill").font(.system(size: 28)).foregroundColor(.brand)
                     }
                 }.cardStyle()
-            }
-            // Manual MPG
-            VStack(alignment: .leading, spacing: 8) {
-                Text("VEHICLE MPG").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary)
-                HStack {
-                    Image(systemName: "fuelpump.fill").foregroundColor(.brand).frame(width: 20)
-                    TextField("e.g. 30", value: $vm.mpg, format: .number).keyboardType(.decimalPad)
-                }
-                .cardStyle()
-                Text("Used to calculate fuel costs for trip settlement")
-                    .font(.system(size: 12)).foregroundColor(.textSecondary)
             }
         }
     }
@@ -1438,13 +1530,6 @@ private struct VehicleSpecsCard: View {
                     Text("\(String(specs.year)) \(specs.make) \(specs.model)")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.textPrimary)
-                    if specs.mpgSource == .unavailable {
-                        Text("MPG data not available from EPA")
-                            .font(.system(size: 12)).foregroundColor(.textSecondary)
-                    } else {
-                        Text("EPA fuel economy data")
-                            .font(.system(size: 12)).foregroundColor(.textSecondary)
-                    }
                 }
                 Spacer()
             }
@@ -1457,25 +1542,15 @@ private struct VehicleSpecsCard: View {
                     Text("SELECT YOUR TRIM").font(.system(size: 11, weight: .bold)).foregroundColor(.textTertiary)
                     ForEach(specs.trims) { trim in
                         let isSelected = vm.pickerTrimId == trim.id
-                        Button(action: { vm.pickerTrimId = trim.id; vm.mpgOverride = nil }) {
+                        Button(action: { vm.pickerTrimId = trim.id }) {
                             HStack(spacing: 10) {
                                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                     .foregroundColor(isSelected ? .brand : .textTertiary)
                                     .font(.system(size: 18))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(trim.trimName)
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.textPrimary)
-                                    if let combined = trim.combinedMpg {
-                                        Text("\(String(combined)) MPG combined")
-                                            .font(.system(size: 12)).foregroundColor(.textSecondary)
-                                    }
-                                }
+                                Text(trim.trimName)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.textPrimary)
                                 Spacer()
-                                if let city = trim.cityMpg, let hwy = trim.highwayMpg {
-                                    Text("\(String(city)) / \(String(hwy))")
-                                        .font(.system(size: 11)).foregroundColor(.textTertiary)
-                                }
                             }
                             .padding(10)
                             .background(isSelected ? Color.brand.opacity(0.06) : Color.clear)
@@ -1484,103 +1559,6 @@ private struct VehicleSpecsCard: View {
                     }
                 }
                 Divider()
-            }
-
-            // ── MPG summary ──────────────────────────────────────────────────
-            if specs.mpgSource == .doe {
-                let trim = vm.selectedTrim
-                let combined = trim?.combinedMpg ?? specs.defaultMpg
-                let city     = trim?.cityMpg
-                let highway  = trim?.highwayMpg
-
-                VStack(spacing: 8) {
-                    HStack {
-                        Label("Fuel Economy", systemImage: "fuelpump.fill")
-                            .font(.system(size: 13, weight: .semibold)).foregroundColor(.textPrimary)
-                        Spacer()
-                        if let c = combined {
-                            Text("\(String(c)) MPG")
-                                .font(.system(size: 17, weight: .bold)).foregroundColor(.brand)
-                        }
-                    }
-                    if let city, let hwy = highway, let combined {
-                        HStack(spacing: 0) {
-                            mpgCell(label: "City",     value: city)
-                            Divider().frame(height: 30)
-                            mpgCell(label: "Hwy",      value: hwy)
-                            Divider().frame(height: 30)
-                            mpgCell(label: "Combined", value: combined)
-                        }
-                        .background(Color.sheetBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                }
-            } else {
-                // MPG unavailable — show specific error message with retry option
-                VStack(alignment: .leading, spacing: 12) {
-                    // Error message with icon
-                    HStack(spacing: 8) {
-                        Image(systemName: errorIcon(for: specs.errorType))
-                            .foregroundColor(.brandGold)
-                            .font(.system(size: 16))
-                        Text(errorTitle(for: specs.errorType))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.textTertiary)
-                    }
-
-                    // Detailed error message
-                    if let errorMessage = specs.errorMessage {
-                        Text(errorMessage)
-                            .font(.system(size: 13))
-                            .foregroundColor(.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    // Suggestion text
-                    if let suggestion = specs.suggestion {
-                        Text(suggestion)
-                            .font(.system(size: 12))
-                            .foregroundColor(.brand)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    // Retry button for transient errors
-                    if specs.isTransient == true {
-                        Button(action: {
-                            Task {
-                                await vm.retrySpecsLookup()
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 14))
-                                Text("Try Again")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundColor(.brand)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.brand.opacity(0.1))
-                            .cornerRadius(8)
-                        }
-                    }
-
-                    // Manual MPG entry
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Or enter MPG manually:")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.textSecondary)
-                        HStack {
-                            Image(systemName: "fuelpump.fill").foregroundColor(.brand).frame(width: 20)
-                            let binding = Binding<Double>(
-                                get: { vm.mpgOverride ?? vm.mpg },
-                                set: { vm.mpgOverride = $0 }
-                            )
-                            TextField("e.g. 30", value: binding, format: .number).keyboardType(.decimalPad)
-                        }
-                        .cardStyle()
-                    }
-                }
             }
 
             Divider()
@@ -1671,49 +1649,6 @@ private struct VehicleSpecsCard: View {
             )
     }
 
-    // Helper functions for error display
-    private func errorIcon(for errorType: String?) -> String {
-        switch errorType {
-        case "timeout":
-            return "clock.fill"
-        case "not_found":
-            return "exclamationmark.triangle.fill"
-        case "rate_limited":
-            return "hourglass"
-        case "network_error":
-            return "wifi.exclamationmark"
-        case "parsing_error":
-            return "doc.text.magnifyingglass"
-        default:
-            return "exclamationmark.circle.fill"
-        }
-    }
-
-    private func errorTitle(for errorType: String?) -> String {
-        switch errorType {
-        case "timeout":
-            return "LOOKUP TIMED OUT"
-        case "not_found":
-            return "MPG DATA NOT AVAILABLE"
-        case "rate_limited":
-            return "TOO MANY REQUESTS"
-        case "network_error":
-            return "CONNECTION ISSUE"
-        case "parsing_error":
-            return "DATA ERROR"
-        default:
-            return "MPG LOOKUP FAILED"
-        }
-    }
-
-    private func mpgCell(label: String, value: Int) -> some View {
-        VStack(spacing: 2) {
-            Text(String(value)).font(.system(size: 17, weight: .bold)).foregroundColor(.textPrimary)
-            Text(label).font(.system(size: 10)).foregroundColor(.textTertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-    }
 }
 
 // MARK: - Searchable Picker Sheet
@@ -2117,22 +2052,22 @@ class DevToolsViewModel: ObservableObject {
         "Cleanup all sim_ accounts"
     ]
 
-    // Formula: mileageRate = $5/mpg, cost = ($5 + dist*mileageRate) / riderCount
+    // Formula: cost = distance × $0.67 + duration_hours × $15, split by riderCount
     private static let costSimStepLabels = [
-        "Scenario 1 — 1 rider, 25 MPG (baseline)",
-        "Scenario 2 — 2 riders, 30 MPG (split verification)",
-        "Scenario 3 — 1 rider + detour pickup, 25 MPG",
-        "Scenario 4 — 3 riders, 20 MPG (fuel-heavy split)",
-        "Scenario 5 — 1 rider, 40 MPG (high efficiency)",
+        "Scenario 1 — 1 rider (baseline)",
+        "Scenario 2 — 2 riders (split verification)",
+        "Scenario 3 — 1 rider + detour pickup",
+        "Scenario 4 — 3 riders",
+        "Scenario 5 — 1 rider (repeat baseline)",
         "Cleanup all sim_cost_ accounts"
     ]
 
-    private static let costSimScenarioDefs: [(label: String, mpg: Double, riders: Int, detour: Bool)] = [
-        ("1 rider · 25 MPG",      25.0, 1, false),
-        ("2 riders · 30 MPG",     30.0, 2, false),
-        ("Detour · 1 rider · 25 MPG", 25.0, 1, true),
-        ("3 riders · 20 MPG",     20.0, 3, false),
-        ("1 rider · 40 MPG",      40.0, 1, false),
+    private static let costSimScenarioDefs: [(label: String, riders: Int, detour: Bool)] = [
+        ("1 rider",         1, false),
+        ("2 riders",        2, false),
+        ("Detour · 1 rider", 1, true),
+        ("3 riders",        3, false),
+        ("1 rider (repeat)", 1, false),
     ]
 
     // Geographic anchors (matches zone_mapper.py grid)
@@ -2717,11 +2652,10 @@ class DevToolsViewModel: ObservableObject {
 
     // MARK: - Simulate Cost Calculation (5 scenarios)
     //
-    // Each scenario registers a fresh driver + rider pair, sets up the driver's
-    // MPG, creates a trip (Santa Clara → SJSU), confirms a booking, then calls
-    // GET /cost/settle/:trip_id and validates the formula:
-    //   mileageRate = $5 / mpg
-    //   costPerRider = ($5 + distance × mileageRate) / riderCount   (±$0.05)
+    // Each scenario registers a fresh driver + rider pair, creates a trip
+    // (Santa Clara → SJSU), confirms a booking, then calls
+    // GET /cost/settle/:trip_id and validates the IRS formula:
+    //   costPerRider = (distance × $0.67 + duration_hours × $15) / riderCount  (±$0.05)
 
     func simulateCostCalculation() async {
         costSimRunning = true
@@ -2763,12 +2697,11 @@ class DevToolsViewModel: ObservableObject {
                 let tokenD = (loginD["data"] as? [String: Any])?["accessToken"] as? String ?? ""
                 guard !tokenD.isEmpty else { throw csErr(n, "Driver login failed") }
 
-                // Set driver profile with specific MPG
+                // Set driver profile
                 _ = try await rawPut("/users/\(drvId)/driver-setup", body: [
                     "vehicle_info": "2024 Test Vehicle",
                     "seats_available": max(def.riders + 1, 3),
-                    "license_plate": "TST\(n)00",
-                    "mpg": def.mpg
+                    "license_plate": "TST\(n)00"
                 ], token: tokenD)
 
                 // Create trip Santa Clara → SJSU
@@ -2820,37 +2753,35 @@ class DevToolsViewModel: ObservableObject {
                 // Fetch settlement
                 let settleRsp = try await rawGet("/cost/settle/\(tripId)")
                 let settleData = settleRsp["data"] as? [String: Any] ?? [:]
-                let actualRate  = settleData["mileage_rate"] as? Double ?? 0
                 let actualCPR   = settleData["cost_per_rider"] as? Double ?? 0
                 let brkdn       = settleData["breakdown"] as? [String: Any] ?? [:]
                 let distMi      = brkdn["direct_distance_miles"] as? Double ?? 0
+                let durHrs      = brkdn["direct_duration_hours"] as? Double ?? 0
                 let riders      = settleData["riders"] as? [[String: Any]] ?? []
                 let riderPaid   = riders.first?["amount_paid"] as? Double
                 let detourRider = riders.first(where: { ($0["detour_miles"] as? Double ?? 0) > 0 })
                 let detourMilesActual = detourRider?["detour_miles"] as? Double ?? 0
                 let detourBreakdown   = detourRider?["breakdown"] as? String ?? ""
 
-                // Formula validation
-                let expectedRate = 5.0 / def.mpg
-                let expectedCPR  = (5.0 + distMi * expectedRate) / Double(def.riders)
-                let rateOk  = abs(actualRate - expectedRate) < 0.001
+                // IRS formula validation
+                let expectedCPR  = (distMi * 0.67 + durHrs * 15.0) / Double(def.riders)
                 let cprOk   = abs(actualCPR - expectedCPR) < 0.05
                 // Detour pass: paid > base cost AND detour_miles > 0 AND breakdown mentions surcharge
-                let baseCost = (5.0 + distMi * (5.0 / def.mpg)) / Double(def.riders)
+                let baseCost = (distMi * 0.67 + durHrs * 15.0) / Double(def.riders)
                 let detourOk = !def.detour || (
                     (riderPaid ?? 0) > baseCost + 0.01 &&
                     detourMilesActual > 0 &&
                     detourBreakdown.contains("detour surcharge")
                 )
-                let passed  = rateOk && cprOk && detourOk
+                let passed  = cprOk && detourOk
 
                 let prettySettle = prettyJSON(settleRsp)
                 var detail: String
                 if def.detour {
                     let paid = riderPaid.map { String(format: "$%.2f", $0) } ?? "?"
-                    detail = "rate=\(String(format:"%.4f",actualRate)) ≈\(String(format:"%.4f",expectedRate)) | base=$\(String(format:"%.2f",baseCost)) paid=\(paid) detour_mi=\(String(format:"%.2f",detourMilesActual)) surcharge:\(detourOk ? "✓" : "✗")"
+                    detail = "base=$\(String(format:"%.2f",baseCost)) paid=\(paid) detour_mi=\(String(format:"%.2f",detourMilesActual)) surcharge:\(detourOk ? "✓" : "✗")"
                 } else {
-                    detail = "rate=\(String(format:"%.4f",actualRate)) ≈\(String(format:"%.4f",expectedRate)) | cost=$\(String(format:"%.2f",actualCPR)) exp=$\(String(format:"%.2f",expectedCPR))"
+                    detail = "cost=$\(String(format:"%.2f",actualCPR)) exp=$\(String(format:"%.2f",expectedCPR)) dist=\(String(format:"%.2f",distMi))mi dur=\(String(format:"%.4f",durHrs))h"
                 }
                 csStep(n, passed ? .success : .error, detail)
                 costSimScenarios[idx].status      = passed ? .success : .error
@@ -3594,7 +3525,7 @@ struct DevToolsSection: View {
         devPanel(title: "Test Cost Calculation", icon: "dollarsign.circle.fill", expanded: $vm.expandCostSim) {
             VStack(alignment: .leading, spacing: 12) {
 
-                Text("Runs 5 live end-to-end scenarios testing the settlement formula: mileageRate = $5/MPG · costPerRider = ($5 + dist × mileageRate) / riders. Creates real temp accounts (sim_cost_), confirms bookings, calls GET /cost/settle/:id, validates ±$0.05. All accounts deleted after.")
+                Text("Runs 5 live end-to-end scenarios testing the IRS mileage rate settlement formula. Creates real temp accounts (sim_cost_), confirms bookings, calls GET /cost/settle/:id, validates ±$0.05. All accounts deleted after.")
                     .font(.system(size: 12))
                     .foregroundColor(.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3604,7 +3535,7 @@ struct DevToolsSection: View {
                     Text("Formula Reference")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.textSecondary)
-                    Text("mileageRate  = $5.00 / mpg\nsharedCost   = $5.00 + distance × mileageRate\ncostPerRider = sharedCost / riderCount\ndetourCost   = detourMiles × mileageRate × 1.25")
+                    Text("tripCost     = distance × $0.67 + duration_hrs × $15.00\ncostPerRider = tripCost / riderCount\ndetourCost   = detourMiles × $0.67 × 1.25")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.textSecondary)
                 }

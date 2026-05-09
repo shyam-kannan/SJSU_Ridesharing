@@ -12,10 +12,10 @@ struct User: Codable, Identifiable {
     let vehicleInfo: String?
     let seatsAvailable: Int?
     let licensePlate: String?
-    let mpg: Double?
     let profilePicture: String?
     let createdAt: Date?
     let updatedAt: Date?
+    let stripeConnectAccountId: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "user_id"
@@ -25,10 +25,10 @@ struct User: Codable, Identifiable {
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
         case licensePlate = "license_plate"
-        case mpg
         case profilePicture = "profile_picture_url"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case stripeConnectAccountId = "stripe_connect_account_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -44,6 +44,7 @@ struct User: Codable, Identifiable {
         profilePicture = try container.decodeIfPresent(String.self, forKey: .profilePicture)
         createdAt    = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         updatedAt    = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        stripeConnectAccountId = try container.decodeIfPresent(String.self, forKey: .stripeConnectAccountId)
 
         // Backend sends rating as a String ("0.00") or occasionally as a Double.
         if let ratingDouble = try? container.decode(Double.self, forKey: .rating) {
@@ -54,16 +55,23 @@ struct User: Codable, Identifiable {
         } else {
             rating = 0.0
         }
+    }
 
-        // mpg may come as Double or String from Postgres DECIMAL
-        if let mpgDouble = try? container.decode(Double.self, forKey: .mpg) {
-            mpg = mpgDouble
-        } else if let mpgString = try? container.decode(String.self, forKey: .mpg),
-                  let parsed = Double(mpgString) {
-            mpg = parsed
-        } else {
-            mpg = nil
-        }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(email, forKey: .email)
+        try c.encode(role, forKey: .role)
+        try c.encode(sjsuIdStatus, forKey: .sjsuIdStatus)
+        try c.encode(rating, forKey: .rating)
+        try c.encodeIfPresent(vehicleInfo, forKey: .vehicleInfo)
+        try c.encodeIfPresent(seatsAvailable, forKey: .seatsAvailable)
+        try c.encodeIfPresent(licensePlate, forKey: .licensePlate)
+        try c.encodeIfPresent(profilePicture, forKey: .profilePicture)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(stripeConnectAccountId, forKey: .stripeConnectAccountId)
     }
 }
 

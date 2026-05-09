@@ -62,7 +62,6 @@ export interface User {
   rating: number;
   vehicle_info?: string;
   seats_available?: number;
-  mpg?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -82,7 +81,7 @@ export interface SafeUser {
   license_plate?: string;
   earnings?: number;
   profile_picture_url?: string | null;
-  mpg?: number;
+  stripe_connect_account_id?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -131,9 +130,14 @@ export interface Booking {
   trip_id: string;
   rider_id: string;
   status: BookingStatus;
-  booking_state?: BookingState;  // New field for driver approval flow
+  booking_state?: BookingState;
   seats_booked: number;
-  fare?: number;  // Rider's fare from quotes table (max_price)
+  fare?: number;
+  payment_intent_id?: string | null;
+  hold_expires_at?: Date | null;
+  payment_deadline_at?: Date | string | null;
+  cancellation_reason?: string | null;
+  pickup_location?: { lat: number; lng: number } | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -294,7 +298,6 @@ export interface DriverSetupRequest {
   vehicle_info: string;
   seats_available: number;
   license_plate: string;
-  mpg?: number;
 }
 
 // ========== API RESPONSE TYPES ==========

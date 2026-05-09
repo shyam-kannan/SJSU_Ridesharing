@@ -14,6 +14,8 @@ struct Trip: Codable, Identifiable {
     let seatsAvailable: Int
     let maxRiders: Int?
     let pendingBookingCount: Int?
+    let totalPayout: Double?
+    let totalQuoted: Double?
     let recurrence: String?
     let status: TripStatus
     let createdAt: Date
@@ -31,6 +33,8 @@ struct Trip: Codable, Identifiable {
         seatsAvailable: Int,
         maxRiders: Int? = nil,
         pendingBookingCount: Int? = nil,
+        totalPayout: Double? = nil,
+        totalQuoted: Double? = nil,
         recurrence: String?,
         status: TripStatus,
         createdAt: Date,
@@ -47,6 +51,8 @@ struct Trip: Codable, Identifiable {
         self.seatsAvailable = seatsAvailable
         self.maxRiders = maxRiders
         self.pendingBookingCount = pendingBookingCount
+        self.totalPayout = totalPayout
+        self.totalQuoted = totalQuoted
         self.recurrence = recurrence
         self.status = status
         self.createdAt = createdAt
@@ -64,6 +70,8 @@ struct Trip: Codable, Identifiable {
         case seatsAvailable = "seats_available"
         case maxRiders = "max_riders"
         case pendingBookingCount = "pending_booking_count"
+        case totalPayout = "total_payout"
+        case totalQuoted = "total_quoted"
         case recurrence, status
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -82,11 +90,34 @@ struct Trip: Codable, Identifiable {
         seatsAvailable = try container.decode(Int.self, forKey: .seatsAvailable)
         maxRiders = try container.decodeIfPresent(Int.self, forKey: .maxRiders)
         pendingBookingCount = try container.decodeIfPresent(Int.self, forKey: .pendingBookingCount)
+        totalPayout = try container.decodeIfPresent(Double.self, forKey: .totalPayout)
+        totalQuoted = try container.decodeIfPresent(Double.self, forKey: .totalQuoted)
         recurrence = try container.decodeIfPresent(String.self, forKey: .recurrence)
         status = try Self.decodeStatus(from: container)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         driver = try container.decodeIfPresent(User.self, forKey: .driver)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(driverId, forKey: .driverId)
+        try c.encode(origin, forKey: .origin)
+        try c.encode(destination, forKey: .destination)
+        try c.encodeIfPresent(originPoint, forKey: .originPoint)
+        try c.encodeIfPresent(destinationPoint, forKey: .destinationPoint)
+        try c.encode(departureTime, forKey: .departureTime)
+        try c.encode(seatsAvailable, forKey: .seatsAvailable)
+        try c.encodeIfPresent(maxRiders, forKey: .maxRiders)
+        try c.encodeIfPresent(pendingBookingCount, forKey: .pendingBookingCount)
+        try c.encodeIfPresent(totalPayout, forKey: .totalPayout)
+        try c.encodeIfPresent(totalQuoted, forKey: .totalQuoted)
+        try c.encodeIfPresent(recurrence, forKey: .recurrence)
+        try c.encode(status, forKey: .status)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(driver, forKey: .driver)
     }
 
     private static func decodeStatus(from container: KeyedDecodingContainer<CodingKeys>) throws -> TripStatus {
@@ -362,8 +393,6 @@ struct TripSettlement: Codable {
     let totalCost: Double
     let driverEarnings: Double
     let riderCount: Int
-    let driverMpg: Double
-    let mileageRate: Double
     let breakdown: SettlementBreakdown
     let riders: [RiderSettlement]
 
@@ -372,8 +401,6 @@ struct TripSettlement: Codable {
         case totalCost = "total_cost"
         case driverEarnings = "driver_earnings"
         case riderCount = "rider_count"
-        case driverMpg = "driver_mpg"
-        case mileageRate = "mileage_rate"
         case breakdown, riders
     }
 }

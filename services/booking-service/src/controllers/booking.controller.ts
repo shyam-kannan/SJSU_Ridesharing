@@ -430,7 +430,35 @@ export const authorizePayment = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
- * Capture authorized payment when trip completes (driver only)
+ * Confirm authorized PaymentIntent server-side after rider taps Pay (rider only)
+ * POST /api/bookings/:id/confirm-payment
+ */
+export const confirmPayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      errorResponse(res, 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+    const booking = await bookingService.confirmPayment(id, req.user.userId);
+
+    successResponse(res, booking, 'Payment confirmed successfully');
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    if (error instanceof AppError) {
+      errorResponse(res, error.message, error.statusCode);
+      return;
+    }
+    if (error instanceof Error) {
+      errorResponse(res, error.message, 400);
+      return;
+    }
+    throw new AppError('Failed to confirm payment', 500);
+  }
+};
+
+/**
  * POST /api/bookings/:id/capture-payment
  */
 export const capturePayment = async (req: AuthRequest, res: Response): Promise<void> => {

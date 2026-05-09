@@ -41,6 +41,12 @@ spec:
         envFrom:
         - configMapRef:
             name: lessgo-config
+        env:
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: lessgo-stripe-secret
+              key: STRIPE_SECRET_KEY
         resources:
           requests:
             memory: "64Mi"

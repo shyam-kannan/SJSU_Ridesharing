@@ -64,8 +64,6 @@ struct RiderHomeView: View {
 
     private let sjsuName = "San Jose State University"
 
-    private let notificationBadgeTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
-
     var body: some View {
         NavigationView {
             GeometryReader { geometry in
@@ -160,6 +158,7 @@ struct RiderHomeView: View {
             .fullScreenCover(isPresented: $showSearchResults) {
                 if let criteria = searchCriteria {
                     RiderSearchResultsView(criteria: criteria)
+                        .environmentObject(authVM)
                 }
             }
             .fullScreenCover(isPresented: $showFinding) {
@@ -209,8 +208,11 @@ struct RiderHomeView: View {
                 hasInitiallyCentered = true
                 centerMap(on: coord)
             }
-            .onReceive(notificationBadgeTimer) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 Task { await refreshNotificationBadge() }
+            }
+            .onChange(of: showNotifications) { isPresented in
+                if !isPresented { Task { await refreshNotificationBadge() } }
             }
             .onAppear {
                 locationManager.requestPermission()

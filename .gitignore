@@ -83,3 +83,5 @@ LessGo/LessGo.xcodeproj/project.xcworkspace/xcuserdata/sriram.xcuserdatad/UserIn
 LessGo/LessGo.xcodeproj/xcuserdata/sriram.xcuserdatad/xcschemes/xcschememanagement.plist
 *.xcuserstate
 .worktrees/
+graphify-out
+docs/DYNAMIC_PRICING_PLAN.md

@@ -19,6 +19,14 @@ const pool = new Pool({
   connectionString: config.databaseUrl,
 });
 
+const getTripById = async (tripId: string) => {
+  const result = await pool.query(
+    'SELECT trip_id, driver_id, origin, destination, seats_available, status, departure_time FROM trips WHERE trip_id = $1',
+    [tripId]
+  );
+  return result.rows[0] ?? null;
+};
+
 /**
  * Create a new booking
  * @param riderId Rider's UUID
@@ -266,6 +274,11 @@ export const getBookingById = async (bookingId: string): Promise<BookingWithDeta
     booking_state: row.booking_state || 'pending',
     seats_booked: row.seats_booked,
     fare: row.fare != null ? parseFloat(row.fare) : undefined,
+    payment_intent_id: row.payment_intent_id || null,
+    hold_expires_at: row.hold_expires_at || null,
+    payment_deadline_at: row.payment_deadline_at || null,
+    cancellation_reason: row.cancellation_reason || null,
+    pickup_location: row.pickup_location || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     trip: {
@@ -334,7 +347,7 @@ export const listUserBookings = async (
   asDriver: boolean = false
 ): Promise<BookingWithDetails[]> => {
   const query = asDriver
-    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 AND b.deleted_at IS NULL ORDER BY b.created_at DESC`
+    ? `SELECT b.booking_id FROM bookings b JOIN trips t ON b.trip_id = t.trip_id WHERE t.driver_id = $1 AND b.deleted_at IS NULL AND t.deleted_at IS NULL ORDER BY b.created_at DESC`
     : `SELECT booking_id, booking_state FROM bookings WHERE rider_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`;
 
   const result = await pool.query(query, [userId]);
@@ -659,11 +672,15 @@ export const getBookingsByTripId = async (tripId: string): Promise<{ bookings: a
       u.rating as rider_rating,
       u.profile_picture_url as rider_picture,
       b.payment_intent_id,
+      b.payment_deadline_at,
+      b.cancellation_reason,
       q.max_price AS fare
     FROM bookings b
     JOIN users u ON b.rider_id = u.user_id
     LEFT JOIN quotes q ON q.booking_id = b.booking_id
-    WHERE b.trip_id = $1 AND b.status IN ('confirmed', 'pending') AND b.deleted_at IS NULL
+    WHERE b.trip_id = $1
+      AND b.booking_state IS NOT NULL
+      AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `;
 
@@ -714,10 +731,20 @@ export const approveBooking = async (
       throw new Error('Cannot approve a rejected or cancelled booking');
     }
 
-    // Update booking state and clear hold_expires_at (seat is now permanently held)
+    // Update booking state, clear hold_expires_at, and set payment_deadline_at
+    // (trip.departure_time - 1 hour) so the rider knows when to complete payment.
     await client.query(
-      'UPDATE bookings SET booking_state = $1, hold_expires_at = NULL, updated_at = current_timestamp WHERE booking_id = $2',
-      ['approved', bookingId]
+      `UPDATE bookings b
+       SET booking_state        = 'approved',
+           hold_expires_at      = NULL,
+           payment_deadline_at  = (
+             SELECT departure_time - INTERVAL '1 hour'
+             FROM trips
+             WHERE trip_id = b.trip_id
+           ),
+           updated_at           = current_timestamp
+       WHERE b.booking_id = $1`,
+      [bookingId]
     );
 
     await client.query('COMMIT');
@@ -805,8 +832,10 @@ export const deleteBooking = async (bookingId: string, userId: string): Promise<
     throw new Error('Booking not found');
   }
 
-  if (bookingData.rider_id !== userId) {
-    throw new AppError('Forbidden: You are not the rider of this booking', 403);
+  // Fix: also allow the trip's driver
+  const tripData = await getTripById(bookingData.trip_id);
+  if (bookingData.rider_id !== userId && tripData?.driver_id !== userId) {
+      throw new AppError('Forbidden', 403);
   }
 
   if (!['cancelled', 'rejected'].includes(bookingData.booking_state || '')) {
@@ -843,18 +872,21 @@ export const authorizePayment = async (
     throw new AppError('Booking must be approved before payment can be authorized', 400);
   }
 
-  // Don't create a duplicate PaymentIntent
+  // Don't create a duplicate PaymentIntent — but only reuse if it's still usable
   const existingResult = await pool.query(
     'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
     [bookingId]
   );
   if (existingResult.rows[0]?.payment_intent_id) {
-    // Return existing PaymentIntent client secret
     const existing = await stripe.paymentIntents.retrieve(existingResult.rows[0].payment_intent_id);
-    return {
-      clientSecret: existing.client_secret!,
-      paymentIntentId: existing.id,
-    };
+    // Reuse only if the intent can still accept a payment method
+    if (existing.status === 'requires_payment_method' || existing.status === 'requires_confirmation') {
+      return {
+        clientSecret: existing.client_secret!,
+        paymentIntentId: existing.id,
+      };
+    }
+    // Otherwise fall through to create a fresh PaymentIntent
   }
 
   // Determine fare amount in cents
@@ -869,6 +901,7 @@ export const authorizePayment = async (
     amount: amountCents,
     currency: 'usd',
     capture_method: 'manual',
+    automatic_payment_methods: { enabled: true },
     metadata: {
       booking_id: bookingId,
       rider_id: riderId,
@@ -883,10 +916,113 @@ export const authorizePayment = async (
     [paymentIntent.id, bookingId]
   );
 
+  // Merge rider pickup into trip route (non-fatal)
+  if (bookingData.pickup_location) {
+    const pl = bookingData.pickup_location as { lat: number; lng: number };
+    try {
+      const tripResult = await pool.query(
+        `SELECT ST_Y(destination_point::geometry) as dest_lat,
+                ST_X(destination_point::geometry) as dest_lng
+         FROM trips WHERE trip_id = $1`,
+        [bookingData.trip_id]
+      );
+      if (tripResult.rows.length > 0) {
+        const { dest_lat, dest_lng } = tripResult.rows[0];
+        await axios.post(
+          `${config.tripServiceUrl}/trips/${bookingData.trip_id}/merge-route`,
+          {
+            rider_id: bookingData.rider_id,
+            pickup_lat: pl.lat,
+            pickup_lng: pl.lng,
+            dropoff_lat: dest_lat,
+            dropoff_lng: dest_lng,
+          },
+          { headers: { 'x-internal-service': 'booking-service' } }
+        );
+      }
+    } catch (mergeErr) {
+      console.warn('[authorizePayment] Route merge failed (non-fatal):', mergeErr);
+    }
+  }
+
+  // Notify all active riders on the trip that the route was updated
+  try {
+    const allRiders = await pool.query(
+      `SELECT rider_id FROM bookings
+       WHERE trip_id = $1
+         AND booking_state IN ('pending', 'approved')
+         AND rider_id != $2
+         AND deleted_at IS NULL`,
+      [bookingData.trip_id, bookingData.rider_id]
+    );
+    for (const row of allRiders.rows) {
+      axios.post(`${config.notificationServiceUrl}/notifications/send`, {
+        user_id: row.rider_id,
+        type: 'route_updated',
+        title: 'Route Updated',
+        message: 'The pickup route has been updated. Check your ride details.',
+        data: { trip_id: bookingData.trip_id },
+      }).catch(() => {});
+    }
+  } catch { /* non-fatal */ }
+
   return {
     clientSecret: paymentIntent.client_secret!,
     paymentIntentId: paymentIntent.id,
   };
+};
+
+/**
+ * Confirm a PaymentIntent server-side (rider calls after authorize-payment)
+ * This attaches a payment method and confirms the intent so it moves to
+ * requires_capture, ready for driver-triggered capture.
+ * @param bookingId Booking's UUID
+ * @param riderId  Rider's UUID (for authorization)
+ * @returns Updated booking
+ */
+export const confirmPayment = async (
+  bookingId: string,
+  riderId: string
+): Promise<BookingWithDetails> => {
+  const bookingData = await getBookingById(bookingId);
+  if (!bookingData) {
+    throw new AppError('Booking not found', 404);
+  }
+
+  if (bookingData.rider_id !== riderId) {
+    throw new AppError('Unauthorized', 403);
+  }
+
+  const intentIdResult = await pool.query(
+    'SELECT payment_intent_id FROM bookings WHERE booking_id = $1',
+    [bookingId]
+  );
+  const paymentIntentId = intentIdResult.rows[0]?.payment_intent_id;
+
+  if (!paymentIntentId) {
+    throw new AppError('No authorized payment found — call authorize-payment first', 400);
+  }
+
+  // Retrieve current state; skip confirm if already confirmed
+  const existing = await stripe.paymentIntents.retrieve(paymentIntentId);
+  if (existing.status !== 'requires_payment_method' && existing.status !== 'requires_confirmation') {
+    // Already confirmed (requires_capture) or in another terminal state — return booking as-is
+    const updatedBooking = await getBookingById(bookingId);
+    return updatedBooking!;
+  }
+
+  // Confirm the PaymentIntent; use test card only outside production
+  const confirmParams: Stripe.PaymentIntentConfirmParams = {};
+  if (process.env.NODE_ENV !== 'production') {
+    confirmParams.payment_method = 'pm_card_visa';
+  }
+  await stripe.paymentIntents.confirm(paymentIntentId, confirmParams);
+
+  // Booking stays in 'approved' state — payment_authorized_at already signals authorization.
+  // It will move to 'completed' when the trip ends.
+
+  const updatedBooking = await getBookingById(bookingId);
+  return updatedBooking!;
 };
 
 /**
@@ -918,7 +1054,34 @@ export const capturePayment = async (
     throw new AppError('No authorized payment found for this booking', 400);
   }
 
-  await stripe.paymentIntents.capture(paymentIntentId);
+  // Partial capture: use final_price if written, otherwise capture full hold
+  const quoteResult = await pool.query(
+    'SELECT final_price, max_price FROM quotes WHERE booking_id = $1',
+    [bookingId]
+  );
+  const finalPrice = quoteResult.rows[0]?.final_price
+    ? parseFloat(quoteResult.rows[0].final_price)
+    : undefined;
+  const holdAmount = quoteResult.rows[0]?.max_price
+    ? parseFloat(quoteResult.rows[0].max_price)
+    : undefined;
+
+  const captureOptions = finalPrice
+    ? { amount_to_capture: Math.round(finalPrice * 100) }
+    : undefined;
+
+  await stripe.paymentIntents.capture(paymentIntentId, captureOptions);
+
+  // Credit driver earnings with the actual captured amount
+  const capturedAmount = finalPrice ?? holdAmount;
+  if (capturedAmount) {
+    await pool.query(
+      `UPDATE users
+       SET earnings = COALESCE(earnings, 0) + $1, updated_at = current_timestamp
+       WHERE user_id = $2`,
+      [capturedAmount, driverId]
+    ).catch(() => {}); // non-fatal
+  }
 
   await pool.query(
     `UPDATE bookings
@@ -929,6 +1092,16 @@ export const capturePayment = async (
 
   const updatedBooking = await getBookingById(bookingId);
   return updatedBooking!;
+};
+
+/**
+ * Write final_price to the quotes row for a booking (called by trip-service on completion)
+ */
+export const writeFinalPrice = async (bookingId: string, finalPrice: number): Promise<void> => {
+  await pool.query(
+    `UPDATE quotes SET final_price = $1 WHERE booking_id = $2`,
+    [finalPrice, bookingId]
+  );
 };
 
 export default {
@@ -944,5 +1117,7 @@ export default {
   rejectBooking,
   deleteBooking,
   authorizePayment,
+  confirmPayment,
   capturePayment,
+  writeFinalPrice,
 };

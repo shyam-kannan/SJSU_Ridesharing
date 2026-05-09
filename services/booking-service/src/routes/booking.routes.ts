@@ -48,6 +48,8 @@ router.patch('/:id/reject', authenticateToken, asyncHandler(bookingController.re
 
 router.post('/:id/authorize-payment', authenticateToken, asyncHandler(bookingController.authorizePayment));
 
+router.post('/:id/confirm-payment', authenticateToken, asyncHandler(bookingController.confirmPayment));
+
 router.post('/:id/capture-payment', authenticateToken, asyncHandler(bookingController.capturePayment));
 
 router.delete('/:id', authenticateToken, asyncHandler(bookingController.deleteBooking));
@@ -94,6 +96,25 @@ router.get(
   asyncHandler(async (req: express.Request, res: express.Response) => {
     const bookings = await bookingService.getBookingsByTripId(req.params.tripId);
     res.json({ status: 'success', data: bookings });
+  })
+);
+
+// Internal: write final_price to quotes table after settlement.
+// Called by trip-service on trip completion.
+router.patch(
+  '/:id/final-price',
+  asyncHandler(async (req: express.Request, res: express.Response) => {
+    if (req.headers['x-internal-service'] !== 'trip-service') {
+      res.status(403).json({ status: 'error', message: 'Forbidden' });
+      return;
+    }
+    const { final_price } = req.body;
+    if (typeof final_price !== 'number' || final_price <= 0) {
+      res.status(400).json({ status: 'error', message: 'final_price must be a positive number' });
+      return;
+    }
+    await bookingService.writeFinalPrice(req.params.id, final_price);
+    res.json({ status: 'success', message: 'final_price updated' });
   })
 );
 

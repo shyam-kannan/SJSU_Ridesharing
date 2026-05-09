@@ -177,4 +177,30 @@ router.post('/:userId/debug-verify', asyncHandler(userController.debugVerify));
  */
 router.delete('/:userId/debug-delete', asyncHandler(userController.debugDelete));
 
+/**
+ * @route   POST /driver/stripe-onboard
+ * @desc    Create or retrieve Stripe Connect onboarding URL
+ * @access  Private (drivers only)
+ */
+router.post('/driver/stripe-onboard', authenticateToken, asyncHandler(userController.stripeOnboard));
+
+/**
+ * @route   GET /driver/stripe-dashboard
+ * @desc    Get Stripe Connect dashboard login link
+ * @access  Private (drivers only)
+ */
+router.get('/driver/stripe-dashboard', authenticateToken, asyncHandler(userController.stripeDashboard));
+
+/**
+ * @route   GET /stripe/connect-return
+ * @desc    Stripe Connect onboarding return redirect (no auth — called by Stripe in browser)
+ */
+router.get('/stripe/connect-return', userController.stripeConnectReturn);
+
+/**
+ * @route   GET /stripe/connect-refresh
+ * @desc    Stripe Connect onboarding refresh redirect (no auth — called by Stripe in browser)
+ */
+router.get('/stripe/connect-refresh', userController.stripeConnectRefresh);
+
 export default router;

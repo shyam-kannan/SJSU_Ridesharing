@@ -77,10 +77,11 @@ describe('services/cost-calculation-service/src/app', () => {
       },
     });
 
+    // fallback: 10 miles × $0.67 + 0 hours × $15 = $6.70 total, $1.34/rider for 5
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('success');
-    expect(response.body.data.breakdown.total_trip_cost).toBe(10);
-    expect(response.body.data.breakdown.price_per_rider).toBe(2);
-    expect(response.body.data.max_price).toBe(2);
+    expect(response.body.data.breakdown.total_trip_cost).toBe(6.70);
+    expect(response.body.data.breakdown.price_per_rider).toBe(1.34);
+    expect(response.body.data.max_price).toBe(1.34);
   });
 });

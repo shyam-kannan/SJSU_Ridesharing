@@ -1,6 +1,16 @@
 import { Pool } from 'pg';
 import { config } from '../config';
 import { SafeUser, Rating, RatingWithUsers, DriverSetupRequest, UserRole } from '@lessgo/shared';
+import Stripe from 'stripe';
+
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!_stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not set');
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' });
+  }
+  return _stripe;
+}
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -13,7 +23,7 @@ const pool = new Pool({
  */
 export const getUserById = async (userId: string): Promise<SafeUser | null> => {
   const query = `
-    SELECT user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, profile_picture_url, created_at, updated_at
+    SELECT user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, stripe_connect_account_id, created_at, updated_at
     FROM users
     WHERE user_id = $1
   `;
@@ -64,7 +74,7 @@ export const updateUserProfile = async (
     UPDATE users
     SET ${fields.join(', ')}
     WHERE user_id = $${paramIndex}
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, profile_picture_url, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, stripe_connect_account_id, created_at, updated_at
   `;
 
   const result = await pool.query(query, values);
@@ -86,7 +96,7 @@ export const setupDriverProfile = async (
   userId: string,
   driverData: DriverSetupRequest
 ): Promise<SafeUser> => {
-  const { vehicle_info, seats_available, license_plate, mpg } = driverData;
+  const { vehicle_info, seats_available, license_plate } = driverData;
 
   const query = `
     UPDATE users
@@ -95,10 +105,9 @@ export const setupDriverProfile = async (
       vehicle_info = $2,
       seats_available = $3,
       license_plate = $4,
-      mpg = $5,
       updated_at = current_timestamp
-    WHERE user_id = $6
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, created_at, updated_at
+    WHERE user_id = $5
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, stripe_connect_account_id, created_at, updated_at
   `;
 
   const result = await pool.query(query, [
@@ -106,7 +115,6 @@ export const setupDriverProfile = async (
     vehicle_info,
     seats_available,
     license_plate,
-    mpg ?? 25.0,
     userId,
   ]);
 
@@ -240,7 +248,7 @@ export const getUserStats = async (
     const tripStatsQuery = `
       SELECT COUNT(*) as total_trips
       FROM trips
-      WHERE driver_id = $1
+      WHERE driver_id = $1 AND status = 'completed'
     `;
 
     const tripStats = await pool.query(tripStatsQuery, [userId]);
@@ -252,6 +260,7 @@ export const getUserStats = async (
     SELECT COUNT(*) as total_bookings
     FROM bookings
     WHERE rider_id = $1
+      AND booking_state = 'completed'
   `;
 
   const bookingStats = await pool.query(bookingStatsQuery, [userId]);
@@ -303,7 +312,7 @@ export const updateProfilePicture = async (
     UPDATE users
     SET profile_picture_url = $1, updated_at = current_timestamp
     WHERE user_id = $2
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, profile_picture_url, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, profile_picture_url, stripe_connect_account_id, created_at, updated_at
   `;
 
   const result = await pool.query(query, [profilePictureUrl, userId]);
@@ -434,7 +443,7 @@ export const updateUserRole = async (userId: string, role: string): Promise<Safe
     UPDATE users
     SET role = $1, updated_at = current_timestamp
     WHERE user_id = $2
-    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, mpg, created_at, updated_at
+    RETURNING user_id, name, email, role, sjsu_id_status, rating, vehicle_info, seats_available, license_plate, earnings, stripe_connect_account_id, created_at, updated_at
   `;
 
   const result = await pool.query(query, [role, userId]);
@@ -462,4 +471,62 @@ export default {
   createReport,
   getUserReports,
   updateUserRole,
+};
+
+export const createStripeConnectOnboardingUrl = async (
+  userId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<{ url: string; accountId: string }> => {
+  const user = await getUserById(userId);
+  if (!user) throw new Error('User not found');
+
+  // Reuse existing account if already created
+  let accountId: string | null = user.stripe_connect_account_id ?? null;
+  if (!accountId) {
+    const stripe = getStripe();
+    const account = await stripe.accounts.create({
+      type: 'express',
+      email: user.email,
+      metadata: { userId },
+    });
+    accountId = account.id;
+    await pool.query(
+      'UPDATE users SET stripe_connect_account_id = $1 WHERE user_id = $2',
+      [accountId, userId]
+    );
+  }
+
+  const stripe = getStripe();
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
+    type: 'account_onboarding',
+  });
+
+  return { url: accountLink.url, accountId };
+};
+
+export const getStripeConnectDashboardUrl = async (
+  userId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<string> => {
+  const user = await getUserById(userId);
+  const accountId = user?.stripe_connect_account_id ?? null;
+  if (!accountId) throw new Error('No Stripe Connect account found');
+  const stripe = getStripe();
+  const account = await stripe.accounts.retrieve(accountId);
+  if (!account.details_submitted) {
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: refreshUrl,
+      return_url: returnUrl,
+      type: 'account_onboarding',
+    });
+    return accountLink.url;
+  }
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  return loginLink.url;
 };

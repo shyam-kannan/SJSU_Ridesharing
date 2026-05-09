@@ -18,6 +18,8 @@ class TripDetailViewModel: ObservableObject {
     @Published var cancellationSuccess = false
     @Published var isAuthorizing = false
     @Published var paymentAuthorized = false
+    @Published var paymentDeadlineAt: Date? = nil
+    @Published var cancellationReason: String? = nil
 
     // MARK: - Private State
 
@@ -51,22 +53,32 @@ class TripDetailViewModel: ObservableObject {
 
         do {
             let loadedTrip = try await tripService.getTrip(id: tripId)
-            // Convert Trip to TripWithDriver (simplified for now)
-            trip = TripWithDriver(
-                id: loadedTrip.id,
-                driverId: loadedTrip.driverId,
-                driverName: loadedTrip.driver?.name ?? "Driver",
-                driverRating: loadedTrip.driver?.rating ?? 0.0,
-                driverPhotoUrl: loadedTrip.driver?.profilePicture,
-                vehicleInfo: loadedTrip.driver?.vehicleInfo,
-                origin: loadedTrip.origin,
-                destination: loadedTrip.destination,
-                departureTime: loadedTrip.departureTime,
-                seatsAvailable: loadedTrip.seatsAvailable,
-                estimatedCost: 10.0,
-                featured: false,
-                status: loadedTrip.status.rawValue
-            )
+            // Preserve the original TripWithDriver (which has costBreakdown from search),
+            // only refreshing mutable fields that may have changed since search.
+            if let existing = trip {
+                trip = TripWithDriver(
+                    id: existing.id,
+                    driverId: existing.driverId,
+                    driverName: loadedTrip.driver?.name ?? existing.driverName,
+                    driverRating: loadedTrip.driver?.rating ?? existing.driverRating,
+                    driverPhotoUrl: loadedTrip.driver?.profilePicture ?? existing.driverPhotoUrl,
+                    vehicleInfo: loadedTrip.driver?.vehicleInfo ?? existing.vehicleInfo,
+                    origin: existing.origin,
+                    destination: existing.destination,
+                    departureTime: existing.departureTime,
+                    seatsAvailable: loadedTrip.seatsAvailable,
+                    estimatedCost: existing.estimatedCost,
+                    featured: existing.featured,
+                    status: loadedTrip.status.rawValue,
+                    originLat: existing.originLat,
+                    originLng: existing.originLng,
+                    detourMiles: existing.detourMiles,
+                    adjustedEtaMinutes: existing.adjustedEtaMinutes,
+                    originalEtaMinutes: existing.originalEtaMinutes,
+                    detourTimeMinutes: existing.detourTimeMinutes,
+                    costBreakdown: existing.costBreakdown
+                )
+            }
 
             // Check for existing booking
             await checkExistingBooking()
@@ -146,7 +158,21 @@ class TripDetailViewModel: ObservableObject {
         defer { isAuthorizing = false }
 
         do {
+            // Step 1: Create PaymentIntent on backend (authorize / card hold)
             _ = try await bookingService.authorizePayment(bookingId: bookingId)
+
+            // Step 2: Confirm the PaymentIntent server-side so it moves to
+            // requires_capture, ready for driver-triggered capture at trip end.
+            try await bookingService.confirmPayment(bookingId: bookingId)
+
+            // Fetch by booking ID directly — getBookingForTrip hits a driver-only
+            // endpoint and 403s for riders, so we use getBooking(id:) instead.
+            if let refreshed = try? await bookingService.getBooking(id: bookingId) {
+                booking = refreshed
+            } else {
+                print("[PAYMENT] Warning: failed to re-fetch booking \(bookingId) after payment")
+            }
+            // paymentAuthorized is the fallback: hides the button even if re-fetch fails
             paymentAuthorized = true
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch let error as NetworkError {
@@ -162,18 +188,28 @@ class TripDetailViewModel: ObservableObject {
 
     func checkExistingBooking() async {
         do {
-            let existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
+            // If we already have a booking ID, fetch it directly for freshest data.
+            // Otherwise fall back to listing rider's bookings filtered by trip.
+            let existingBooking: Booking?
+            if let knownId = booking?.id {
+                existingBooking = try await bookingService.getBooking(id: knownId)
+            } else {
+                existingBooking = try await bookingService.getBookingForTrip(tripId: tripId)
+            }
             if let existingBooking = existingBooking,
                existingBooking.bookingState == .cancelled || existingBooking.bookingState == .rejected {
                 booking = nil
                 bookingState = nil
+                cancellationReason = existingBooking.cancellationReason
+                paymentDeadlineAt = nil
             } else {
                 booking = existingBooking
-                if let bookingState = existingBooking?.bookingState {
-                    self.bookingState = bookingState
-                    if bookingState == .pending {
-                        startPolling()
-                    }
+                if let existingBooking = existingBooking {
+                    let state = existingBooking.bookingState
+                    self.bookingState = state
+                    self.paymentDeadlineAt = existingBooking.paymentDeadlineAt
+                    self.cancellationReason = existingBooking.cancellationReason
+                    if state == .pending { startPolling() } else { stopPolling() }
                 }
             }
         } catch {
@@ -186,7 +222,7 @@ class TripDetailViewModel: ObservableObject {
     private func startPolling() {
         stopPolling()
 
-        pollingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        pollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.checkExistingBooking()
             }

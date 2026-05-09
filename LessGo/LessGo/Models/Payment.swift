@@ -38,6 +38,17 @@ struct Payment: Codable, Identifiable {
             amount = 0.0
         }
     }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(bookingId, forKey: .bookingId)
+        try c.encodeIfPresent(stripePaymentIntentId, forKey: .stripePaymentIntentId)
+        try c.encode(amount, forKey: .amount)
+        try c.encode(status, forKey: .status)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+    }
 }
 
 enum PaymentStatus: String, Codable {

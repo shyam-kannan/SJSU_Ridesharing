@@ -52,8 +52,8 @@ class UserService {
 
     // MARK: - Setup Driver Profile
 
-    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String, mpg: Double = 25.0) async throws -> User {
-        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate, mpg: mpg)
+    func setupDriverProfile(id: String, vehicleInfo: String, seatsAvailable: Int, licensePlate: String) async throws -> User {
+        let body = DriverSetupRequest(vehicleInfo: vehicleInfo, seatsAvailable: seatsAvailable, licensePlate: licensePlate)
 
         let user: User = try await network.request(
             endpoint: "/users/\(id)/driver-setup",
@@ -157,6 +157,38 @@ class UserService {
         return user
     }
 
+    // MARK: - Stripe Connect
+
+    func startStripeOnboarding() async throws -> URL {
+        struct OnboardData: Codable {
+            let url: String
+        }
+        let response: OnboardData = try await network.request(
+            endpoint: "/users/driver/stripe-onboard",
+            method: .post,
+            requiresAuth: true
+        )
+        guard let url = URL(string: response.url) else {
+            throw NetworkError.decodingError(NSError(domain: "Invalid Stripe onboarding URL", code: 0))
+        }
+        return url
+    }
+
+    func getStripeDashboardUrl() async throws -> URL {
+        struct DashData: Codable {
+            let url: String
+        }
+        let response: DashData = try await network.request(
+            endpoint: "/users/driver/stripe-dashboard",
+            method: .get,
+            requiresAuth: true
+        )
+        guard let url = URL(string: response.url) else {
+            throw NetworkError.decodingError(NSError(domain: "Invalid Stripe dashboard URL", code: 0))
+        }
+        return url
+    }
+
     // MARK: - Driver Availability
 
     func updateAvailability(userId: String, available: Bool) async throws {
@@ -179,13 +211,11 @@ struct DriverSetupRequest: Codable {
     let vehicleInfo: String
     let seatsAvailable: Int
     let licensePlate: String
-    let mpg: Double?
 
     enum CodingKeys: String, CodingKey {
         case vehicleInfo = "vehicle_info"
         case seatsAvailable = "seats_available"
         case licensePlate = "license_plate"
-        case mpg
     }
 }
 

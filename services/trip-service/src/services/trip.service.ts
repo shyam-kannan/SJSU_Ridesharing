@@ -375,9 +375,26 @@ export const listTrips = async (filters?: {
       ST_Y(t.origin_point::geometry) as origin_lat,
       ST_X(t.destination_point::geometry) as destination_lng,
       ST_Y(t.destination_point::geometry) as destination_lat,
-      t.departure_time, t.seats_available, t.recurrence, t.status,
+      t.departure_time, t.seats_available, t.max_riders, t.recurrence, t.status,
       t.created_at, t.updated_at,
       (SELECT COUNT(*) FROM bookings b WHERE b.trip_id = t.trip_id AND b.booking_state = 'pending') AS pending_booking_count,
+      COALESCE((
+        SELECT SUM(p.amount)
+        FROM payments p
+        JOIN bookings b ON p.booking_id = b.booking_id
+        WHERE b.trip_id = t.trip_id AND p.status = 'captured'
+      ), 0) AS total_payout,
+      COALESCE((
+        SELECT SUM(q.max_price)
+        FROM quotes q
+        JOIN bookings b ON q.booking_id = b.booking_id
+        WHERE b.trip_id = t.trip_id
+          AND b.booking_state = 'approved'
+          AND NOT EXISTS (
+            SELECT 1 FROM payments p2
+            WHERE p2.booking_id = b.booking_id AND p2.status = 'captured'
+          )
+      ), 0) AS total_quoted,
       u.user_id as driver_user_id,
       u.name as driver_name,
       u.email as driver_email,
@@ -434,9 +451,12 @@ export const listTrips = async (filters?: {
     destination_point: { lat: row.destination_lat, lng: row.destination_lng },
     departure_time: row.departure_time,
     seats_available: row.seats_available,
+    max_riders: row.max_riders ? parseInt(row.max_riders, 10) : undefined,
     recurrence: row.recurrence,
     status: row.status,
     pending_booking_count: parseInt(row.pending_booking_count, 10),
+    total_payout: parseFloat(row.total_payout || '0'),
+    total_quoted: parseFloat(row.total_quoted || '0'),
     created_at: row.created_at,
     updated_at: row.updated_at,
     driver: {
@@ -795,8 +815,9 @@ export const isLocationNearSJSU = async (
 // ── ML-ranked search for posted rides with rerouting ────────────────────────
 
 export interface CostBreakdown {
-  base_fare: number;
-  detour_surcharge: number;
+  trip_cost:       number;
+  duration_hours:  number;
+  detour_fee:      number;
   per_rider_split: number;
 }
 
@@ -892,6 +913,9 @@ export const searchTripsWithRerouting = async (
       let adjustedEtaMinutes: number | undefined;
       let originalEtaMinutes: number | undefined;
       let detourTimeMinutes: number | undefined;
+      let leg1DurationSec = 0;
+      let leg2DurationSec = 0;
+      let leg2DistanceMiles = 0;
       try {
         // Two-leg ETA: driver_origin → rider_pickup + rider_pickup → destination
         const [leg1, leg2] = await Promise.all([
@@ -904,16 +928,21 @@ export const searchTripsWithRerouting = async (
             destination: `${destinationLat},${destinationLng}`,
           }, { timeout: 4000 }),
         ]);
-        detourTimeMinutes   = Math.round((leg1.data?.duration_seconds ?? 0) / 60);
-        originalEtaMinutes  = Math.round((leg2.data?.duration_seconds ?? 0) / 60);
+        leg1DurationSec   = leg1.data?.duration_seconds ?? 0;
+        leg2DurationSec   = leg2.data?.duration_seconds ?? 0;
+        leg2DistanceMiles = leg2.data?.distance_miles   ?? 0;
+        detourTimeMinutes   = Math.round(leg1DurationSec / 60);
+        originalEtaMinutes  = Math.round(leg2DurationSec / 60);
         adjustedEtaMinutes  = detourTimeMinutes + originalEtaMinutes;
       } catch {
         // Routing service unavailable — omit ETA
       }
 
-      const baseFare = 5.00; // default base fare; cost-calculation-service can refine this
-      const detourSurcharge = parseFloat((detourMiles * 0.50).toFixed(2));
-      const perRiderSplit = parseFloat((baseFare + detourSurcharge).toFixed(2));
+      const durationHours       = (leg1DurationSec + leg2DurationSec) / 3600;
+      const directDistanceMiles = leg2DistanceMiles > 0 ? leg2DistanceMiles : detourMiles;
+      const tripCost            = parseFloat((directDistanceMiles * 0.67 + durationHours * 15.00).toFixed(2));
+      const detourFee           = parseFloat((detourMiles * 0.67 * 1.25).toFixed(2));
+      const perRiderSplit        = parseFloat((tripCost + detourFee).toFixed(2));
 
       return {
         ...trip,
@@ -929,8 +958,9 @@ export const searchTripsWithRerouting = async (
         original_eta_minutes: originalEtaMinutes,
         detour_time_minutes: detourTimeMinutes,
         cost_breakdown: {
-          base_fare: baseFare,
-          detour_surcharge: detourSurcharge,
+          trip_cost:       tripCost,
+          duration_hours:  parseFloat(durationHours.toFixed(4)),
+          detour_fee:      detourFee,
           per_rider_split: perRiderSplit,
         },
       };
@@ -966,6 +996,117 @@ export const deleteTrip = async (tripId: string, driverId: string): Promise<void
   );
 };
 
+/**
+ * Remove all anchor points that belong to a specific rider from a trip's route.
+ * Called after a payment-deadline cancellation so the route no longer includes
+ * the removed rider's pickup/dropoff stops.
+ *
+ * @param tripId  Trip UUID
+ * @param riderId Rider UUID to remove from the route
+ */
+export const removeRiderFromRoute = async (tripId: string, riderId: string): Promise<void> => {
+  // Fetch current anchor_points
+  const result = await pool.query<{ anchor_points: any[] }>(
+    `SELECT COALESCE(anchor_points, '[]'::jsonb) AS anchor_points FROM trips WHERE trip_id = $1`,
+    [tripId]
+  );
+  if (result.rows.length === 0) return;
+
+  const currentAnchors: any[] = Array.isArray(result.rows[0].anchor_points)
+    ? result.rows[0].anchor_points
+    : [];
+
+  const updatedAnchors = currentAnchors.filter((ap: any) => ap.rider_id !== riderId);
+
+  // Only update if something was actually removed
+  if (updatedAnchors.length < currentAnchors.length) {
+    await pool.query(
+      `UPDATE trips SET anchor_points = $1::jsonb, updated_at = NOW() WHERE trip_id = $2`,
+      [JSON.stringify(updatedAnchors), tripId]
+    );
+    console.log(
+      `[removeRiderFromRoute] Removed rider ${riderId} from trip ${tripId} route (${currentAnchors.length} → ${updatedAnchors.length} anchors)`
+    );
+  }
+};
+
+/**
+ * Detect bookings that were cancelled by the pg_cron payment-deadline job
+ * (cancellation_reason = 'payment_not_completed', route_updated_after_cancel = FALSE),
+ * update the trip route by removing the rider, and send notifications.
+ *
+ * Exposed as POST /trips/internal/process-deadline-cancellations.
+ */
+export const processDeadlineCancellations = async (): Promise<{ processed: number }> => {
+  // Find newly deadline-cancelled bookings that haven't had their route updated yet
+  const query = `
+    SELECT b.booking_id, b.trip_id, b.rider_id, b.seats_booked,
+           u.email AS rider_email, u.name AS rider_name,
+           t.origin, t.destination, t.departure_time, t.driver_id
+    FROM bookings b
+    JOIN users u ON b.rider_id = u.user_id
+    JOIN trips  t ON b.trip_id = t.trip_id
+    WHERE b.booking_state           = 'cancelled'
+      AND b.cancellation_reason     = 'payment_not_completed'
+      AND b.route_updated_after_cancel = FALSE
+      AND b.deleted_at IS NULL
+  `;
+
+  const result = await pool.query(query);
+  if (result.rows.length === 0) return { processed: 0 };
+
+  for (const row of result.rows) {
+    try {
+      // 1. Remove rider from route
+      await removeRiderFromRoute(row.trip_id, row.rider_id);
+
+      // 2. Mark route as updated so we don't process it again
+      await pool.query(
+        `UPDATE bookings SET route_updated_after_cancel = TRUE, updated_at = NOW() WHERE booking_id = $1`,
+        [row.booking_id]
+      );
+
+      // 3. Send notifications (fire-and-forget; non-fatal)
+      // Find other approved/pending riders on the same trip for the route-update notification
+      const otherRidersResult = await pool.query(
+        `SELECT rider_id FROM bookings
+         WHERE trip_id = $1
+           AND booking_state IN ('pending', 'approved')
+           AND rider_id != $2
+           AND deleted_at IS NULL`,
+        [row.trip_id, row.rider_id]
+      );
+      const otherPassengerIds: string[] = otherRidersResult.rows.map((r: any) => r.rider_id);
+
+      axios.post(`${config.notificationServiceUrl}/notifications/send/payment-deadline-cancelled`, {
+        rider_id: row.rider_id,
+        rider_email: row.rider_email,
+        driver_id: row.driver_id,
+        other_passenger_ids: otherPassengerIds,
+        trip_origin: row.origin,
+        trip_destination: row.destination,
+        departure_time: row.departure_time,
+      }).catch((err: unknown) => {
+        console.warn(
+          `[processDeadlineCancellations] Notification failed for booking ${row.booking_id}:`,
+          err
+        );
+      });
+
+      console.log(
+        `[processDeadlineCancellations] Processed booking ${row.booking_id} (trip ${row.trip_id}, rider ${row.rider_id})`
+      );
+    } catch (err) {
+      console.error(
+        `[processDeadlineCancellations] Error processing booking ${row.booking_id}:`,
+        err
+      );
+    }
+  }
+
+  return { processed: result.rows.length };
+};
+
 export default {
   updateTripLocation,
   getTripLocation,
@@ -982,4 +1123,6 @@ export default {
   getTripMessages,
   markMessagesAsRead,
   isLocationNearSJSU,
+  removeRiderFromRoute,
+  processDeadlineCancellations,
 };
