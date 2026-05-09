@@ -1498,6 +1498,8 @@ private struct BookingRideDetailView: View {
     @State private var riderPickupAddress: String?
     @State private var isAuthorizing = false
     @State private var authError: String?
+    @ObservedObject private var stripeManager = StripePaymentManager.shared
+    @State private var shouldPresentPaymentSheet = false
 
     private var currentBooking: Booking {
         vm.bookings.first(where: { $0.id == booking.id }) ?? booking
@@ -1574,6 +1576,19 @@ private struct BookingRideDetailView: View {
         .background(Color.appBackground.ignoresSafeArea())
         .navigationTitle("Ride Details")
         .navigationBarTitleDisplayMode(.inline)
+        .background(
+            Group {
+                if let sheet = stripeManager.paymentSheet {
+                    Color.clear.paymentSheet(
+                        isPresented: $shouldPresentPaymentSheet,
+                        paymentSheet: sheet,
+                        onCompletion: { result in
+                            Task { await handlePaymentResult(result) }
+                        }
+                    )
+                }
+            }
+        )
         .task {
             await loadAnchorPoints()
         }
@@ -1788,9 +1803,27 @@ private struct BookingRideDetailView: View {
 
     private func authorizePayment() async {
         isAuthorizing = true
-        _ = try? await BookingService.shared.authorizePayment(bookingId: booking.id)
-        await vm.loadBookings(asDriver: false)
+        authError = nil
+        do {
+            let result = try await BookingService.shared.authorizePayment(bookingId: booking.id)
+            stripeManager.preparePaymentSheet(clientSecret: result.clientSecret)
+            shouldPresentPaymentSheet = true
+        } catch {
+            authError = error.localizedDescription
+        }
         isAuthorizing = false
+    }
+
+    private func handlePaymentResult(_ result: PaymentSheetResult) async {
+        switch result {
+        case .completed:
+            try? await BookingService.shared.confirmPayment(bookingId: booking.id)
+            await vm.loadBookings(asDriver: false)
+        case .canceled:
+            break
+        case .failed(let error):
+            authError = error.localizedDescription
+        }
     }
 
     private func routeCard(trip: Trip) -> some View {
@@ -2035,7 +2068,7 @@ private struct BookingRideDetailView: View {
             }
 
             // Rider: authorize payment hold after driver approves
-            if !showAsDriver && booking.bookingState == .approved && booking.payment == nil {
+            if !showAsDriver && currentBooking.bookingState == .approved && currentBooking.payment == nil {
                 Button(action: { Task { await authorizePayment() } }) {
                     actionPill(
                         title: isAuthorizing ? "Authorizing…" : "Confirm & Pay Hold",
