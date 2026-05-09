@@ -583,7 +583,10 @@ export const stripeDashboard = async (req: AuthRequest, res: Response): Promise<
       res.status(403).json({ status: 'error', message: 'Only drivers can set up payouts' });
       return;
     }
-    const url = await userService.getStripeConnectDashboardUrl(userId);
+    const gatewayUrl = process.env.GATEWAY_PUBLIC_URL ?? 'https://lessgo-zeta.vercel.app';
+    const returnUrl = `${gatewayUrl}/api/users/stripe/connect-return`;
+    const refreshUrl = `${gatewayUrl}/api/users/stripe/connect-refresh`;
+    const url = await userService.getStripeConnectDashboardUrl(userId, returnUrl, refreshUrl);
     res.json({ status: 'success', data: { url } });
   } catch (err) {
     console.error('Stripe dashboard error:', err);

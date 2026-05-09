@@ -508,11 +508,25 @@ export const createStripeConnectOnboardingUrl = async (
   return { url: accountLink.url, accountId };
 };
 
-export const getStripeConnectDashboardUrl = async (userId: string): Promise<string> => {
+export const getStripeConnectDashboardUrl = async (
+  userId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<string> => {
   const user = await getUserById(userId);
   const accountId = user?.stripe_connect_account_id ?? null;
   if (!accountId) throw new Error('No Stripe Connect account found');
   const stripe = getStripe();
+  const account = await stripe.accounts.retrieve(accountId);
+  if (!account.details_submitted) {
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: refreshUrl,
+      return_url: returnUrl,
+      type: 'account_onboarding',
+    });
+    return accountLink.url;
+  }
   const loginLink = await stripe.accounts.createLoginLink(accountId);
   return loginLink.url;
 };
