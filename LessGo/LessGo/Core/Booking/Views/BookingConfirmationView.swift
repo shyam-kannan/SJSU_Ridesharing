@@ -1481,7 +1481,7 @@ private struct BookingRideDetailView: View {
     @State private var isAuthorizing = false
     @State private var authError: String?
     @State private var paymentSucceeded = false
-    @ObservedObject private var stripeManager = StripePaymentManager.shared
+    @State private var paymentSheet: PaymentSheet?
     @State private var shouldPresentPaymentSheet = false
 
     private var currentBooking: Booking {
@@ -1561,7 +1561,7 @@ private struct BookingRideDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .background(
             Group {
-                if let sheet = stripeManager.paymentSheet {
+                if let sheet = paymentSheet {
                     Color.clear.paymentSheet(
                         isPresented: $shouldPresentPaymentSheet,
                         paymentSheet: sheet,
@@ -1572,6 +1572,7 @@ private struct BookingRideDetailView: View {
                 }
             }
         )
+
         .alert("Payment Error", isPresented: Binding(
             get: { authError != nil },
             set: { if !$0 { authError = nil } }
@@ -1802,7 +1803,13 @@ private struct BookingRideDetailView: View {
         authError = nil
         do {
             let result = try await BookingService.shared.authorizePayment(bookingId: booking.id)
-            stripeManager.preparePaymentSheet(clientSecret: result.clientSecret)
+            var config = PaymentSheet.Configuration()
+            config.merchantDisplayName = "LessGo Ridesharing"
+            config.style = .automatic
+            paymentSheet = PaymentSheet(paymentIntentClientSecret: result.clientSecret, configuration: config)
+            // Defer by one main-actor hop so SwiftUI re-renders the `if let sheet = paymentSheet`
+            // branch (attaching the .paymentSheet modifier) before isPresented flips true.
+            await Task.yield()
             shouldPresentPaymentSheet = true
         } catch {
             authError = error.localizedDescription
